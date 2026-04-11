@@ -4,6 +4,7 @@ import { useKeepAwake } from "expo-keep-awake";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MediaShelf } from "@/features/home/components/media-shelf";
+import { useDeviceId } from "@/features/home/hooks/use-device-id";
 import { mockShelves, type MockMediaItem, type MockShelf } from "@/features/home/mock-shelves";
 import { useAuth } from "@/services/auth/state";
 import { useSystemInfo } from "@/services/query";
@@ -11,11 +12,12 @@ import { useSystemInfo } from "@/services/query";
 const DEMO_BASE_URL = "https://demo.jellyfin.org/stable";
 
 /**
- * Phase 0b.3 home screen. Stacks a header with live system info on top
- * of the mock shelves rendered via FlashList + expo-image + the shared
- * theme tokens. Replaced by the real Home feature in Phase 2 (real
- * `useContinueWatching` / `useNextUp` / `useRecentlyAdded` hooks
- * populating the same shelf component).
+ * Phase 1a home screen. Adds a live `DEVICE` row showing the id returned
+ * from `useDeviceId()` — which goes through
+ * `Application.getIosIdForVendorAsync` on iOS and falls back to a
+ * secure-storage-persisted UUID — so we can visually confirm the native
+ * plumbing on-device. Shelves + system info carry over from 0b.3.
+ * Replaced by the real Home feature in Phase 2.
  */
 export function HomeScreen() {
   // Placeholder for player / download screens that land in Phase 3/5 —
@@ -24,6 +26,7 @@ export function HomeScreen() {
 
   const { signOut } = useAuth();
   const systemInfo = useSystemInfo(DEMO_BASE_URL);
+  const deviceId = useDeviceId();
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
@@ -39,6 +42,7 @@ export function HomeScreen() {
                 ? `${systemInfo.data.productName} ${systemInfo.data.version}`
                 : undefined
             }
+            deviceId={deviceId}
             onSignOut={signOut}
           />
         }
@@ -68,14 +72,15 @@ interface HeaderProps {
   serverLabel: string;
   status: string;
   product: string | undefined;
+  deviceId: string | undefined;
   onSignOut: () => void;
 }
 
-function Header({ serverLabel, status, product, onSignOut }: HeaderProps) {
+function Header({ serverLabel, status, product, deviceId, onSignOut }: HeaderProps) {
   return (
     <View style={styles.header}>
       <Text style={styles.title}>Jellyfuse</Text>
-      <Text style={styles.subtitle}>Phase 0b.3 · nitro fetch + flashlist</Text>
+      <Text style={styles.subtitle}>Phase 1a · secure storage + device id + auth api</Text>
       <View style={styles.metaRow}>
         <Text style={styles.metaLabel}>SERVER</Text>
         <Text style={styles.metaValue}>{serverLabel}</Text>
@@ -90,6 +95,12 @@ function Header({ serverLabel, status, product, onSignOut }: HeaderProps) {
           <Text style={styles.metaValue}>{product}</Text>
         </View>
       ) : null}
+      <View style={styles.metaRow}>
+        <Text style={styles.metaLabel}>DEVICE</Text>
+        <Text style={styles.metaValue} numberOfLines={1}>
+          {deviceId ?? "resolving…"}
+        </Text>
+      </View>
       <Pressable
         accessibilityRole="button"
         onPress={onSignOut}
