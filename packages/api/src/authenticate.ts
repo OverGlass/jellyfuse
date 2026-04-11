@@ -97,11 +97,28 @@ export async function authenticateByName(
   if (!isRawAuthResult(raw)) {
     throw new AuthenticateParseError("Unexpected response shape from /Users/AuthenticateByName");
   }
+  const avatarUrl = buildAvatarUrl(input.baseUrl, raw.User.Id, raw.User.PrimaryImageTag);
   return {
     userId: raw.User.Id,
     displayName: raw.User.Name,
     token: raw.AccessToken,
+    ...(avatarUrl ? { avatarUrl } : {}),
   };
+}
+
+/**
+ * Build the Jellyfin avatar URL for a user. Returns `undefined` when
+ * the user hasn't set an avatar (`PrimaryImageTag` is null). Mirrors
+ * the Rust URL in `crates/jf-api/src/jellyfin.rs:168-170`.
+ */
+function buildAvatarUrl(
+  baseUrl: string,
+  userId: string,
+  tag: string | null | undefined,
+): string | undefined {
+  if (!tag) return undefined;
+  const base = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
+  return `${base}/Users/${userId}/Images/Primary?tag=${encodeURIComponent(tag)}&quality=90`;
 }
 
 function joinPath(baseUrl: string, path: string): string {
@@ -141,7 +158,7 @@ async function fetcherWithInit(
 }
 
 interface RawAuthResult {
-  User: { Id: string; Name: string };
+  User: { Id: string; Name: string; PrimaryImageTag?: string | null };
   AccessToken: string;
 }
 
@@ -152,5 +169,8 @@ function isRawAuthResult(value: unknown): value is RawAuthResult {
   const user = v["User"];
   if (typeof user !== "object" || user === null) return false;
   const u = user as Record<string, unknown>;
-  return typeof u["Id"] === "string" && typeof u["Name"] === "string";
+  if (typeof u["Id"] !== "string" || typeof u["Name"] !== "string") return false;
+  // PrimaryImageTag is optional and may be null — accept undefined, null, or string.
+  const tag = u["PrimaryImageTag"];
+  return tag === undefined || tag === null || typeof tag === "string";
 }

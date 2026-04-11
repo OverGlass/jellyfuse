@@ -19,7 +19,7 @@ const baseInput: AuthenticateInput = {
 };
 
 const rawOk = {
-  User: { Id: "user-xyz", Name: "alice" },
+  User: { Id: "user-xyz", Name: "alice", PrimaryImageTag: "image-tag-1" },
   AccessToken: "tok-123",
 };
 
@@ -38,14 +38,24 @@ function fakeFetcher(
 }
 
 describe("authenticateByName", () => {
-  it("posts credentials and returns the authenticated user", async () => {
+  it("posts credentials and returns the authenticated user with avatar URL", async () => {
     const fetcher = fakeFetcher();
     const result = await authenticateByName(baseInput, fetcher);
     expect(result).toEqual({
       userId: "user-xyz",
       displayName: "alice",
       token: "tok-123",
+      avatarUrl:
+        "https://jellyfin.example.com/Users/user-xyz/Images/Primary?tag=image-tag-1&quality=90",
     });
+  });
+
+  it("omits avatarUrl when the user has no PrimaryImageTag", async () => {
+    const fetcher = fakeFetcher({
+      body: { User: { Id: "u1", Name: "bob", PrimaryImageTag: null }, AccessToken: "tok-b" },
+    });
+    const result = await authenticateByName(baseInput, fetcher);
+    expect(result.avatarUrl).toBeUndefined();
   });
 
   it("sends username and password as JSON Username / Pw fields", async () => {

@@ -257,6 +257,7 @@ function useAuthInternal(): AuthState {
         userId: jellyfinResult.userId,
         displayName: jellyfinResult.displayName,
         token: jellyfinResult.token,
+        ...(jellyfinResult.avatarUrl !== undefined ? { avatarUrl: jellyfinResult.avatarUrl } : {}),
         ...(jellyseerrCookie !== undefined ? { jellyseerrCookie } : {}),
       };
       const users = await upsertUser(secureUserStorage, user);

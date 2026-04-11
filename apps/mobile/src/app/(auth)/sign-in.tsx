@@ -1,5 +1,5 @@
 import { colors, fontSize, fontWeight, spacing } from "@jellyfuse/theme";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import {
   ActivityIndicator,
@@ -25,7 +25,9 @@ import { AuthServerNotConfiguredError, useAuth } from "@/services/auth/state";
  * → root router redirects to `(app)`.
  */
 export default function SignInScreen() {
-  const { serverUrl, serverVersion, signInWithCredentials } = useAuth();
+  const { serverUrl, serverVersion, users, signInWithCredentials } = useAuth();
+  const params = useLocalSearchParams<{ mode?: string }>();
+  const isAddUserMode = params.mode === "add-user";
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -57,6 +59,16 @@ export default function SignInScreen() {
     router.replace("/(auth)/server");
   }
 
+  function handleCancel() {
+    // Add-user mode opened from the profile picker — back preserves
+    // picker state by popping the navigation stack.
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace("/");
+    }
+  }
+
   // Root router (app/index.tsx) owns the three-way routing decision
   // (loading / unauth+no-server → /(auth)/server / unauth+server →
   // /(auth)/sign-in / authenticated → /(app)). Don't second-guess it
@@ -70,14 +82,26 @@ export default function SignInScreen() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <View style={styles.container}>
-          <Text style={styles.title}>Sign in</Text>
-          <Pressable accessibilityRole="button" onPress={handleChangeServer}>
-            <Text style={styles.subtitle}>
-              {serverUrl ? serverUrl.replace(/^https?:\/\//, "") : "—"}
-              {serverVersion ? ` · ${serverVersion}` : ""}
-            </Text>
-            <Text style={styles.changeServer}>Change server</Text>
-          </Pressable>
+          <Text style={styles.title}>{isAddUserMode ? "Add another account" : "Sign in"}</Text>
+          {isAddUserMode ? (
+            <Pressable accessibilityRole="button" onPress={handleCancel}>
+              <Text style={styles.subtitle}>
+                {serverUrl ? serverUrl.replace(/^https?:\/\//, "") : "—"}
+                {serverVersion ? ` · ${serverVersion}` : ""}
+              </Text>
+              <Text style={styles.changeServer}>
+                {users.length > 0 ? "← Back to profiles" : "← Back"}
+              </Text>
+            </Pressable>
+          ) : (
+            <Pressable accessibilityRole="button" onPress={handleChangeServer}>
+              <Text style={styles.subtitle}>
+                {serverUrl ? serverUrl.replace(/^https?:\/\//, "") : "—"}
+                {serverVersion ? ` · ${serverVersion}` : ""}
+              </Text>
+              <Text style={styles.changeServer}>Change server</Text>
+            </Pressable>
+          )}
 
           <View style={styles.inputBlock}>
             <Text style={styles.label}>Username</Text>

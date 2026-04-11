@@ -4,20 +4,21 @@ import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { useAuth } from "@/services/auth/state";
 
 /**
- * Root route. Three-way switch on `AuthProvider` status, with a splash
- * placeholder for the hydration window so the app doesn't bounce into
- * sign-in for a frame before landing on the right destination:
+ * Root route. Single source of routing truth:
  *
- * - `loading` → splash (secure-storage read in flight)
+ * - `loading` → splash (secure-storage hydration in flight)
  * - `authenticated` → `(app)` home
- * - `unauthenticated` with no server URL → `(auth)/server`
- * - `unauthenticated` with a server URL → `(auth)/sign-in`
+ * - `unauthenticated` + no server URL → `(auth)/server`
+ * - `unauthenticated` + server URL + **no saved users** → `(auth)/sign-in`
+ * - `unauthenticated` + server URL + **saved users** → `(auth)/profile-picker`
  *
- * Phase 1b.4 will add profile-picker routing for the "multi-user, at
- * least one signed in" case.
+ * The picker case covers sign-out (users list intact, active user
+ * cleared) and cold launch when the previously-active user was removed.
+ * Both (auth) and (app) sub-layouts bounce to this route on any state
+ * mismatch, so routing decisions live in exactly one place.
  */
 export default function IndexRoute() {
-  const { status, serverUrl } = useAuth();
+  const { status, serverUrl, users } = useAuth();
   if (status === "loading") {
     return <SplashPlaceholder />;
   }
@@ -26,6 +27,9 @@ export default function IndexRoute() {
   }
   if (!serverUrl) {
     return <Redirect href="/(auth)/server" />;
+  }
+  if (users.length > 0) {
+    return <Redirect href="/(auth)/profile-picker" />;
   }
   return <Redirect href="/(auth)/sign-in" />;
 }

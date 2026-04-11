@@ -1,6 +1,8 @@
 import { colors, fontSize, fontWeight, spacing } from "@jellyfuse/theme";
 import { FlashList } from "@shopify/flash-list";
+import { Image } from "expo-image";
 import { useKeepAwake } from "expo-keep-awake";
+import { router } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MediaShelf } from "@/features/home/components/media-shelf";
@@ -39,6 +41,7 @@ export function HomeScreen() {
         ListHeaderComponent={
           <Header
             userLabel={activeUser?.displayName ?? "Signed in"}
+            userAvatarUrl={activeUser?.avatarUrl}
             serverLabel={serverUrl?.replace(/^https?:\/\//, "") ?? "—"}
             status={statusLabel(systemInfo)}
             product={
@@ -48,6 +51,7 @@ export function HomeScreen() {
             }
             deviceId={deviceId}
             jellyseerrLabel={jellyseerrLabel(jellyseerrStatus, jellyseerrUrl, jellyseerrLastError)}
+            onOpenProfiles={handleOpenProfiles}
             onSignOut={signOutAll}
           />
         }
@@ -58,6 +62,10 @@ export function HomeScreen() {
       />
     </SafeAreaView>
   );
+}
+
+function handleOpenProfiles() {
+  router.push("/(auth)/profile-picker");
 }
 
 function jellyseerrLabel(
@@ -90,27 +98,54 @@ function statusLabel(query: ReturnType<typeof useSystemInfo>): string {
 
 interface HeaderProps {
   userLabel: string;
+  userAvatarUrl: string | undefined;
   serverLabel: string;
   status: string;
   product: string | undefined;
   deviceId: string | undefined;
   jellyseerrLabel: string;
+  onOpenProfiles: () => void;
   onSignOut: () => void;
 }
 
 function Header({
   userLabel,
+  userAvatarUrl,
   serverLabel,
   status,
   product,
   deviceId,
   jellyseerrLabel,
+  onOpenProfiles,
   onSignOut,
 }: HeaderProps) {
   return (
     <View style={styles.header}>
-      <Text style={styles.title}>Jellyfuse</Text>
-      <Text style={styles.subtitle}>Phase 1b.3 · jellyseerr login + connect.sid</Text>
+      <View style={styles.topRow}>
+        <View style={styles.topTitleBlock}>
+          <Text style={styles.title}>Jellyfuse</Text>
+          <Text style={styles.subtitle}>Phase 1b.4 · profile picker</Text>
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Switch profile (currently ${userLabel})`}
+          onPress={onOpenProfiles}
+          style={({ pressed }) => [styles.avatarButton, pressed && styles.avatarButtonPressed]}
+        >
+          {userAvatarUrl ? (
+            <Image
+              source={userAvatarUrl}
+              style={styles.avatarImage}
+              contentFit="cover"
+              transition={200}
+              recyclingKey={userAvatarUrl}
+              cachePolicy="memory-disk"
+            />
+          ) : (
+            <Text style={styles.avatarLetter}>{userLabel.slice(0, 1).toUpperCase()}</Text>
+          )}
+        </Pressable>
+      </View>
       <View style={styles.metaRow}>
         <Text style={styles.metaLabel}>USER</Text>
         <Text style={styles.metaValue}>{userLabel}</Text>
@@ -163,6 +198,14 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.md,
     gap: spacing.xs,
   },
+  topRow: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  topTitleBlock: {
+    flex: 1,
+  },
   title: {
     color: colors.textPrimary,
     fontSize: fontSize.display,
@@ -172,6 +215,29 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: fontSize.body,
     marginBottom: spacing.md,
+  },
+  avatarButton: {
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderRadius: 20,
+    height: 40,
+    justifyContent: "center",
+    marginLeft: spacing.md,
+    marginTop: spacing.xs,
+    overflow: "hidden",
+    width: 40,
+  },
+  avatarButtonPressed: {
+    opacity: 0.75,
+  },
+  avatarImage: {
+    height: 40,
+    width: 40,
+  },
+  avatarLetter: {
+    color: colors.textSecondary,
+    fontSize: fontSize.bodyLarge,
+    fontWeight: fontWeight.semibold,
   },
   metaRow: {
     flexDirection: "row",
