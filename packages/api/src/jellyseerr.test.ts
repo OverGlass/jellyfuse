@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import {
   extractConnectSid,
   JellyseerrHttpError,
-  JellyseerrNoCookieError,
   jellyseerrLogin,
   type JellyseerrLoginInput,
 } from "./jellyseerr";
@@ -73,20 +72,18 @@ describe("jellyseerrLogin", () => {
     );
   });
 
-  it("throws JellyseerrNoCookieError when Set-Cookie is missing", async () => {
+  it("returns cookie: null when Set-Cookie is missing (caller falls back to native jar)", async () => {
     const fetcher = fakeFetcher({ setCookie: null });
-    await expect(jellyseerrLogin(baseInput, fetcher as never)).rejects.toBeInstanceOf(
-      JellyseerrNoCookieError,
-    );
+    const result = await jellyseerrLogin(baseInput, fetcher as never);
+    expect(result.cookie).toBeNull();
   });
 
-  it("throws JellyseerrNoCookieError when Set-Cookie has no connect.sid", async () => {
+  it("returns cookie: null when Set-Cookie has no connect.sid", async () => {
     const fetcher = fakeFetcher({
       setCookie: "other=value; Path=/, another=thing; Path=/",
     });
-    await expect(jellyseerrLogin(baseInput, fetcher as never)).rejects.toBeInstanceOf(
-      JellyseerrNoCookieError,
-    );
+    const result = await jellyseerrLogin(baseInput, fetcher as never);
+    expect(result.cookie).toBeNull();
   });
 });
 

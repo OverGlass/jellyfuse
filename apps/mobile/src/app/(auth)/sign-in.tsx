@@ -1,5 +1,5 @@
 import { colors, fontSize, fontWeight, spacing } from "@jellyfuse/theme";
-import { Redirect, router } from "expo-router";
+import { router } from "expo-router";
 import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
@@ -55,11 +55,11 @@ export default function SignInScreen() {
     router.replace("/(auth)/server");
   }, []);
 
-  // Defend against deep-links / stale navigation — if we land here with
-  // no server URL, bounce to the server screen. Hooks above stay stable.
-  if (!serverUrl) {
-    return <Redirect href="/(auth)/server" />;
-  }
+  // Root router (app/index.tsx) owns the three-way routing decision
+  // (loading / unauth+no-server → /(auth)/server / unauth+server →
+  // /(auth)/sign-in / authenticated → /(app)). Don't second-guess it
+  // here — a defensive <Redirect> race-condition'd against the RQ
+  // subscription propagation when landing from the server screen.
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -71,7 +71,7 @@ export default function SignInScreen() {
           <Text style={styles.title}>Sign in</Text>
           <Pressable accessibilityRole="button" onPress={handleChangeServer}>
             <Text style={styles.subtitle}>
-              {serverUrl.replace(/^https?:\/\//, "")}
+              {serverUrl ? serverUrl.replace(/^https?:\/\//, "") : "—"}
               {serverVersion ? ` · ${serverVersion}` : ""}
             </Text>
             <Text style={styles.changeServer}>Change server</Text>

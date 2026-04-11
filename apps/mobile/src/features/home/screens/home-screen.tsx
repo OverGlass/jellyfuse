@@ -20,7 +20,14 @@ export function HomeScreen() {
   // `useKeepAwake` is wired from day 1 so we catch any native breakage.
   useKeepAwake();
 
-  const { serverUrl, activeUser, jellyseerrUrl, jellyseerrStatus, signOutAll } = useAuth();
+  const {
+    serverUrl,
+    activeUser,
+    jellyseerrUrl,
+    jellyseerrStatus,
+    jellyseerrLastError,
+    signOutAll,
+  } = useAuth();
   const systemInfo = useSystemInfo(serverUrl);
   const deviceId = useDeviceId();
 
@@ -40,7 +47,7 @@ export function HomeScreen() {
                 : undefined
             }
             deviceId={deviceId}
-            jellyseerrLabel={jellyseerrLabel(jellyseerrStatus, jellyseerrUrl)}
+            jellyseerrLabel={jellyseerrLabel(jellyseerrStatus, jellyseerrUrl, jellyseerrLastError)}
             onSignOut={signOutAll}
           />
         }
@@ -56,6 +63,7 @@ export function HomeScreen() {
 function jellyseerrLabel(
   status: ReturnType<typeof useAuth>["jellyseerrStatus"],
   url: string | undefined,
+  lastError: string | undefined,
 ): string {
   switch (status) {
     case "not-configured":
@@ -63,7 +71,7 @@ function jellyseerrLabel(
     case "connected":
       return `connected · ${url?.replace(/^https?:\/\//, "") ?? "—"}`;
     case "disconnected":
-      return "disconnected";
+      return lastError ? `disconnected · ${lastError}` : "disconnected";
   }
 }
 

@@ -1,6 +1,7 @@
 import { authenticateByName, jellyseerrLogin, type AuthenticatedUser } from "@jellyfuse/api";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, useContext, useMemo, type ReactNode } from "react";
+import NitroCookies from "react-native-nitro-cookies";
 import { apiFetch } from "@/services/api/client";
 import {
   clearSecureStorage,
@@ -64,6 +65,8 @@ export interface AuthState {
   activeUser: AuthenticatedUser | undefined;
   jellyseerrUrl: string | undefined;
   jellyseerrStatus: JellyseerrStatus;
+  /** Debug: last Jellyseerr sign-in error, if any. Cleared on next attempt. */
+  jellyseerrLastError: string | undefined;
 
   setServer: (args: {
     url: string;
@@ -95,6 +98,8 @@ async function loadPersistedAuth(): Promise<PersistedAuth> {
     jellyseerrUrl,
   };
 }
+
+const JELLYSEERR_LAST_ERROR_KEY = ["auth", "jellyseerrLastError"] as const;
 
 const AuthContext = createContext<AuthState | null>(null);
 
@@ -132,6 +137,16 @@ function useAuthInternal(): AuthState {
 
   const persisted = persistedQuery.data ?? EMPTY_PERSISTED_AUTH;
   const activeUser = findActiveUser(persisted);
+
+  const jellyseerrLastErrorQuery = useQuery({
+    queryKey: JELLYSEERR_LAST_ERROR_KEY,
+    queryFn: () => null as string | null,
+    staleTime: Infinity,
+    gcTime: Infinity,
+    retry: 0,
+    enabled: false,
+    initialData: null,
+  });
 
   // ------------------------------------------------------------------
   // Mutations — each reads the current persisted cache, mutates
@@ -206,6 +221,13 @@ function useAuthInternal(): AuthState {
       // Jellyfin half intact and the user still lands on `(app)`.
       // The cookie is **per-user** and travels on the
       // `AuthenticatedUser` record.
+      //
+      // React Native's Fetch API (including Nitro Fetch) hides the
+      // Set-Cookie response header from JavaScript per the browser
+      // "forbidden response header" rule, so `session.cookie` is
+      // always null in the app. We fall back to reading it out of
+      // the native cookie jar via `react-native-nitro-cookies`, which
+      // Nitro Fetch's URLSession has already populated automatically.
       let jellyseerrCookie: string | undefined;
       if (jellyseerrUrl) {
         try {
@@ -213,11 +235,23 @@ function useAuthInternal(): AuthState {
             { baseUrl: jellyseerrUrl, username: input.username, password: input.password },
             apiFetch,
           );
-          jellyseerrCookie = session.cookie;
+          jellyseerrCookie = session.cookie ?? undefined;
+          if (!jellyseerrCookie) {
+            const jar = NitroCookies.getSync(jellyseerrUrl);
+            jellyseerrCookie = jar["connect.sid"]?.value;
+            if (!jellyseerrCookie) {
+              throw new Error("connect.sid cookie not found in native jar after Jellyseerr login");
+            }
+          }
+          queryClient.setQueryData(JELLYSEERR_LAST_ERROR_KEY, null);
         } catch (err: unknown) {
+          const message = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
           console.warn("jellyseerr login failed — continuing without it", err);
+          queryClient.setQueryData(JELLYSEERR_LAST_ERROR_KEY, message);
           jellyseerrCookie = undefined;
         }
+      } else {
+        queryClient.setQueryData(JELLYSEERR_LAST_ERROR_KEY, null);
       }
 
       const user: AuthenticatedUser = {
@@ -273,10 +307,22 @@ function useAuthInternal(): AuthState {
 
   const signOutAllMutation = useMutation({
     mutationFn: async (): Promise<PersistedAuth> => {
+      const current =
+        queryClient.getQueryData<PersistedAuth>(PERSISTED_AUTH_KEY) ?? EMPTY_PERSISTED_AUTH;
+      // Clear the native Jellyseerr session cookie before wiping
+      // secure-storage so the next user gets a fresh session.
+      if (current.jellyseerrUrl) {
+        try {
+          await NitroCookies.clearByName(current.jellyseerrUrl, "connect.sid");
+        } catch (err: unknown) {
+          console.warn("failed to clear native jellyseerr cookie on sign-out", err);
+        }
+      }
       await clearSecureStorage();
       // Evict every auth-context entry so the next signed-in user
       // gets a fresh fetchQuery build rather than a stale cached one.
       queryClient.removeQueries({ queryKey: ["auth", "context"] });
+      queryClient.setQueryData(JELLYSEERR_LAST_ERROR_KEY, null);
       return EMPTY_PERSISTED_AUTH;
     },
     onSuccess: (data) => {
@@ -303,6 +349,7 @@ function useAuthInternal(): AuthState {
       activeUser,
       jellyseerrUrl: persisted.jellyseerrUrl,
       jellyseerrStatus,
+      jellyseerrLastError: jellyseerrLastErrorQuery.data ?? undefined,
       setServer: (args) => setServerMutation.mutateAsync(args).then(() => undefined),
       signInWithCredentials: (args) => signInMutation.mutateAsync(args).then(() => undefined),
       switchUser: (userId) => switchUserMutation.mutateAsync(userId).then(() => undefined),
@@ -313,6 +360,7 @@ function useAuthInternal(): AuthState {
     persistedQuery.isPending,
     persisted,
     activeUser,
+    jellyseerrLastErrorQuery.data,
     setServerMutation,
     signInMutation,
     switchUserMutation,

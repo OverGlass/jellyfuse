@@ -15,8 +15,17 @@ import type { FetchLike } from "./system-info";
  */
 
 export interface JellyseerrSession {
-  /** The raw value of the `connect.sid` cookie, e.g. `s%3A...` */
-  cookie: string;
+  /**
+   * The raw value of the `connect.sid` cookie, e.g. `s%3A...` — or
+   * `null` if the HTTP call succeeded but the `Set-Cookie` header
+   * wasn't visible to our fetcher. React Native's Fetch API (including
+   * Nitro Fetch) mirrors the browser "forbidden response header" rule
+   * and hides Set-Cookie from JavaScript, so in the app we always see
+   * `null` here and fall back to reading from the native cookie jar
+   * via `react-native-nitro-cookies`. Vitest / node-fetch-based tests
+   * see the actual string.
+   */
+  cookie: string | null;
 }
 
 export class JellyseerrHttpError extends Error {
@@ -25,13 +34,6 @@ export class JellyseerrHttpError extends Error {
     super(`Jellyseerr /api/v1/auth/jellyfin returned HTTP ${status}`);
     this.name = "JellyseerrHttpError";
     this.status = status;
-  }
-}
-
-export class JellyseerrNoCookieError extends Error {
-  constructor() {
-    super("Jellyseerr responded without a connect.sid cookie");
-    this.name = "JellyseerrNoCookieError";
   }
 }
 
@@ -98,10 +100,12 @@ export async function jellyseerrLogin(
 
   const setCookie = response.headers.get("set-cookie");
   const cookie = extractConnectSid(setCookie);
-  if (!cookie) {
-    throw new JellyseerrNoCookieError();
-  }
-  return { cookie };
+  // In React Native / Nitro Fetch the Set-Cookie header is hidden from
+  // JavaScript — we fall through with `cookie: null` and the caller is
+  // expected to read the cookie from the native jar via
+  // react-native-nitro-cookies. In Vitest / node-fetch with a fake
+  // fetcher that exposes Set-Cookie the caller gets the real string.
+  return { cookie: cookie ?? null };
 }
 
 function joinPath(baseUrl: string, path: string): string {

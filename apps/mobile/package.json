@@ -46,6 +46,7 @@
     "react-native": "0.83.4",
     "react-native-gesture-handler": "~2.30.0",
     "react-native-mmkv": "^4.3.1",
+    "react-native-nitro-cookies": "^1.1.0",
     "react-native-nitro-fetch": "^1.0.0",
     "react-native-nitro-modules": "^0.35.4",
     "react-native-reanimated": "4.2.1",
