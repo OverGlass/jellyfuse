@@ -1,79 +1,216 @@
 import { colors, fontSize, fontWeight, spacing } from "@jellyfuse/theme";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Redirect, router } from "expo-router";
+import { useCallback, useState } from "react";
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useAuth } from "@/services/auth/state";
+import { AuthServerNotConfiguredError, useAuth } from "@/services/auth/state";
 
 /**
- * Phase 0b.2 sign-in placeholder. Real AuthenticateByName + server-URL flow
- * lands in Phase 1. For now this is the default entry point for a fresh
- * install and has a single "Enter demo mode" button that flips auth state
- * to `authenticated` so we can see the `(app)` group renders.
+ * Phase 1b.2 sign-in screen — step 2 of the two-step flow. The server
+ * URL is already set in `AuthProvider` by the time we get here (root
+ * router redirects to `/(auth)/server` otherwise), so this screen only
+ * asks for Jellyfin credentials.
+ *
+ * Submit calls `signInWithCredentials` which chains
+ * `authenticateByName` → `upsertUser` → flip status to `authenticated`
+ * → root router redirects to `(app)`.
  */
 export default function SignInScreen() {
-  const { enterDemoMode } = useAuth();
+  const { serverUrl, serverVersion, signInWithCredentials } = useAuth();
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | undefined>(undefined);
+
+  const canSubmit = Boolean(username.trim()) && Boolean(password) && !busy;
+
+  const handleSubmit = useCallback(async () => {
+    if (!canSubmit) return;
+    setBusy(true);
+    setError(undefined);
+    try {
+      await signInWithCredentials({ username: username.trim(), password });
+      // Root router picks up the status change and redirects to (app) —
+      // no explicit navigation from here.
+    } catch (err: unknown) {
+      setError(buildErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }, [canSubmit, username, password, signInWithCredentials]);
+
+  const handleChangeServer = useCallback(() => {
+    router.replace("/(auth)/server");
+  }, []);
+
+  // Defend against deep-links / stale navigation — if we land here with
+  // no server URL, bounce to the server screen. Hooks above stay stable.
+  if (!serverUrl) {
+    return <Redirect href="/(auth)/server" />;
+  }
+
   return (
     <SafeAreaView style={styles.safe}>
-      <View style={styles.container}>
-        <Text style={styles.title}>Welcome to Jellyfuse</Text>
-        <Text style={styles.subtitle}>Phase 0b.2 · auth scaffold</Text>
-        <Pressable
-          accessibilityRole="button"
-          onPress={enterDemoMode}
-          style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
-        >
-          <Text style={styles.buttonLabel}>Enter demo mode</Text>
-        </Pressable>
-        <Text style={styles.hint}>
-          Real sign in wires up in Phase 1 (AuthenticateByName + profile picker).
-        </Text>
-      </View>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <View style={styles.container}>
+          <Text style={styles.title}>Sign in</Text>
+          <Pressable accessibilityRole="button" onPress={handleChangeServer}>
+            <Text style={styles.subtitle}>
+              {serverUrl.replace(/^https?:\/\//, "")}
+              {serverVersion ? ` · ${serverVersion}` : ""}
+            </Text>
+            <Text style={styles.changeServer}>Change server</Text>
+          </Pressable>
+
+          <View style={styles.inputBlock}>
+            <Text style={styles.label}>Username</Text>
+            <TextInput
+              value={username}
+              onChangeText={setUsername}
+              placeholder="alice"
+              placeholderTextColor={colors.textMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="username"
+              textContentType="username"
+              returnKeyType="next"
+              style={styles.input}
+              editable={!busy}
+            />
+          </View>
+
+          <View style={styles.inputBlock}>
+            <Text style={styles.label}>Password</Text>
+            <TextInput
+              value={password}
+              onChangeText={setPassword}
+              placeholder="••••••••"
+              placeholderTextColor={colors.textMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="current-password"
+              textContentType="password"
+              secureTextEntry
+              returnKeyType="go"
+              onSubmitEditing={handleSubmit}
+              style={styles.input}
+              editable={!busy}
+            />
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={handleSubmit}
+            disabled={!canSubmit}
+            style={({ pressed }) => [styles.button, (!canSubmit || pressed) && styles.buttonMuted]}
+          >
+            {busy ? (
+              <ActivityIndicator color={colors.textPrimary} />
+            ) : (
+              <Text style={styles.buttonLabel}>Sign in</Text>
+            )}
+          </Pressable>
+
+          {error ? <Text style={styles.error}>{error}</Text> : null}
+        </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
+function buildErrorMessage(err: unknown): string {
+  if (err instanceof AuthServerNotConfiguredError) {
+    return "No server configured. Go back to the server step.";
+  }
+  if (err instanceof Error) {
+    if (err.name === "AuthenticateHttpError") {
+      const status = (err as Error & { status?: number }).status;
+      if (status === 401) return "Wrong username or password.";
+      return `Sign-in failed (HTTP ${status ?? "error"}).`;
+    }
+    if (err.name === "AuthenticateParseError") {
+      return "The server responded but the data didn't look right.";
+    }
+    return err.message;
+  }
+  return "Sign in failed.";
+}
+
 const styles = StyleSheet.create({
   safe: {
-    flex: 1,
     backgroundColor: colors.background,
+    flex: 1,
+  },
+  flex: {
+    flex: 1,
   },
   container: {
     flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: spacing.md,
+    gap: spacing.lg,
     padding: spacing.lg,
   },
   title: {
     color: colors.textPrimary,
     fontSize: fontSize.display,
     fontWeight: fontWeight.bold,
-    textAlign: "center",
+    marginTop: spacing.xxl,
   },
   subtitle: {
     color: colors.textSecondary,
     fontSize: fontSize.bodyLarge,
-    marginBottom: spacing.xl,
+  },
+  changeServer: {
+    color: colors.accent,
+    fontSize: fontSize.caption,
+    marginTop: 2,
+  },
+  inputBlock: {
+    gap: spacing.xs,
+  },
+  label: {
+    color: colors.textMuted,
+    fontSize: fontSize.caption,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
+  input: {
+    backgroundColor: colors.surface,
+    borderRadius: spacing.sm,
+    color: colors.textPrimary,
+    fontSize: fontSize.bodyLarge,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
   },
   button: {
     alignItems: "center",
     backgroundColor: colors.accent,
     borderRadius: spacing.sm,
     justifyContent: "center",
-    paddingHorizontal: spacing.xl,
+    minHeight: 52,
     paddingVertical: spacing.md,
   },
-  buttonPressed: {
-    opacity: 0.75,
+  buttonMuted: {
+    opacity: 0.5,
   },
   buttonLabel: {
     color: colors.textPrimary,
     fontSize: fontSize.bodyLarge,
     fontWeight: fontWeight.semibold,
   },
-  hint: {
-    color: colors.textMuted,
-    fontSize: fontSize.caption,
-    marginTop: spacing.xl,
-    textAlign: "center",
+  error: {
+    color: "#ef4444",
+    fontSize: fontSize.body,
   },
 });

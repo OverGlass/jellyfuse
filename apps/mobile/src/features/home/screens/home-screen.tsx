@@ -9,23 +9,19 @@ import { mockShelves, type MockMediaItem, type MockShelf } from "@/features/home
 import { useAuth } from "@/services/auth/state";
 import { useSystemInfo } from "@/services/query";
 
-const DEMO_BASE_URL = "https://demo.jellyfin.org/stable";
-
 /**
- * Phase 1a home screen. Adds a live `DEVICE` row showing the id returned
- * from `useDeviceId()` — which goes through
- * `Application.getIosIdForVendorAsync` on iOS and falls back to a
- * secure-storage-persisted UUID — so we can visually confirm the native
- * plumbing on-device. Shelves + system info carry over from 0b.3.
- * Replaced by the real Home feature in Phase 2.
+ * Phase 1b.2 home screen. Replaces the hard-coded DEMO_BASE_URL with
+ * the active user's server URL from `AuthProvider` — we're now serving
+ * the real signed-in session instead of a demo fetcher. Shelves stay
+ * mocked until Phase 2 ports the real home query keys.
  */
 export function HomeScreen() {
   // Placeholder for player / download screens that land in Phase 3/5 —
   // `useKeepAwake` is wired from day 1 so we catch any native breakage.
   useKeepAwake();
 
-  const { signOutAll } = useAuth();
-  const systemInfo = useSystemInfo(DEMO_BASE_URL);
+  const { serverUrl, activeUser, signOutAll } = useAuth();
+  const systemInfo = useSystemInfo(serverUrl);
   const deviceId = useDeviceId();
 
   return (
@@ -35,7 +31,8 @@ export function HomeScreen() {
         keyExtractor={(shelf) => shelf.id}
         ListHeaderComponent={
           <Header
-            serverLabel={DEMO_BASE_URL.replace(/^https?:\/\//, "")}
+            userLabel={activeUser?.displayName ?? "Signed in"}
+            serverLabel={serverUrl?.replace(/^https?:\/\//, "") ?? "—"}
             status={statusLabel(systemInfo)}
             product={
               systemInfo.data
@@ -69,6 +66,7 @@ function statusLabel(query: ReturnType<typeof useSystemInfo>): string {
 }
 
 interface HeaderProps {
+  userLabel: string;
   serverLabel: string;
   status: string;
   product: string | undefined;
@@ -76,11 +74,15 @@ interface HeaderProps {
   onSignOut: () => void;
 }
 
-function Header({ serverLabel, status, product, deviceId, onSignOut }: HeaderProps) {
+function Header({ userLabel, serverLabel, status, product, deviceId, onSignOut }: HeaderProps) {
   return (
     <View style={styles.header}>
       <Text style={styles.title}>Jellyfuse</Text>
-      <Text style={styles.subtitle}>Phase 1a · secure storage + device id + auth api</Text>
+      <Text style={styles.subtitle}>Phase 1b.2 · real sign-in flow</Text>
+      <View style={styles.metaRow}>
+        <Text style={styles.metaLabel}>USER</Text>
+        <Text style={styles.metaValue}>{userLabel}</Text>
+      </View>
       <View style={styles.metaRow}>
         <Text style={styles.metaLabel}>SERVER</Text>
         <Text style={styles.metaValue}>{serverLabel}</Text>

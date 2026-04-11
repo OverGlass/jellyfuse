@@ -4,22 +4,28 @@ import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { useAuth } from "@/services/auth/state";
 
 /**
- * Root route. Redirects into the correct route group based on auth state.
- * Auth-group vs app-group layouts handle all per-group concerns; this
- * screen is the entry-point switch + the splash placeholder while
- * AuthProvider is hydrating from secure-storage on boot.
+ * Root route. Three-way switch on `AuthProvider` status, with a splash
+ * placeholder for the hydration window so the app doesn't bounce into
+ * sign-in for a frame before landing on the right destination:
  *
- * Phase 1b.2 adds the server-then-credentials split — for now any
- * unauthenticated state lands on the Phase 0b.2 sign-in placeholder,
- * which flips to authenticated via the in-memory `enterDemoMode` action.
+ * - `loading` → splash (secure-storage read in flight)
+ * - `authenticated` → `(app)` home
+ * - `unauthenticated` with no server URL → `(auth)/server`
+ * - `unauthenticated` with a server URL → `(auth)/sign-in`
+ *
+ * Phase 1b.4 will add profile-picker routing for the "multi-user, at
+ * least one signed in" case.
  */
 export default function IndexRoute() {
-  const { status } = useAuth();
+  const { status, serverUrl } = useAuth();
   if (status === "loading") {
     return <SplashPlaceholder />;
   }
   if (status === "authenticated") {
     return <Redirect href="/(app)" />;
+  }
+  if (!serverUrl) {
+    return <Redirect href="/(auth)/server" />;
   }
   return <Redirect href="/(auth)/sign-in" />;
 }
