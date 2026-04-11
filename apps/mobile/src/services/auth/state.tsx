@@ -1,6 +1,6 @@
 import { authenticateByName, jellyseerrLogin, type AuthenticatedUser } from "@jellyfuse/api";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createContext, useContext, useMemo, type ReactNode } from "react";
+import { createContext, useContext, type ReactNode } from "react";
 import NitroCookies from "react-native-nitro-cookies";
 import { apiFetch } from "@/services/api/client";
 import {
@@ -330,43 +330,36 @@ function useAuthInternal(): AuthState {
     },
   });
 
-  return useMemo<AuthState>(() => {
-    const status: AuthStatus = persistedQuery.isPending
-      ? "loading"
-      : activeUser
-        ? "authenticated"
-        : "unauthenticated";
-    const jellyseerrStatus: JellyseerrStatus = !persisted.jellyseerrUrl
-      ? "not-configured"
-      : activeUser?.jellyseerrCookie
-        ? "connected"
-        : "disconnected";
-    return {
-      status,
-      serverUrl: persisted.serverUrl,
-      serverVersion: persisted.serverVersion,
-      users: persisted.users,
-      activeUser,
-      jellyseerrUrl: persisted.jellyseerrUrl,
-      jellyseerrStatus,
-      jellyseerrLastError: jellyseerrLastErrorQuery.data ?? undefined,
-      setServer: (args) => setServerMutation.mutateAsync(args).then(() => undefined),
-      signInWithCredentials: (args) => signInMutation.mutateAsync(args).then(() => undefined),
-      switchUser: (userId) => switchUserMutation.mutateAsync(userId).then(() => undefined),
-      removeUser: (userId) => removeUserMutation.mutateAsync(userId).then(() => undefined),
-      signOutAll: () => signOutAllMutation.mutateAsync().then(() => undefined),
-    };
-  }, [
-    persistedQuery.isPending,
-    persisted,
+  const status: AuthStatus = persistedQuery.isPending
+    ? "loading"
+    : activeUser
+      ? "authenticated"
+      : "unauthenticated";
+  const jellyseerrStatus: JellyseerrStatus = !persisted.jellyseerrUrl
+    ? "not-configured"
+    : activeUser?.jellyseerrCookie
+      ? "connected"
+      : "disconnected";
+
+  // React Compiler handles memoisation — no manual useMemo per
+  // CLAUDE.md. The returned shape is stable because its inputs
+  // (persisted, activeUser, mutation refs) are themselves stable
+  // across renders when nothing has changed.
+  return {
+    status,
+    serverUrl: persisted.serverUrl,
+    serverVersion: persisted.serverVersion,
+    users: persisted.users,
     activeUser,
-    jellyseerrLastErrorQuery.data,
-    setServerMutation,
-    signInMutation,
-    switchUserMutation,
-    removeUserMutation,
-    signOutAllMutation,
-  ]);
+    jellyseerrUrl: persisted.jellyseerrUrl,
+    jellyseerrStatus,
+    jellyseerrLastError: jellyseerrLastErrorQuery.data ?? undefined,
+    setServer: (args) => setServerMutation.mutateAsync(args).then(() => undefined),
+    signInWithCredentials: (args) => signInMutation.mutateAsync(args).then(() => undefined),
+    switchUser: (userId) => switchUserMutation.mutateAsync(userId).then(() => undefined),
+    removeUser: (userId) => removeUserMutation.mutateAsync(userId).then(() => undefined),
+    signOutAll: () => signOutAllMutation.mutateAsync().then(() => undefined),
+  };
 }
 
 export function useAuth(): AuthState {

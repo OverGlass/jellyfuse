@@ -1,6 +1,6 @@
 import { colors, fontSize, fontWeight, spacing } from "@jellyfuse/theme";
 import { router } from "expo-router";
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -36,7 +36,9 @@ export default function SignInScreen() {
   // The server returns 401 if this specific account actually needs one.
   const canSubmit = Boolean(username.trim()) && !busy;
 
-  const handleSubmit = useCallback(async () => {
+  // React Compiler handles memoisation — plain function declarations,
+  // no useCallback per CLAUDE.md.
+  async function handleSubmit() {
     if (!canSubmit) return;
     setBusy(true);
     setError(undefined);
@@ -49,11 +51,11 @@ export default function SignInScreen() {
     } finally {
       setBusy(false);
     }
-  }, [canSubmit, username, password, signInWithCredentials]);
+  }
 
-  const handleChangeServer = useCallback(() => {
+  function handleChangeServer() {
     router.replace("/(auth)/server");
-  }, []);
+  }
 
   // Root router (app/index.tsx) owns the three-way routing decision
   // (loading / unauth+no-server → /(auth)/server / unauth+server →

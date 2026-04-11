@@ -1,6 +1,6 @@
 import { colors, fontSize, fontWeight, spacing } from "@jellyfuse/theme";
 import { router } from "expo-router";
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -36,13 +36,15 @@ export default function ServerScreen() {
 
   const systemInfo = useSystemInfo(submittedUrl);
 
-  const handleCheck = useCallback(() => {
+  // React Compiler handles memoisation — plain function declarations,
+  // no useCallback per CLAUDE.md.
+  function handleCheck() {
     const normalized = normalizeUrl(urlDraft);
     if (!normalized) return;
     setSubmittedUrl(normalized);
-  }, [urlDraft]);
+  }
 
-  const handleContinue = useCallback(async () => {
+  async function handleContinue() {
     if (!submittedUrl || !systemInfo.data) return;
     const jellyseerrUrl = normalizeUrl(jellyseerrDraft);
     await setServer({
@@ -51,7 +53,7 @@ export default function ServerScreen() {
       jellyseerrUrl,
     });
     router.replace("/(auth)/sign-in");
-  }, [submittedUrl, systemInfo.data, jellyseerrDraft, setServer]);
+  }
 
   const errorMessage = buildErrorMessage(systemInfo);
 
