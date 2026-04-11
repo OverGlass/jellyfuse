@@ -1,4 +1,4 @@
-import { buildAuthHeader, type AuthContext } from "./index";
+import { buildAuthHeader, type AuthContext } from "./auth-header";
 import type { FetchLike } from "./system-info";
 
 /**
