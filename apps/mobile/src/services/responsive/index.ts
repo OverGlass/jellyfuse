@@ -33,23 +33,24 @@ export function useBreakpoint(): { breakpoint: Breakpoint; values: ResponsiveVal
 }
 
 /**
- * Screen gutters that also respect the notch / Dynamic Island / nav-bar
- * insets. Returns the max of `responsive.screenPaddingHorizontal` and
- * the live safe-area insets so content doesn't slide under the notch
- * when the device is rotated into landscape (the Dynamic Island moves
- * to the leading edge, and iPhone landscape also picks up the home
- * indicator on the trailing edge).
+ * Horizontal screen gutters that also respect the notch / Dynamic
+ * Island inset. Returns the max of `responsive.screenPaddingHorizontal`
+ * and the live safe-area `insets.left/right` so content doesn't slide
+ * under the notch when the device is rotated into landscape (the
+ * Dynamic Island moves to the leading edge).
  *
  * Use this at every screen container + every horizontally-scrolling
- * list's `contentContainerStyle.paddingLeft/Right`.
+ * list's `contentContainerStyle.paddingLeft/Right`. For vertical
+ * (top / bottom) safe-area padding, call `useSafeAreaInsets()` directly
+ * — those values aren't merged with any responsive token, so there's
+ * no wrapper value to add and routing them through this hook would
+ * just obscure intent.
  */
-export function useScreenGutters(): { left: number; right: number; top: number; bottom: number } {
+export function useScreenGutters(): { left: number; right: number } {
   const { values } = useBreakpoint();
   const insets = useSafeAreaInsets();
   return {
     left: Math.max(values.screenPaddingHorizontal, insets.left),
     right: Math.max(values.screenPaddingHorizontal, insets.right),
-    top: insets.top,
-    bottom: insets.bottom,
   };
 }

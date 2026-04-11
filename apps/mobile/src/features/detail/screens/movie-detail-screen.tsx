@@ -1,9 +1,12 @@
 import { colors, fontSize, layout, spacing } from "@jellyfuse/theme";
-import { router } from "expo-router";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import Animated, { useAnimatedScrollHandler, useSharedValue } from "react-native-reanimated";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { BackButton } from "@/features/common/components/back-button";
+import { StatusBarScrim } from "@/features/common/components/status-bar-scrim";
 import { DetailActionRow } from "@/features/detail/components/detail-action-row";
 import { DetailHero } from "@/features/detail/components/detail-hero";
+import { DetailMetaRow } from "@/features/detail/components/detail-meta-row";
 import { useMovieDetail } from "@/services/query";
 import { useScreenGutters } from "@/services/responsive";
 
@@ -20,6 +23,11 @@ interface Props {
 export function MovieDetailScreen({ itemId }: Props) {
   const query = useMovieDetail(itemId);
   const gutters = useScreenGutters();
+  const insets = useSafeAreaInsets();
+  const scrollY = useSharedValue(0);
+  const scrollHandler = useAnimatedScrollHandler((event) => {
+    scrollY.value = event.contentOffset.y;
+  });
 
   if (query.isPending) {
     return (
@@ -48,10 +56,19 @@ export function MovieDetailScreen({ itemId }: Props) {
   const hasResume = (item.progress ?? 0) > 0.01;
 
   return (
-    <SafeAreaView style={styles.safe} edges={["bottom"]}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <DetailHero item={item} />
+    <SafeAreaView style={styles.safe} edges={[]}>
+      <Animated.ScrollView
+        contentContainerStyle={[
+          styles.scroll,
+          { paddingBottom: insets.bottom + layout.screenPaddingBottom },
+        ]}
+        showsVerticalScrollIndicator={false}
+        onScroll={scrollHandler}
+        scrollEventThrottle={16}
+      >
+        <DetailHero item={item} scrollY={scrollY} />
         <View style={[styles.body, { paddingLeft: gutters.left, paddingRight: gutters.right }]}>
+          <DetailMetaRow item={item} />
           <DetailActionRow
             hasResume={hasResume}
             onPlay={() => {
@@ -63,16 +80,11 @@ export function MovieDetailScreen({ itemId }: Props) {
           />
           {item.overview ? <Text style={styles.overview}>{item.overview}</Text> : null}
         </View>
-      </ScrollView>
-      <BackHint />
+      </Animated.ScrollView>
+      <StatusBarScrim />
+      <BackButton />
     </SafeAreaView>
   );
-}
-
-function BackHint() {
-  // Expo Router's default header is disabled on this screen's stack entry,
-  // so `router.canGoBack()` is our only hint that there's somewhere to go.
-  return router.canGoBack() ? null : null;
 }
 
 const styles = StyleSheet.create({
@@ -81,7 +93,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scroll: {
-    paddingBottom: layout.screenPaddingBottom,
+    // paddingBottom is merged in at the call site from
+    // `insets.bottom + layout.screenPaddingBottom` so the safe-area
+    // inset is part of scrollable content (scrolls past the home
+    // indicator) rather than fixed shell padding.
   },
   body: {
     gap: spacing.lg,

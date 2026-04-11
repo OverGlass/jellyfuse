@@ -1,9 +1,20 @@
 import type { MediaItem } from "@jellyfuse/api";
 import { colors, fontSize, layout, spacing } from "@jellyfuse/theme";
 import { useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { ActivityIndicator, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
+import Animated, {
+  Extrapolation,
+  interpolate,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+} from "react-native-reanimated";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { BackButton } from "@/features/common/components/back-button";
+import { FloatingBlurHeader } from "@/features/common/components/floating-blur-header";
+import { StatusBarScrim } from "@/features/common/components/status-bar-scrim";
 import { DetailActionRow } from "@/features/detail/components/detail-action-row";
+import { DetailMetaRow } from "@/features/detail/components/detail-meta-row";
 import { DetailHero } from "@/features/detail/components/detail-hero";
 import { EpisodeRow } from "@/features/detail/components/episode-row";
 import { SeasonTabs } from "@/features/detail/components/season-tabs";
@@ -26,6 +37,13 @@ interface Props {
   itemId: string;
 }
 
+// Estimated height of one `<EpisodeRow>` (thumbnail 80 + vertical
+// padding + ~3 lines of overview). Used as a lower bound for the
+// episode list container's `minHeight` so switching to a shorter
+// season doesn't reflow the page. Close enough; real heights are
+// measured via onLayout and the max is remembered below.
+const ESTIMATED_EPISODE_ROW_HEIGHT = 110;
+
 export function SeriesDetailScreen({ itemId }: Props) {
   const seriesQuery = useSeriesDetail(itemId);
   const seasonsQuery = useSeasons(itemId);
@@ -35,6 +53,92 @@ export function SeriesDetailScreen({ itemId }: Props) {
 
   const episodesQuery = useEpisodes(itemId, resolvedActiveSeasonId);
   const gutters = useScreenGutters();
+  const insets = useSafeAreaInsets();
+  const scrollY = useSharedValue(0);
+  const tabLayoutY = useSharedValue(0);
+  const scrollHandler = useAnimatedScrollHandler((event) => {
+    scrollY.value = event.contentOffset.y;
+  });
+
+  // Remember the tallest episode list height we've seen so far and
+  // pin the container to it, so switching to a season with fewer
+  // episodes doesn't shrink the page. Grows monotonically.
+  const [maxEpisodeListHeight, setMaxEpisodeListHeight] = useState(0);
+  const onEpisodeListLayout = (e: LayoutChangeEvent) => {
+    const h = e.nativeEvent.layout.height;
+    if (h > maxEpisodeListHeight) setMaxEpisodeListHeight(h);
+  };
+
+  /**
+   * Animated style for the floating sticky-tabs overlay. We don't use
+   * `stickyHeaderIndices` because that grows the view in-flow (the
+   * inset/clearance padding would be present even before the tabs
+   * pin, which looked wrong). Instead we render two copies: the
+   * natural tabs inside the ScrollView for layout + scroll anchoring,
+   * and a floating overlay (absolutely positioned at the top of the
+   * SafeAreaView) that fades + slides in as the natural tabs scroll
+   * past the viewport top.
+   *
+   * Opacity interpolates over a 40 dp transition zone just before
+   * `stickPoint` so the overlay smoothly fades in (not a hard
+   * snap). translateY starts at -8 and eases to 0 over the same
+   * range for a slight vertical nudge that feels like iOS large
+   * title → small title. When fully invisible (`opacity < 0.01`)
+   * the overlay is parked at translateY: -1000 so it doesn't eat
+   * taps.
+   */
+  const floatingTabsStyle = useAnimatedStyle(() => {
+    "worklet";
+    const stickPoint = tabLayoutY.value;
+    if (stickPoint <= 0) {
+      return { opacity: 0, transform: [{ translateY: -1000 }] };
+    }
+    const progress = interpolate(
+      scrollY.value,
+      [stickPoint - 40, stickPoint],
+      [0, 1],
+      Extrapolation.CLAMP,
+    );
+    const slide = interpolate(
+      scrollY.value,
+      [stickPoint - 40, stickPoint],
+      [-8, 0],
+      Extrapolation.CLAMP,
+    );
+    const parked = progress < 0.01 ? -1000 : slide;
+    return {
+      opacity: progress,
+      transform: [{ translateY: parked }],
+    };
+  });
+
+  /**
+   * Back-button visibility — the inverse of `floatingTabsStyle`.
+   * Visible while the hero dominates the viewport (user hasn't
+   * scrolled yet), fades out as the floating tabs come in so we
+   * never stack both in the top area at the same time.
+   */
+  const backButtonStyle = useAnimatedStyle(() => {
+    "worklet";
+    const stickPoint = tabLayoutY.value;
+    if (stickPoint <= 0) {
+      return { opacity: 1, transform: [{ translateY: 0 }] };
+    }
+    const progress = interpolate(
+      scrollY.value,
+      [stickPoint - 40, stickPoint],
+      [1, 0],
+      Extrapolation.CLAMP,
+    );
+    return {
+      opacity: progress,
+      transform: [{ translateY: progress < 0.01 ? -1000 : 0 }],
+    };
+  });
+
+  const onNaturalTabsLayout = (event: LayoutChangeEvent) => {
+    tabLayoutY.value = event.nativeEvent.layout.y;
+  };
 
   if (seriesQuery.isPending) {
     return (
@@ -63,12 +167,25 @@ export function SeriesDetailScreen({ itemId }: Props) {
   const seasons = seasonsQuery.data ?? [];
   const episodes = episodesQuery.data ?? [];
   const hasResume = (series.progress ?? 0) > 0.01;
+  const resumeTarget = pickResumeTarget(episodes);
 
   return (
-    <SafeAreaView style={styles.safe} edges={["bottom"]}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <DetailHero item={series} />
+    <SafeAreaView style={styles.safe} edges={[]}>
+      <Animated.ScrollView
+        contentContainerStyle={[
+          styles.scroll,
+          { paddingBottom: insets.bottom + layout.screenPaddingBottom },
+        ]}
+        showsVerticalScrollIndicator={false}
+        onScroll={scrollHandler}
+        scrollEventThrottle={16}
+      >
+        {/* Hero */}
+        <DetailHero item={series} resumeTarget={resumeTarget} scrollY={scrollY} />
+
+        {/* Meta row + action row + overview */}
         <View style={[styles.body, { paddingLeft: gutters.left, paddingRight: gutters.right }]}>
+          <DetailMetaRow item={series} />
           <DetailActionRow
             hasResume={hasResume}
             onPlay={() => {
@@ -79,29 +196,107 @@ export function SeriesDetailScreen({ itemId }: Props) {
             }}
           />
           {series.overview ? <Text style={styles.overview}>{series.overview}</Text> : null}
-          {seasons.length > 0 ? (
-            <>
-              <SeasonTabs
-                seasons={seasons}
-                activeSeasonId={resolvedActiveSeasonId}
-                onSelect={setActiveSeasonId}
-              />
-              {episodesQuery.isPending ? <ActivityIndicator color={colors.textSecondary} /> : null}
-              {episodes.map((episode) => (
-                <EpisodeRow
-                  key={keyFor(episode)}
-                  item={episode}
-                  onPress={() => {
-                    console.warn(`play episode ${keyFor(episode)}`);
-                  }}
-                />
-              ))}
-            </>
-          ) : null}
         </View>
-      </ScrollView>
+
+        {/* Natural-flow season tabs — no inset or back-button padding.
+            Captures the layout Y in a SharedValue so the floating
+            overlay below knows when to slide in. */}
+        {seasons.length > 0 ? (
+          <View
+            onLayout={onNaturalTabsLayout}
+            style={[styles.naturalTabs, { paddingLeft: gutters.left, paddingRight: gutters.right }]}
+          >
+            <SeasonTabs
+              seasons={seasons}
+              activeSeasonId={resolvedActiveSeasonId}
+              onSelect={setActiveSeasonId}
+            />
+          </View>
+        ) : null}
+
+        {/* Episode list. The container's `minHeight` is the max
+            height we've ever measured plus a rough per-row estimate
+            for the tallest declared season, so switching to a
+            shorter season doesn't shrink the page. */}
+        {seasons.length > 0 ? (
+          <View
+            onLayout={onEpisodeListLayout}
+            style={[
+              styles.body,
+              {
+                paddingLeft: gutters.left,
+                paddingRight: gutters.right,
+                minHeight: Math.max(
+                  maxEpisodeListHeight,
+                  maxDeclaredEpisodeCount(seasons) * ESTIMATED_EPISODE_ROW_HEIGHT,
+                ),
+              },
+            ]}
+          >
+            {episodesQuery.isPending ? <ActivityIndicator color={colors.textSecondary} /> : null}
+            {episodes.map((episode) => (
+              <EpisodeRow
+                key={keyFor(episode)}
+                item={episode}
+                onPress={() => {
+                  console.warn(`play episode ${keyFor(episode)}`);
+                }}
+              />
+            ))}
+          </View>
+        ) : null}
+      </Animated.ScrollView>
+      {seasons.length > 0 ? (
+        <FloatingBlurHeader style={floatingTabsStyle}>
+          <View style={{ paddingLeft: gutters.left, paddingRight: gutters.right }}>
+            <SeasonTabs
+              seasons={seasons}
+              activeSeasonId={resolvedActiveSeasonId}
+              onSelect={setActiveSeasonId}
+            />
+          </View>
+        </FloatingBlurHeader>
+      ) : null}
+      <StatusBarScrim />
+      {/* Back button is visible at rest (hero view) and fades out as
+          the floating tabs fade in. Never stacked with the pinned
+          tabs — the two inhabit the top area in alternation. */}
+      <Animated.View pointerEvents="box-none" style={[StyleSheet.absoluteFill, backButtonStyle]}>
+        <BackButton />
+      </Animated.View>
     </SafeAreaView>
   );
+}
+
+/**
+ * Pick the episode the series "Resume / Play" CTA should point at.
+ * Heuristic order: in-progress (0 < progress < 1) → first unplayed →
+ * first loaded episode. Good enough for Phase 2d; the Rust
+ * `DetailState::play_target()` uses the same ordering.
+ */
+/**
+ * Largest season episode count across all loaded seasons. Used to
+ * size the episode list container so switching to a shorter season
+ * doesn't reflow the page.
+ */
+function maxDeclaredEpisodeCount(seasons: MediaItem[]): number {
+  let max = 0;
+  for (const s of seasons) {
+    const n = s.episodeCount ?? 0;
+    if (n > max) max = n;
+  }
+  return max;
+}
+
+function pickResumeTarget(episodes: MediaItem[]): MediaItem | undefined {
+  if (episodes.length === 0) return undefined;
+  const inProgress = episodes.find((e) => {
+    const p = e.progress ?? 0;
+    return p > 0.01 && p < 0.99;
+  });
+  if (inProgress) return inProgress;
+  const unplayed = episodes.find((e) => !(e.userData?.played ?? false));
+  return unplayed ?? episodes[0];
 }
 
 function defaultSeasonId(seasons: MediaItem[] | undefined): string | undefined {
@@ -128,11 +323,20 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scroll: {
-    paddingBottom: layout.screenPaddingBottom,
+    // paddingBottom is merged in at the call site from
+    // `insets.bottom + layout.screenPaddingBottom` so the safe-area
+    // inset is part of scrollable content (scrolls past the home
+    // indicator) rather than fixed shell padding.
   },
   body: {
     gap: spacing.lg,
     marginTop: spacing.lg,
+  },
+  naturalTabs: {
+    // in-flow tabs with standard gutter padding — no notch inset,
+    // no back-button clearance. The pinned copy lives in
+    // <FloatingBlurHeader>, which handles its own padding.
+    paddingVertical: spacing.sm,
   },
   overview: {
     color: colors.textSecondary,
