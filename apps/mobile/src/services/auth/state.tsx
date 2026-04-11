@@ -9,6 +9,7 @@ import {
   SecureStorageKey,
   setSecureItem,
 } from "@/services/secure-storage";
+import { clearAllScrollStates } from "@/services/nav-state/store";
 import { buildPreAuthContext } from "./auth-context-builder";
 import {
   EMPTY_PERSISTED_AUTH,
@@ -282,6 +283,9 @@ function useAuthInternal(): AuthState {
         return current;
       }
       await secureUserStorage.saveActiveUserId(userId);
+      // Drop every saved scroll offset — the previous user's nav
+      // positions are meaningless against the new user's library.
+      clearAllScrollStates();
       return { ...current, activeUserId: userId };
     },
     onSuccess: (data) => {
@@ -334,6 +338,9 @@ function useAuthInternal(): AuthState {
       // gets a fresh fetchQuery build rather than a stale cached one.
       queryClient.removeQueries({ queryKey: ["auth", "context"] });
       queryClient.setQueryData(JELLYSEERR_LAST_ERROR_KEY, null);
+      // Drop every saved scroll offset so a fresh sign-in doesn't
+      // inherit the previous account's nav positions.
+      clearAllScrollStates();
 
       return {
         ...current,

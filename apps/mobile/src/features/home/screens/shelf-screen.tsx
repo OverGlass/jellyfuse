@@ -7,6 +7,7 @@ import { router } from "expo-router";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { BackButton } from "@/features/common/components/back-button";
+import { useRestoredScroll } from "@/features/common/hooks/use-restored-scroll";
 import { MediaCard } from "@/features/home/components/media-card";
 import { useShelfInfinite } from "@/services/query";
 import { useBreakpoint, useScreenGutters } from "@/services/responsive";
@@ -55,6 +56,7 @@ export function ShelfScreen({ shelfKey }: Props) {
   const { values } = useBreakpoint();
   const gutters = useScreenGutters();
   const insets = useSafeAreaInsets();
+  const scrollRestore = useRestoredScroll(`/shelf/${shelfKey}`);
 
   if (!pageable) {
     return (
@@ -83,6 +85,9 @@ export function ShelfScreen({ shelfKey }: Props) {
         {total > 0 ? <Text style={styles.count}>{total} items</Text> : null}
       </View>
       <FlashList
+        ref={scrollRestore.ref}
+        onScroll={scrollRestore.onScroll}
+        onContentSizeChange={scrollRestore.onContentSizeChange}
         data={items}
         numColumns={values.shelfGridColumns}
         keyExtractor={(item, index) => `${keyFor(item)}-${index}`}

@@ -18,6 +18,7 @@ import { router } from "expo-router";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ConnectionBanner } from "@/features/common/components/connection-banner";
+import { useRestoredScroll } from "@/features/common/hooks/use-restored-scroll";
 import { MediaShelf, type MediaShelfVariant } from "@/features/home/components/media-shelf";
 import { useAuth } from "@/services/auth/state";
 import { useConnectionStatus } from "@/services/connection/monitor";
@@ -49,6 +50,7 @@ export function HomeScreen() {
   const { activeUser, signOutAll } = useAuth();
   const gutters = useScreenGutters();
   const connectionStatus = useConnectionStatus();
+  const scrollRestore = useRestoredScroll("/home");
 
   const continueWatching = useContinueWatching();
   const nextUp = useNextUp();
@@ -82,6 +84,9 @@ export function HomeScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <FlashList
+        ref={scrollRestore.ref}
+        onScroll={scrollRestore.onScroll}
+        onContentSizeChange={scrollRestore.onContentSizeChange}
         data={visibleShelves}
         keyExtractor={(shelf) => shelf.key}
         ListHeaderComponent={
