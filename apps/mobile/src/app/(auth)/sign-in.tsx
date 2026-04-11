@@ -31,7 +31,10 @@ export default function SignInScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
 
-  const canSubmit = Boolean(username.trim()) && Boolean(password) && !busy;
+  // Jellyfin allows users with empty passwords (common on home-lab
+  // installs and the public demo server) — only require the username.
+  // The server returns 401 if this specific account actually needs one.
+  const canSubmit = Boolean(username.trim()) && !busy;
 
   const handleSubmit = useCallback(async () => {
     if (!canSubmit) return;
