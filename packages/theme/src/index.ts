@@ -88,26 +88,33 @@ export const responsive = {
     /** Horizontal screen gutter. */
     screenPaddingHorizontal: layout.screenPaddingHorizontal,
     /** Shelf grid column count on the "see all" screen. */
-    shelfGridColumns: 2,
-    /** Poster card width + aspect-ratio height. */
-    mediaCardWidth: 120,
-    mediaCardPosterHeight: 180,
+    shelfGridColumns: 3,
+    /** Poster card (2:3). */
+    mediaCardWidth: 104,
+    mediaCardPosterHeight: 156,
+    /** Wide card (16:9) — used by Continue Watching. */
+    wideCardWidth: 224,
+    wideCardHeight: 126,
     /** Horizontal gap between cards inside a shelf row. */
-    mediaCardGap: 16,
+    mediaCardGap: 12,
   },
   tablet: {
     screenPaddingHorizontal: 32,
     shelfGridColumns: 4,
-    mediaCardWidth: 150,
-    mediaCardPosterHeight: 225,
-    mediaCardGap: 20,
+    mediaCardWidth: 140,
+    mediaCardPosterHeight: 210,
+    wideCardWidth: 288,
+    wideCardHeight: 162,
+    mediaCardGap: 16,
   },
   desktop: {
     screenPaddingHorizontal: 48,
     shelfGridColumns: 6,
-    mediaCardWidth: 180,
-    mediaCardPosterHeight: 270,
-    mediaCardGap: 24,
+    mediaCardWidth: 170,
+    mediaCardPosterHeight: 255,
+    wideCardWidth: 340,
+    wideCardHeight: 191,
+    mediaCardGap: 20,
   },
 } as const;
 export type ResponsiveValues = (typeof responsive)[Breakpoint];

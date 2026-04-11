@@ -3,28 +3,39 @@ import { colors, fontSize, fontWeight, opacity, spacing } from "@jellyfuse/theme
 import { FlashList } from "@shopify/flash-list";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { MediaCard } from "@/features/home/components/media-card";
+import { WideMediaCard } from "@/features/home/components/wide-media-card";
 import { useBreakpoint } from "@/services/responsive";
 
 /**
  * One row on the home screen — a title, an optional "See all" chevron,
- * and a horizontal FlashList of `MediaCard`s driven by `items`. Pure
- * component: all data in via props, navigation flows out via the
- * `onItemPress` + `onSeeAll` callbacks. Parent (HomeScreen) hides the
- * whole row when `items.length === 0`, so empty states don't pollute
- * the layout with spinners / labels.
+ * and a horizontal FlashList of `MediaCard`s (or `WideMediaCard`s when
+ * `variant === "wide"`) driven by `items`. Pure component: all data
+ * in via props, navigation flows out via `onItemPress` + `onSeeAll`.
+ * Parent (HomeScreen) hides the whole row when `items.length === 0`,
+ * so empty states don't pollute the layout with spinners / labels.
  *
  * **Responsive**: pulls card width / height / gap from `useBreakpoint`,
  * so the same component lays out correctly on phone / tablet / desktop
  * without any parent math.
+ *
+ * **Variants**:
+ * - `"poster"` (default) — 2:3 portrait card, for Latest / Recently
+ *   Added / Next Up shelves where we want a lot of titles visible.
+ * - `"wide"` — 16:9 landscape card, for Continue Watching where we
+ *   want the episode thumbnail + progress bar to dominate.
  */
+
+export type MediaShelfVariant = "poster" | "wide";
+
 interface Props {
   title: string;
   items: MediaItem[];
+  variant?: MediaShelfVariant;
   onItemPress: (item: MediaItem) => void;
   onSeeAll?: () => void;
 }
 
-export function MediaShelf({ title, items, onItemPress, onSeeAll }: Props) {
+export function MediaShelf({ title, items, variant = "poster", onItemPress, onSeeAll }: Props) {
   const { values } = useBreakpoint();
   return (
     <View style={styles.root}>
@@ -46,15 +57,25 @@ export function MediaShelf({ title, items, onItemPress, onSeeAll }: Props) {
         showsHorizontalScrollIndicator={false}
         data={items}
         keyExtractor={(item, index) => `${keyFor(item)}-${index}`}
-        renderItem={({ item }) => (
-          <MediaCard
-            item={item}
-            width={values.mediaCardWidth}
-            posterHeight={values.mediaCardPosterHeight}
-            gap={values.mediaCardGap}
-            onPress={() => onItemPress(item)}
-          />
-        )}
+        renderItem={({ item }) =>
+          variant === "wide" ? (
+            <WideMediaCard
+              item={item}
+              width={values.wideCardWidth}
+              height={values.wideCardHeight}
+              gap={values.mediaCardGap}
+              onPress={() => onItemPress(item)}
+            />
+          ) : (
+            <MediaCard
+              item={item}
+              width={values.mediaCardWidth}
+              posterHeight={values.mediaCardPosterHeight}
+              gap={values.mediaCardGap}
+              onPress={() => onItemPress(item)}
+            />
+          )
+        }
         contentContainerStyle={{ paddingHorizontal: values.screenPaddingHorizontal }}
       />
     </View>

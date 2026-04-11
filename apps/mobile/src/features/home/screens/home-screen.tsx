@@ -18,7 +18,7 @@ import { router } from "expo-router";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ConnectionBanner } from "@/features/common/components/connection-banner";
-import { MediaShelf } from "@/features/home/components/media-shelf";
+import { MediaShelf, type MediaShelfVariant } from "@/features/home/components/media-shelf";
 import { useAuth } from "@/services/auth/state";
 import { useConnectionStatus } from "@/services/connection/monitor";
 import {
@@ -57,11 +57,16 @@ export function HomeScreen() {
   const latestTv = useLatestTv();
 
   const shelves: HomeShelf[] = [
-    { key: "continue-watching", title: "Continue Watching", query: continueWatching },
-    { key: "next-up", title: "Next Up", query: nextUp },
-    { key: "recently-added", title: "Recently Added", query: recentlyAdded },
-    { key: "latest-movies", title: "Latest Movies", query: latestMovies },
-    { key: "latest-tv", title: "Latest TV", query: latestTv },
+    {
+      key: "continue-watching",
+      title: "Continue Watching",
+      variant: "wide",
+      query: continueWatching,
+    },
+    { key: "next-up", title: "Next Up", variant: "wide", query: nextUp },
+    { key: "recently-added", title: "Recently Added", variant: "poster", query: recentlyAdded },
+    { key: "latest-movies", title: "Latest Movies", variant: "poster", query: latestMovies },
+    { key: "latest-tv", title: "Latest TV", variant: "poster", query: latestTv },
   ];
 
   const visibleShelves = shelves.filter(
@@ -109,6 +114,7 @@ export function HomeScreen() {
           <MediaShelf
             title={item.title}
             items={item.query.data ?? []}
+            variant={item.variant}
             onItemPress={handleItemPress}
             onSeeAll={() => handleSeeAll(item.key)}
           />
@@ -122,6 +128,7 @@ export function HomeScreen() {
 interface HomeShelf {
   key: ShelfKey;
   title: string;
+  variant: MediaShelfVariant;
   query: {
     data: MediaItem[] | undefined;
     isPending: boolean;

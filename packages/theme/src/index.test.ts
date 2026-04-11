@@ -79,6 +79,8 @@ describe("@jellyfuse/theme", () => {
         expect(values.shelfGridColumns).toBeGreaterThan(0);
         expect(values.mediaCardWidth).toBeGreaterThan(0);
         expect(values.mediaCardPosterHeight).toBeGreaterThan(0);
+        expect(values.wideCardWidth).toBeGreaterThan(0);
+        expect(values.wideCardHeight).toBeGreaterThan(0);
         expect(values.mediaCardGap).toBeGreaterThan(0);
       }
     });
@@ -86,6 +88,24 @@ describe("@jellyfuse/theme", () => {
     it("card width grows from phone to desktop", () => {
       expect(responsive.phone.mediaCardWidth).toBeLessThan(responsive.tablet.mediaCardWidth);
       expect(responsive.tablet.mediaCardWidth).toBeLessThan(responsive.desktop.mediaCardWidth);
+    });
+
+    it("wide card keeps a ~16:9 aspect ratio at every breakpoint", () => {
+      for (const bp of ["phone", "tablet", "desktop"] as const) {
+        const { wideCardWidth, wideCardHeight } = responsive[bp];
+        const ratio = wideCardWidth / wideCardHeight;
+        expect(ratio).toBeGreaterThanOrEqual(1.7);
+        expect(ratio).toBeLessThanOrEqual(1.82);
+      }
+    });
+
+    it("poster card keeps a ~2:3 aspect ratio at every breakpoint", () => {
+      for (const bp of ["phone", "tablet", "desktop"] as const) {
+        const { mediaCardWidth, mediaCardPosterHeight } = responsive[bp];
+        const ratio = mediaCardPosterHeight / mediaCardWidth;
+        expect(ratio).toBeGreaterThanOrEqual(1.48);
+        expect(ratio).toBeLessThanOrEqual(1.52);
+      }
     });
   });
 
