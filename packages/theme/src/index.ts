@@ -85,8 +85,8 @@ export type Breakpoint = keyof typeof breakpoints;
  */
 export const responsive = {
   phone: {
-    /** Horizontal screen gutter. */
-    screenPaddingHorizontal: layout.screenPaddingHorizontal,
+    /** Horizontal screen gutter. 16 dp is the iOS native content inset. */
+    screenPaddingHorizontal: 16,
     /** Shelf grid column count on the "see all" screen. */
     shelfGridColumns: 3,
     /** Poster card (2:3). */
@@ -99,7 +99,7 @@ export const responsive = {
     mediaCardGap: 12,
   },
   tablet: {
-    screenPaddingHorizontal: 32,
+    screenPaddingHorizontal: 24,
     shelfGridColumns: 4,
     mediaCardWidth: 140,
     mediaCardPosterHeight: 210,
@@ -108,7 +108,7 @@ export const responsive = {
     mediaCardGap: 16,
   },
   desktop: {
-    screenPaddingHorizontal: 48,
+    screenPaddingHorizontal: 32,
     shelfGridColumns: 6,
     mediaCardWidth: 170,
     mediaCardPosterHeight: 255,
