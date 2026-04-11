@@ -176,7 +176,7 @@ async function fetchShelf(
   return mapper(baseUrl, raw, shelf);
 }
 
-function mapItemsResponse(baseUrl: string, raw: unknown, shelf: string): MediaItem[] {
+export function mapItemsResponse(baseUrl: string, raw: unknown, shelf: string): MediaItem[] {
   if (typeof raw !== "object" || raw === null) {
     throw new ShelfParseError(shelf, "response is not an object");
   }
@@ -252,13 +252,13 @@ interface RawJfProviderIds {
   Tvdb?: string;
 }
 
-function isRawJfItem(value: unknown): value is RawJfItem {
+export function isRawJfItem(value: unknown): value is RawJfItem {
   if (typeof value !== "object" || value === null) return false;
   const v = value as Record<string, unknown>;
   return typeof v["Id"] === "string" && typeof v["Name"] === "string";
 }
 
-function mapJfItem(baseUrl: string, item: RawJfItem): MediaItem {
+export function mapJfItem(baseUrl: string, item: RawJfItem): MediaItem {
   const mediaType = mapMediaType(item.Type);
   const posterUrl = item.ImageTags?.Primary
     ? buildPrimaryImageUrl(baseUrl, item.Id, 400)

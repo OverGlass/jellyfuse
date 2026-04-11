@@ -10,3 +10,4 @@ export {
   useNextUp,
   useRecentlyAdded,
 } from "./hooks/use-home-shelves";
+export { useEpisodes, useMovieDetail, useSeasons, useSeriesDetail } from "./hooks/use-detail";

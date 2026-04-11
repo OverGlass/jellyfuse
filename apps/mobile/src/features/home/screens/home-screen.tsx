@@ -148,13 +148,15 @@ function handleSeeAll(shelfKey: ShelfKey) {
 function handleItemPress(item: MediaItem) {
   const jellyfinId = mediaIdJellyfin(item.id);
   if (!jellyfinId) return;
-  // Phase 2d ships the real detail screens. For now warn to keep
-  // the tap wired end-to-end; routing will swap in when the screens
-  // land.
+  // Episodes route to their parent series detail; everything else to
+  // the corresponding movie / series page. The TMDB-only detail lands
+  // in Phase 4.
   if (item.mediaType === "series") {
-    console.warn(`detail series ${jellyfinId}`);
+    router.push(`/detail/series/${jellyfinId}`);
+  } else if (item.mediaType === "episode" && item.seriesId) {
+    router.push(`/detail/series/${item.seriesId}`);
   } else {
-    console.warn(`detail movie ${jellyfinId}`);
+    router.push(`/detail/movie/${jellyfinId}`);
   }
 }
 
