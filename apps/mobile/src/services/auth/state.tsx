@@ -4,7 +4,6 @@ import { createContext, useContext, type ReactNode } from "react";
 import NitroCookies from "react-native-nitro-cookies";
 import { apiFetch } from "@/services/api/client";
 import {
-  clearSecureStorage,
   getSecureItem,
   removeSecureItem,
   SecureStorageKey,
@@ -309,8 +308,10 @@ function useAuthInternal(): AuthState {
     mutationFn: async (): Promise<PersistedAuth> => {
       const current =
         queryClient.getQueryData<PersistedAuth>(PERSISTED_AUTH_KEY) ?? EMPTY_PERSISTED_AUTH;
-      // Clear the native Jellyseerr session cookie before wiping
-      // secure-storage so the next user gets a fresh session.
+
+      // Clear the native Jellyseerr session cookie so the next
+      // user gets a fresh session rather than inheriting the
+      // previous user's connect.sid from the native jar.
       if (current.jellyseerrUrl) {
         try {
           await NitroCookies.clearByName(current.jellyseerrUrl, "connect.sid");
@@ -318,12 +319,26 @@ function useAuthInternal(): AuthState {
           console.warn("failed to clear native jellyseerr cookie on sign-out", err);
         }
       }
-      await clearSecureStorage();
+
+      // "Sign out" keeps the server configuration — the user stays
+      // connected to this Jellyfin+Jellyseerr pair, they just log out
+      // of their account. Next screen is /(auth)/sign-in, not
+      // /(auth)/server. A separate "Forget server" action (Phase 6
+      // settings) will wipe the server URLs if the user wants to
+      // switch instances.
+      await secureUserStorage.saveUsers([]);
+      await secureUserStorage.saveActiveUserId(undefined);
+
       // Evict every auth-context entry so the next signed-in user
       // gets a fresh fetchQuery build rather than a stale cached one.
       queryClient.removeQueries({ queryKey: ["auth", "context"] });
       queryClient.setQueryData(JELLYSEERR_LAST_ERROR_KEY, null);
-      return EMPTY_PERSISTED_AUTH;
+
+      return {
+        ...current,
+        users: [],
+        activeUserId: undefined,
+      };
     },
     onSuccess: (data) => {
       queryClient.setQueryData(PERSISTED_AUTH_KEY, data);

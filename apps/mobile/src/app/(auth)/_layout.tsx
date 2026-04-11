@@ -8,7 +8,9 @@ import { useAuth } from "@/services/auth/state";
 export default function AuthLayout() {
   const { status } = useAuth();
   if (status === "authenticated") {
-    return <Redirect href="/(app)" />;
+    // Bounce back to the root router — single source of routing
+    // truth, mirrors the pattern in (app)/_layout.tsx.
+    return <Redirect href="/" />;
   }
   return <Stack screenOptions={{ headerShown: false }} />;
 }

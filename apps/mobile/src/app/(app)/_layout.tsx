@@ -14,8 +14,11 @@ export default function AppLayout() {
   if (status === "loading") {
     return <SplashPlaceholder />;
   }
+  // Bounce back to the root router — it's the single source of
+  // routing truth (server configured? user signed in? Jellyseerr
+  // URL set? → one decision tree in app/index.tsx).
   if (status !== "authenticated") {
-    return <Redirect href="/(auth)/sign-in" />;
+    return <Redirect href="/" />;
   }
   return <Stack screenOptions={{ headerShown: false }} />;
 }
