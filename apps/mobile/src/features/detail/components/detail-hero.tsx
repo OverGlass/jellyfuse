@@ -1,80 +1,105 @@
 import type { MediaItem } from "@jellyfuse/api";
 import { mediaItemSubtitle } from "@jellyfuse/models";
-import { colors, duration, fontSize, fontWeight, radius, spacing } from "@jellyfuse/theme";
+import { colors, duration, fontSize, fontWeight, spacing } from "@jellyfuse/theme";
 import { Image } from "expo-image";
+import { LinearGradient } from "expo-linear-gradient";
 import { StyleSheet, Text, View } from "react-native";
 import { useBreakpoint, useScreenGutters } from "@/services/responsive";
 
 /**
- * Detail screen hero — blurred backdrop tint, poster + title block
- * overlaid on top, year / runtime / genres row. Pure component, takes
- * a `MediaItem` and nothing else. Responsive via `useBreakpoint`:
- * phone is a vertical stack, tablet/desktop put the poster beside the
- * title block.
+ * Detail screen hero. Ports the Rust `DetailView::render_hero`:
+ * full-width backdrop image under a vertical gradient scrim, with
+ * the **title logo** (falling back to the title text) anchored to
+ * the bottom-left. Genres + year + runtime render as the subtitle
+ * beneath the logo, not as a right column — on mobile there's no
+ * room for a two-column hero, so everything stacks left-aligned.
+ *
+ * **Never** shows the poster here — the hero is about backdrop +
+ * branding, and repeating the poster inline wastes vertical space
+ * and feels redundant with the shelves the user just came from.
+ *
+ * Responsive: taller backdrop on tablet/desktop to match the larger
+ * viewport; everything else derives from `useScreenGutters()` so the
+ * notch in landscape is handled automatically.
  */
 interface Props {
   item: MediaItem;
 }
 
-const HERO_BACKDROP_HEIGHT_PHONE = 280;
-const HERO_BACKDROP_HEIGHT_TABLET = 360;
+const HERO_HEIGHT_PHONE = 320;
+const HERO_HEIGHT_TABLET = 440;
+const HERO_HEIGHT_DESKTOP = 520;
+const LOGO_HEIGHT = 72;
 
 export function DetailHero({ item }: Props) {
-  const { breakpoint, values } = useBreakpoint();
+  const { breakpoint } = useBreakpoint();
   const gutters = useScreenGutters();
-  const isCompact = breakpoint === "phone";
-  const backdropHeight = isCompact ? HERO_BACKDROP_HEIGHT_PHONE : HERO_BACKDROP_HEIGHT_TABLET;
-  const posterWidth = isCompact ? 120 : values.mediaCardWidth;
-  const posterHeight = isCompact ? 180 : values.mediaCardPosterHeight;
+  const height =
+    breakpoint === "phone"
+      ? HERO_HEIGHT_PHONE
+      : breakpoint === "tablet"
+        ? HERO_HEIGHT_TABLET
+        : HERO_HEIGHT_DESKTOP;
   const subtitle = mediaItemSubtitle(item);
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, { height }]}>
       {item.backdropUrl ? (
         <Image
           source={item.backdropUrl}
-          style={[styles.backdrop, { height: backdropHeight }]}
+          style={styles.backdrop}
           contentFit="cover"
           transition={duration.normal}
           recyclingKey={item.backdropUrl}
           cachePolicy="memory-disk"
         />
       ) : (
-        <View style={[styles.backdrop, styles.backdropFallback, { height: backdropHeight }]} />
+        <View style={[styles.backdrop, styles.backdropFallback]} />
       )}
-      <View style={[styles.scrim, { height: backdropHeight }]} />
-      <View
-        style={[
-          styles.contentRow,
-          isCompact ? styles.contentRowCompact : styles.contentRowWide,
-          { paddingLeft: gutters.left, paddingRight: gutters.right },
+      {/* Bottom scrim — fades the backdrop into the page background so
+          the title logo + subtitle + genres stay legible on any image. */}
+      <LinearGradient
+        pointerEvents="none"
+        colors={[
+          "rgba(30,34,39,0)",
+          "rgba(30,34,39,0.45)",
+          "rgba(30,34,39,0.85)",
+          colors.background,
         ]}
-      >
-        {item.posterUrl ? (
+        locations={[0, 0.45, 0.8, 1]}
+        style={StyleSheet.absoluteFill}
+      />
+      {/* Top mask — darkens the area under the status bar / notch so the
+          status icons + back button stay readable when the backdrop is
+          bright. Covers ~statusbar + notch height (120 dp is enough for
+          Dynamic Island on iPhone 14/15 Pro). */}
+      <LinearGradient
+        pointerEvents="none"
+        colors={["rgba(30,34,39,0.85)", "rgba(30,34,39,0)"]}
+        locations={[0, 1]}
+        style={styles.topMask}
+      />
+      <View style={[styles.textBlock, { paddingLeft: gutters.left, paddingRight: gutters.right }]}>
+        {item.logoUrl ? (
           <Image
-            source={item.posterUrl}
-            style={[styles.poster, { width: posterWidth, height: posterHeight }]}
-            contentFit="cover"
+            source={item.logoUrl}
+            style={styles.logo}
+            contentFit="contain"
             transition={duration.normal}
-            recyclingKey={item.posterUrl}
+            recyclingKey={item.logoUrl}
             cachePolicy="memory-disk"
           />
         ) : (
-          <View style={[styles.posterFallback, { width: posterWidth, height: posterHeight }]}>
-            <Text style={styles.posterFallbackGlyph}>{item.title.slice(0, 1).toUpperCase()}</Text>
-          </View>
-        )}
-        <View style={[styles.titleBlock, isCompact && styles.titleBlockCompact]}>
           <Text style={styles.title} numberOfLines={3}>
             {item.title}
           </Text>
-          {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
-          {item.genres.length > 0 ? (
-            <Text style={styles.genres} numberOfLines={1}>
-              {item.genres.slice(0, 3).join(" · ")}
-            </Text>
-          ) : null}
-        </View>
+        )}
+        {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+        {item.genres.length > 0 ? (
+          <Text style={styles.genres} numberOfLines={1}>
+            {item.genres.slice(0, 3).join(" · ")}
+          </Text>
+        ) : null}
       </View>
     </View>
   );
@@ -84,57 +109,34 @@ const styles = StyleSheet.create({
   root: {
     backgroundColor: colors.background,
     position: "relative",
+    width: "100%",
   },
   backdrop: {
+    height: "100%",
     width: "100%",
   },
   backdropFallback: {
     backgroundColor: colors.surface,
   },
-  scrim: {
-    backgroundColor: colors.background,
-    bottom: 0,
+  topMask: {
+    height: 120,
     left: 0,
-    opacity: 0.55,
     position: "absolute",
     right: 0,
+    top: 0,
   },
-  contentRow: {
-    alignItems: "flex-end",
+  textBlock: {
     bottom: spacing.lg,
+    gap: spacing.xs,
     left: 0,
     position: "absolute",
     right: 0,
   },
-  contentRowCompact: {
-    flexDirection: "column",
-    alignItems: "flex-start",
-  },
-  contentRowWide: {
-    flexDirection: "row",
-    gap: spacing.lg,
-  },
-  poster: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-  },
-  posterFallback: {
-    alignItems: "center",
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    justifyContent: "center",
-  },
-  posterFallbackGlyph: {
-    color: colors.textMuted,
-    fontSize: fontSize.display,
-    fontWeight: fontWeight.bold,
-  },
-  titleBlock: {
-    flex: 1,
-    gap: spacing.xs,
-  },
-  titleBlockCompact: {
-    marginTop: spacing.md,
+  logo: {
+    alignSelf: "flex-start",
+    aspectRatio: 3,
+    height: LOGO_HEIGHT,
+    maxWidth: "75%",
   },
   title: {
     color: colors.textPrimary,
