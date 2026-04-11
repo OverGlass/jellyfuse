@@ -5,4 +5,4 @@
 // SubtitleTrack, JellyfinUser, AuthenticatedUser).
 
 /** Monorepo-wide version marker to prove the package is wired. */
-export const MODELS_PACKAGE_VERSION = "0.0.0" as const
+export const MODELS_PACKAGE_VERSION = "0.0.0" as const;

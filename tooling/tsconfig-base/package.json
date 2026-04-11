@@ -2,6 +2,8 @@
   "name": "@jellyfuse/tsconfig-base",
   "version": "0.0.0",
   "private": true,
-  "main": "tsconfig.base.json",
-  "files": ["tsconfig.base.json"]
+  "files": [
+    "tsconfig.base.json"
+  ],
+  "main": "tsconfig.base.json"
 }

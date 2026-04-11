@@ -8,13 +8,13 @@
 
 export interface AuthContext {
   /** Stable device id from the `device-id` Nitro module, never random-per-session. */
-  deviceId: string
+  deviceId: string;
   /** Authenticated user token, or undefined pre-login. */
-  token: string | undefined
+  token: string | undefined;
   /** Client name + version, used in the X-Emby-Authorization header. */
-  clientName: string
-  clientVersion: string
-  deviceName: string
+  clientName: string;
+  clientVersion: string;
+  deviceName: string;
 }
 
 /**
@@ -27,12 +27,14 @@ export function buildAuthHeader(ctx: AuthContext): string {
     `Device="${escape(ctx.deviceName)}"`,
     `DeviceId="${escape(ctx.deviceId)}"`,
     `Version="${escape(ctx.clientVersion)}"`,
-  ]
-  if (ctx.token) parts.push(`Token="${escape(ctx.token)}"`)
-  return parts.join(", ")
+  ];
+  if (ctx.token) parts.push(`Token="${escape(ctx.token)}"`);
+  return parts.join(", ");
 }
 
 function escape(value: string): string {
   // Jellyfin header values are quoted; escape embedded quotes and backslashes.
-  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
+
+export * from "./system-info";

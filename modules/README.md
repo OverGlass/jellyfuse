@@ -4,16 +4,16 @@ Native modules built on [Nitro Modules](https://nitro.margelo.com). One TS spec 
 
 ## Module matrix
 
-| Module | Platforms | Purpose |
-|---|---|---|
-| `native-mpv` | iOS · tvOS · Catalyst · Android · Android TV | **The only video player.** libmpv render context in a Fabric view. |
-| `downloader` | iOS · Android · Android TV | Background downloads. URLSession (iOS) / WorkManager (Android). Manifest-first state machine. |
-| `secure-storage` | all | Keychain / Android Keystore. |
-| `device-id` | all | Stable device id. Persisted in `secure-storage`. |
-| `cookie-jar` | all | Jellyseerr `connect.sid` session cookie. |
-| `chromecast` | iOS · Android (not Catalyst) | Google Cast SDK. Gated out of Mac Catalyst builds. |
-| `airplay` | iOS · tvOS · Catalyst | `AVRoutePickerView`. |
-| `pip` | iOS · Android | AVKit PiP controller / Android `PictureInPictureParams`. |
+| Module           | Platforms                                    | Purpose                                                                                       |
+| ---------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `native-mpv`     | iOS · tvOS · Catalyst · Android · Android TV | **The only video player.** libmpv render context in a Fabric view.                            |
+| `downloader`     | iOS · Android · Android TV                   | Background downloads. URLSession (iOS) / WorkManager (Android). Manifest-first state machine. |
+| `secure-storage` | all                                          | Keychain / Android Keystore.                                                                  |
+| `device-id`      | all                                          | Stable device id. Persisted in `secure-storage`.                                              |
+| `cookie-jar`     | all                                          | Jellyseerr `connect.sid` session cookie.                                                      |
+| `chromecast`     | iOS · Android (not Catalyst)                 | Google Cast SDK. Gated out of Mac Catalyst builds.                                            |
+| `airplay`        | iOS · tvOS · Catalyst                        | `AVRoutePickerView`.                                                                          |
+| `pip`            | iOS · Android                                | AVKit PiP controller / Android `PictureInPictureParams`.                                      |
 
 Skipped on tvOS: `downloader`, `chromecast`.
 
@@ -54,9 +54,9 @@ When authoring a new module:
 
 Placeholder — real modules land in their respective phases:
 
-| Phase | Module |
-|---|---|
+| Phase   | Module                                      |
+| ------- | ------------------------------------------- |
 | Phase 1 | `secure-storage`, `device-id`, `cookie-jar` |
-| Phase 3 | `native-mpv` |
-| Phase 5 | `downloader` |
-| Phase 9 | `chromecast`, `airplay`, `pip` |
+| Phase 3 | `native-mpv`                                |
+| Phase 5 | `downloader`                                |
+| Phase 9 | `chromecast`, `airplay`, `pip`              |

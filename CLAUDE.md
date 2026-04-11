@@ -18,21 +18,21 @@ bun run --filter @jellyfuse/mobile catalyst
 
 ## Workspace Map
 
-| Path | Role |
-|------|------|
-| `apps/mobile` | Expo app — all platform targets from one codebase |
-| `apps/web` | (future) marketing / landing page |
-| `packages/api` | Pure TS Jellyfin + Jellyseerr HTTP clients. **No business logic, no state.** |
-| `packages/models` | Domain types (ports `jf-core/src/models.rs`) |
-| `packages/query-keys` | TanStack Query key factory + stale times (ports `jf-core/src/query.rs`) |
-| `packages/theme` | Design tokens shared between app and web |
-| `modules/native-mpv` | MPV player Nitro module (Swift + Kotlin) — **the only video backend** |
-| `modules/downloader` | Background downloads (URLSession / WorkManager) |
-| `modules/secure-storage` | Keychain / Keystore |
-| `modules/device-id` | Stable device ID |
-| `modules/cookie-jar` | Jellyseerr session cookie |
-| `modules/chromecast` · `airplay` · `pip` | Cast / AirPlay / PiP |
-| `tooling/*` | Shared tsconfig, eslint, vitest preset |
+| Path                                     | Role                                                                         |
+| ---------------------------------------- | ---------------------------------------------------------------------------- |
+| `apps/mobile`                            | Expo app — all platform targets from one codebase                            |
+| `apps/web`                               | (future) marketing / landing page                                            |
+| `packages/api`                           | Pure TS Jellyfin + Jellyseerr HTTP clients. **No business logic, no state.** |
+| `packages/models`                        | Domain types (ports `jf-core/src/models.rs`)                                 |
+| `packages/query-keys`                    | TanStack Query key factory + stale times (ports `jf-core/src/query.rs`)      |
+| `packages/theme`                         | Design tokens shared between app and web                                     |
+| `modules/native-mpv`                     | MPV player Nitro module (Swift + Kotlin) — **the only video backend**        |
+| `modules/downloader`                     | Background downloads (URLSession / WorkManager)                              |
+| `modules/secure-storage`                 | Keychain / Keystore                                                          |
+| `modules/device-id`                      | Stable device ID                                                             |
+| `modules/cookie-jar`                     | Jellyseerr session cookie                                                    |
+| `modules/chromecast` · `airplay` · `pip` | Cast / AirPlay / PiP                                                         |
+| `tooling/*`                              | Shared tsconfig, eslint, vitest preset                                       |
 
 ## Data Flow — React Query Is The Store
 
@@ -66,12 +66,12 @@ user action / effect
 
 ## Layered Rules
 
-| Layer | Where | Rules |
-|-------|-------|-------|
-| **UI** | `apps/mobile/features/*` | Pure components: props struct + callback fields. No API calls. No navigation imports — callbacks out. |
-| **Data/State** | TanStack Query + `packages/query-keys` + `packages/models` | Single source of truth for async state. |
-| **Network** | `packages/api` | HTTP only. No business logic. No state. |
-| **Orchestration** | `apps/mobile/services/*` | Hooks, event handlers, query wiring, connection monitor, playback reporter. |
+| Layer             | Where                                                      | Rules                                                                                                 |
+| ----------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| **UI**            | `apps/mobile/features/*`                                   | Pure components: props struct + callback fields. No API calls. No navigation imports — callbacks out. |
+| **Data/State**    | TanStack Query + `packages/query-keys` + `packages/models` | Single source of truth for async state.                                                               |
+| **Network**       | `packages/api`                                             | HTTP only. No business logic. No state.                                                               |
+| **Orchestration** | `apps/mobile/services/*`                                   | Hooks, event handlers, query wiring, connection monitor, playback reporter.                           |
 
 ## Event / callback convention
 
@@ -176,6 +176,7 @@ Three surfaces, each with the right tool:
 4. **Native modules** → XCTest (Swift) / JUnit + Robolectric (Kotlin), focused on downloader state machine + MPV property wiring.
 
 When touching:
+
 - `packages/api` → add/update a Vitest test with a fixture.
 - A hook in `services/` → add a Jest test.
 - A component → add an RTL interaction test.

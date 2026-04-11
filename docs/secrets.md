@@ -8,10 +8,10 @@ This is enforced by the CLAUDE.md ban on hardcoding secrets and by the `.gitigno
 
 Two vaults owned by the Jellyfuse workspace:
 
-| Vault | Purpose | Who |
-|---|---|---|
-| `Jellyfuse Dev` | Local development secrets (dev Jellyfin URL, test user credentials, Sentry DSN for dev). | Engineers |
-| `Jellyfuse CI` | CI-only secrets: EAS token, Apple App Store Connect API key, Android keystore passphrase, Google Play service account JSON, Sentry release DSN, signing profiles. | CI service account (read-only) |
+| Vault           | Purpose                                                                                                                                                           | Who                            |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| `Jellyfuse Dev` | Local development secrets (dev Jellyfin URL, test user credentials, Sentry DSN for dev).                                                                          | Engineers                      |
+| `Jellyfuse CI`  | CI-only secrets: EAS token, Apple App Store Connect API key, Android keystore passphrase, Google Play service account JSON, Sentry release DSN, signing profiles. | CI service account (read-only) |
 
 ## Local development
 

@@ -2,12 +2,14 @@
   "name": "@jellyfuse/vitest-preset",
   "version": "0.0.0",
   "private": true,
+  "files": [
+    "index.mjs"
+  ],
   "type": "module",
   "main": "./index.mjs",
   "exports": {
     ".": "./index.mjs"
   },
-  "files": ["index.mjs"],
   "peerDependencies": {
     "vitest": "^2.1.3"
   }

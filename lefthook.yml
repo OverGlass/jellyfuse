@@ -11,7 +11,7 @@ pre-commit:
       # lefthook's staged-files glob quirks with nested monorepo paths.
       run: PATH="$HOME/.bun/bin:$PATH" bun run format:check
     typecheck:
-      glob: '**/*.{ts,tsx}'
+      glob: "**/*.{ts,tsx}"
       run: PATH="$HOME/.bun/bin:$PATH" bun run typecheck
 
 commit-msg:

@@ -11,8 +11,8 @@ export const spacing = {
   lg: 24,
   xl: 32,
   xxl: 48,
-} as const
-export type Spacing = keyof typeof spacing
+} as const;
+export type Spacing = keyof typeof spacing;
 
 /** Font size scale in dp. Monotonic. */
 export const fontSize = {
@@ -22,8 +22,8 @@ export const fontSize = {
   subtitle: 18,
   title: 24,
   display: 32,
-} as const
-export type FontSize = keyof typeof fontSize
+} as const;
+export type FontSize = keyof typeof fontSize;
 
 /** Font weights. RN accepts string values. */
 export const fontWeight = {
@@ -31,8 +31,8 @@ export const fontWeight = {
   medium: "500",
   semibold: "600",
   bold: "700",
-} as const
-export type FontWeight = keyof typeof fontWeight
+} as const;
+export type FontWeight = keyof typeof fontWeight;
 
 /**
  * Phase 0b ships a single dark-first palette. A full Jellyfin-tinted palette
@@ -51,5 +51,5 @@ export const colors = {
   textMuted: "#5f6368",
   /** Accent (brand). Placeholder until Phase 2. */
   accent: "#00a4dc",
-} as const
-export type ColorToken = keyof typeof colors
+} as const;
+export type ColorToken = keyof typeof colors;

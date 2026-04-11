@@ -1,5 +1,5 @@
 // @ts-check
-import { defineConfig } from "vitest/config"
+import { defineConfig } from "vitest/config";
 
 /**
  * Shared Vitest base config for pure-TS workspace packages.
@@ -18,6 +18,6 @@ export const baseConfig = defineConfig({
       reporter: ["text", "json-summary", "json"],
     },
   },
-})
+});
 
-export default baseConfig
+export default baseConfig;

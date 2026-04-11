@@ -3,13 +3,7 @@
 // eslint-plugin-react-compiler, and eslint-plugin-react-native once apps/mobile is installed.
 export default [
   {
-    ignores: [
-      "**/dist/**",
-      "**/build/**",
-      "**/.expo/**",
-      "**/ios/**",
-      "**/android/**",
-    ],
+    ignores: ["**/dist/**", "**/build/**", "**/.expo/**", "**/ios/**", "**/android/**"],
   },
   {
     languageOptions: {
@@ -21,4 +15,4 @@ export default [
       "no-debugger": "error",
     },
   },
-]
+];

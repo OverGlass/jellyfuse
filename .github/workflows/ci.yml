@@ -43,11 +43,14 @@ jobs:
       fail-fast: false
       matrix:
         target:
-          - { name: ios, cmd: 'bun run --filter @jellyfuse/mobile prebuild:ios:dry' }
-          - { name: android, cmd: 'bun run --filter @jellyfuse/mobile prebuild:android:dry' }
-          - { name: tvos, cmd: 'EXPO_TV=1 bun run --filter @jellyfuse/mobile prebuild:ios:dry' }
-          - { name: androidtv, cmd: 'EXPO_TV=1 bun run --filter @jellyfuse/mobile prebuild:android:dry' }
-          - { name: catalyst, cmd: 'bun run --filter @jellyfuse/mobile prebuild:catalyst:dry' }
+          - { name: ios, cmd: "bun run --filter @jellyfuse/mobile prebuild:ios:dry" }
+          - { name: android, cmd: "bun run --filter @jellyfuse/mobile prebuild:android:dry" }
+          - { name: tvos, cmd: "EXPO_TV=1 bun run --filter @jellyfuse/mobile prebuild:ios:dry" }
+          - {
+              name: androidtv,
+              cmd: "EXPO_TV=1 bun run --filter @jellyfuse/mobile prebuild:android:dry",
+            }
+          - { name: catalyst, cmd: "bun run --filter @jellyfuse/mobile prebuild:catalyst:dry" }
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2

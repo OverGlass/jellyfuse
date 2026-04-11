@@ -13,9 +13,9 @@ export const STALE_TIMES = {
   qualityProfiles: 30 * 60 * 1000,
   /** Radarr/Sonarr download progress — 10 s (polled via refetchInterval). */
   downloadProgress: 10 * 1000,
-} as const
+} as const;
 
-export type StaleTimeKey = keyof typeof STALE_TIMES
+export type StaleTimeKey = keyof typeof STALE_TIMES;
 
 /**
  * Root key factory. Every key is scoped by userId so `queryClient.clear()`
@@ -25,4 +25,4 @@ export const queryKeys = {
   systemInfo: (baseUrl: string) => ["system-info", baseUrl] as const,
   home: (userId: string) => ["home", userId] as const,
   qualityProfiles: () => ["quality-profiles"] as const,
-} as const
+} as const;

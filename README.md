@@ -29,21 +29,21 @@ bun run --filter @jellyfuse/mobile android
 
 ## Workspace layout
 
-| Path | Purpose |
-|---|---|
-| `apps/mobile` | Expo app (iOS, iPadOS, tvOS, Catalyst, Android, Android TV) |
-| `apps/web` | (future) marketing / landing page |
-| `packages/api` | Pure TS Jellyfin + Jellyseerr HTTP clients |
-| `packages/models` | Domain types (ported from `jf-core/models.rs`) |
-| `packages/query-keys` | TanStack Query key factory + stale times |
-| `packages/theme` | Design tokens shared across apps |
-| `modules/native-mpv` | MPV player — Swift + Kotlin Nitro module |
-| `modules/downloader` | Background downloads — URLSession / WorkManager |
-| `modules/secure-storage` | Keychain / Keystore |
-| `modules/device-id` | Stable device ID |
-| `modules/cookie-jar` | Jellyseerr `connect.sid` |
-| `modules/chromecast` · `airplay` · `pip` | Cast / AirPlay / Picture-in-Picture |
-| `tooling/*` | Shared `tsconfig`, eslint, vitest preset |
+| Path                                     | Purpose                                                     |
+| ---------------------------------------- | ----------------------------------------------------------- |
+| `apps/mobile`                            | Expo app (iOS, iPadOS, tvOS, Catalyst, Android, Android TV) |
+| `apps/web`                               | (future) marketing / landing page                           |
+| `packages/api`                           | Pure TS Jellyfin + Jellyseerr HTTP clients                  |
+| `packages/models`                        | Domain types (ported from `jf-core/models.rs`)              |
+| `packages/query-keys`                    | TanStack Query key factory + stale times                    |
+| `packages/theme`                         | Design tokens shared across apps                            |
+| `modules/native-mpv`                     | MPV player — Swift + Kotlin Nitro module                    |
+| `modules/downloader`                     | Background downloads — URLSession / WorkManager             |
+| `modules/secure-storage`                 | Keychain / Keystore                                         |
+| `modules/device-id`                      | Stable device ID                                            |
+| `modules/cookie-jar`                     | Jellyseerr `connect.sid`                                    |
+| `modules/chromecast` · `airplay` · `pip` | Cast / AirPlay / Picture-in-Picture                         |
+| `tooling/*`                              | Shared `tsconfig`, eslint, vitest preset                    |
 
 ## Secrets (1Password)
 
