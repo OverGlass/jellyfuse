@@ -29,5 +29,8 @@
   "engines": {
     "bun": ">=1.3.0",
     "node": ">=20"
+  },
+  "patchedDependencies": {
+    "expo-dev-launcher@55.0.27": "patches/expo-dev-launcher@55.0.27.patch"
   }
 }
