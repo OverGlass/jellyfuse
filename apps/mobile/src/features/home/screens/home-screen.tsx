@@ -1,3 +1,6 @@
+import type { MediaItem } from "@jellyfuse/api";
+import { mediaIdJellyfin } from "@jellyfuse/models";
+import type { ShelfKey } from "@jellyfuse/query-keys";
 import {
   colors,
   duration,
@@ -12,61 +15,103 @@ import { FlashList } from "@shopify/flash-list";
 import { Image } from "expo-image";
 import { useKeepAwake } from "expo-keep-awake";
 import { router } from "expo-router";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { ConnectionBanner } from "@/features/common/components/connection-banner";
 import { MediaShelf } from "@/features/home/components/media-shelf";
-import { useDeviceId } from "@/features/home/hooks/use-device-id";
-import { mockShelves, type MockMediaItem, type MockShelf } from "@/features/home/mock-shelves";
 import { useAuth } from "@/services/auth/state";
-import { useSystemInfo } from "@/services/query";
+import { useConnectionStatus } from "@/services/connection/monitor";
+import {
+  useContinueWatching,
+  useLatestMovies,
+  useLatestTv,
+  useNextUp,
+  useRecentlyAdded,
+} from "@/services/query";
+import { useBreakpoint } from "@/services/responsive";
 
 /**
- * Phase 1b.3 home screen. Adds a JELLYSEERR meta row alongside the
- * USER / SERVER / STATUS / PRODUCT / DEVICE rows so we can see the
- * optional Jellyseerr session's state alongside the Jellyfin one.
- * Shelves stay mocked until Phase 2 ports the real home query keys.
+ * Phase 2c home screen. Real Jellyfin shelves wired through the
+ * `@jellyfuse/api` fetchers + RQ hooks. Responsive from day 1:
+ * `useBreakpoint()` drives the screen padding + card sizing so the
+ * same layout works on phone / tablet / desktop (Catalyst, iPad,
+ * Android TV). Top `ConnectionBanner` covers offline / reconnecting
+ * state — when the server is reachable, hooks render cached shelves
+ * instantly and revalidate silently (per Phase 2b hydrate-as-stale).
+ *
+ * Shelf order (from the plan): Continue Watching → Next Up →
+ * Recently Added → Latest Movies → Latest TV. Suggestions stays
+ * deferred to Phase 4 (Jellyseerr-backed).
  */
 export function HomeScreen() {
-  // Placeholder for player / download screens that land in Phase 3/5 —
-  // `useKeepAwake` is wired from day 1 so we catch any native breakage.
   useKeepAwake();
 
-  const {
-    serverUrl,
-    activeUser,
-    jellyseerrUrl,
-    jellyseerrStatus,
-    jellyseerrLastError,
-    signOutAll,
-  } = useAuth();
-  const systemInfo = useSystemInfo(serverUrl);
-  const deviceId = useDeviceId();
+  const { activeUser, signOutAll } = useAuth();
+  const { values } = useBreakpoint();
+  const connectionStatus = useConnectionStatus();
+
+  const continueWatching = useContinueWatching();
+  const nextUp = useNextUp();
+  const recentlyAdded = useRecentlyAdded();
+  const latestMovies = useLatestMovies();
+  const latestTv = useLatestTv();
+
+  const shelves: HomeShelf[] = [
+    { key: "continue-watching", title: "Continue Watching", query: continueWatching },
+    { key: "next-up", title: "Next Up", query: nextUp },
+    { key: "recently-added", title: "Recently Added", query: recentlyAdded },
+    { key: "latest-movies", title: "Latest Movies", query: latestMovies },
+    { key: "latest-tv", title: "Latest TV", query: latestTv },
+  ];
+
+  const visibleShelves = shelves.filter(
+    (shelf) => shelf.query.isPending || (shelf.query.data?.length ?? 0) > 0,
+  );
+
+  const anyLoading = shelves.some((s) => s.query.isPending);
+  const allEmptyOnline =
+    !anyLoading &&
+    connectionStatus === "online" &&
+    shelves.every((s) => (s.query.data?.length ?? 0) === 0);
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <FlashList
-        data={mockShelves}
-        keyExtractor={(shelf) => shelf.id}
+        data={visibleShelves}
+        keyExtractor={(shelf) => shelf.key}
         ListHeaderComponent={
-          <Header
-            userLabel={activeUser?.displayName ?? "Signed in"}
-            userAvatarUrl={activeUser?.avatarUrl}
-            userColorSeed={activeUser?.userId ?? "anonymous"}
-            serverLabel={serverUrl?.replace(/^https?:\/\//, "") ?? "—"}
-            status={statusLabel(systemInfo)}
-            product={
-              systemInfo.data
-                ? `${systemInfo.data.productName} ${systemInfo.data.version}`
-                : undefined
-            }
-            deviceId={deviceId}
-            jellyseerrLabel={jellyseerrLabel(jellyseerrStatus, jellyseerrUrl, jellyseerrLastError)}
-            onOpenProfiles={handleOpenProfiles}
-            onSignOut={signOutAll}
-          />
+          <View>
+            <HomeHeader
+              userLabel={activeUser?.displayName ?? "Signed in"}
+              userAvatarUrl={activeUser?.avatarUrl}
+              userColorSeed={activeUser?.userId ?? "anonymous"}
+              horizontalPadding={values.screenPaddingHorizontal}
+              onOpenProfiles={handleOpenProfiles}
+              onSignOut={signOutAll}
+            />
+            <ConnectionBanner status={connectionStatus} />
+            {anyLoading && visibleShelves.length === 0 ? (
+              <View style={styles.centered}>
+                <ActivityIndicator color={colors.textSecondary} />
+              </View>
+            ) : null}
+            {allEmptyOnline ? (
+              <View style={styles.centered}>
+                <Text style={styles.emptyTitle}>No items yet</Text>
+                <Text style={styles.emptyBody}>
+                  Your library is empty or Jellyfin is still scanning.
+                </Text>
+              </View>
+            ) : null}
+          </View>
         }
-        renderItem={({ item }: { item: MockShelf }) => (
-          <MediaShelf title={item.title} items={item.items} onItemPress={handleItemPress} />
+        renderItem={({ item }) => (
+          <MediaShelf
+            title={item.title}
+            items={item.query.data ?? []}
+            onItemPress={handleItemPress}
+            onSeeAll={() => handleSeeAll(item.key)}
+          />
         )}
         ItemSeparatorComponent={null}
       />
@@ -74,70 +119,66 @@ export function HomeScreen() {
   );
 }
 
+interface HomeShelf {
+  key: ShelfKey;
+  title: string;
+  query: {
+    data: MediaItem[] | undefined;
+    isPending: boolean;
+  };
+}
+
 function handleOpenProfiles() {
   router.push("/profile-picker");
 }
 
-function jellyseerrLabel(
-  status: ReturnType<typeof useAuth>["jellyseerrStatus"],
-  url: string | undefined,
-  lastError: string | undefined,
-): string {
-  switch (status) {
-    case "not-configured":
-      return "not configured";
-    case "connected":
-      return `connected · ${url?.replace(/^https?:\/\//, "") ?? "—"}`;
-    case "disconnected":
-      return lastError ? `disconnected · ${lastError}` : "disconnected";
+function handleSeeAll(shelfKey: ShelfKey) {
+  // Phase 2e will route to /shelf/[shelfKey] — warn for now so the
+  // chevron is visibly wired but not yet functional.
+  console.warn(`see-all tapped: ${shelfKey}`);
+}
+
+function handleItemPress(item: MediaItem) {
+  const jellyfinId = mediaIdJellyfin(item.id);
+  if (!jellyfinId) return;
+  // Phase 2d ships the real detail screens. For now warn to keep
+  // the tap wired end-to-end; routing will swap in when the screens
+  // land.
+  if (item.mediaType === "series") {
+    console.warn(`detail series ${jellyfinId}`);
+  } else {
+    console.warn(`detail movie ${jellyfinId}`);
   }
 }
 
-function handleItemPress(item: MockMediaItem) {
-  // Placeholder — Phase 2 routes through Expo Router to
-  // `/(app)/detail/movie/[jellyfinId]` or `/series/[jellyfinId]`.
-  console.warn(`pressed ${item.title} (${item.id})`);
-}
-
-function statusLabel(query: ReturnType<typeof useSystemInfo>): string {
-  if (query.isLoading) return "loading…";
-  if (query.isError) return `error: ${(query.error as Error).message}`;
-  if (query.data) return query.isFetching ? "revalidating…" : "ok";
-  return "idle";
-}
+// ──────────────────────────────────────────────────────────────────────
+// Header
+// ──────────────────────────────────────────────────────────────────────
 
 interface HeaderProps {
   userLabel: string;
   userAvatarUrl: string | undefined;
   userColorSeed: string;
-  serverLabel: string;
-  status: string;
-  product: string | undefined;
-  deviceId: string | undefined;
-  jellyseerrLabel: string;
+  horizontalPadding: number;
   onOpenProfiles: () => void;
   onSignOut: () => void;
 }
 
-function Header({
+function HomeHeader({
   userLabel,
   userAvatarUrl,
   userColorSeed,
-  serverLabel,
-  status,
-  product,
-  deviceId,
-  jellyseerrLabel,
+  horizontalPadding,
   onOpenProfiles,
   onSignOut,
 }: HeaderProps) {
   const fallbackColor = profileColorFor(userColorSeed);
   return (
-    <View style={styles.header}>
+    <View style={[styles.header, { paddingHorizontal: horizontalPadding }]}>
       <View style={styles.topRow}>
         <View style={styles.topTitleBlock}>
           <Text style={styles.title}>Jellyfuse</Text>
-          <Text style={styles.subtitle}>Phase 1b.4 · profile picker</Text>
+          <Text style={styles.subtitle}>Signed in as {userLabel}</Text>
         </View>
         <Pressable
           accessibilityRole="button"
@@ -163,36 +204,6 @@ function Header({
           )}
         </Pressable>
       </View>
-      <View style={styles.metaRow}>
-        <Text style={styles.metaLabel}>USER</Text>
-        <Text style={styles.metaValue}>{userLabel}</Text>
-      </View>
-      <View style={styles.metaRow}>
-        <Text style={styles.metaLabel}>SERVER</Text>
-        <Text style={styles.metaValue}>{serverLabel}</Text>
-      </View>
-      <View style={styles.metaRow}>
-        <Text style={styles.metaLabel}>STATUS</Text>
-        <Text style={styles.metaValue}>{status}</Text>
-      </View>
-      {product ? (
-        <View style={styles.metaRow}>
-          <Text style={styles.metaLabel}>PRODUCT</Text>
-          <Text style={styles.metaValue}>{product}</Text>
-        </View>
-      ) : null}
-      <View style={styles.metaRow}>
-        <Text style={styles.metaLabel}>JELLYSEERR</Text>
-        <Text style={styles.metaValue} numberOfLines={1}>
-          {jellyseerrLabel}
-        </Text>
-      </View>
-      <View style={styles.metaRow}>
-        <Text style={styles.metaLabel}>DEVICE</Text>
-        <Text style={styles.metaValue} numberOfLines={1}>
-          {deviceId ?? "resolving…"}
-        </Text>
-      </View>
       <Pressable
         accessibilityRole="button"
         onPress={onSignOut}
@@ -210,10 +221,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   header: {
-    paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
     paddingBottom: spacing.md,
-    gap: spacing.xs,
+    gap: spacing.sm,
   },
   topRow: {
     alignItems: "flex-start",
@@ -231,7 +241,6 @@ const styles = StyleSheet.create({
   subtitle: {
     color: colors.textSecondary,
     fontSize: fontSize.body,
-    marginBottom: spacing.md,
   },
   avatarButton: {
     alignItems: "center",
@@ -256,26 +265,11 @@ const styles = StyleSheet.create({
     fontSize: fontSize.bodyLarge,
     fontWeight: fontWeight.bold,
   },
-  metaRow: {
-    flexDirection: "row",
-    gap: spacing.md,
-  },
-  metaLabel: {
-    color: colors.textMuted,
-    fontSize: fontSize.caption,
-    letterSpacing: 1,
-    textTransform: "uppercase",
-    width: 88,
-  },
-  metaValue: {
-    color: colors.textPrimary,
-    fontSize: fontSize.caption,
-  },
   signOut: {
     alignSelf: "flex-start",
     backgroundColor: colors.surface,
     borderRadius: radius.md,
-    marginTop: spacing.md,
+    marginTop: spacing.sm,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
@@ -285,5 +279,19 @@ const styles = StyleSheet.create({
   signOutLabel: {
     color: colors.textSecondary,
     fontSize: fontSize.caption,
+  },
+  centered: {
+    alignItems: "center",
+    paddingVertical: spacing.xl,
+  },
+  emptyTitle: {
+    color: colors.textPrimary,
+    fontSize: fontSize.subtitle,
+    fontWeight: fontWeight.semibold,
+  },
+  emptyBody: {
+    color: colors.textMuted,
+    fontSize: fontSize.body,
+    marginTop: spacing.xs,
   },
 });

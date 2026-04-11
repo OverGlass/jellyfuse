@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  breakpointForWidth,
+  breakpoints,
   colors,
   duration,
   fontSize,
@@ -9,6 +11,7 @@ import {
   profileColorFor,
   profilePalette,
   radius,
+  responsive,
   spacing,
 } from "./index";
 
@@ -51,6 +54,39 @@ describe("@jellyfuse/theme", () => {
   it("duration scale is monotonically increasing", () => {
     const ordered = [duration.fast, duration.normal, duration.slow];
     expect(ordered).toEqual([...ordered].sort((a, b) => a - b));
+  });
+
+  describe("responsive breakpoints", () => {
+    it("breakpoints are monotonically non-decreasing", () => {
+      const ordered = [breakpoints.phone, breakpoints.tablet, breakpoints.desktop];
+      expect(ordered).toEqual([...ordered].sort((a, b) => a - b));
+    });
+
+    it("breakpointForWidth maps widths correctly", () => {
+      expect(breakpointForWidth(375)).toBe("phone"); // iPhone 13 portrait
+      expect(breakpointForWidth(599)).toBe("phone"); // just under tablet
+      expect(breakpointForWidth(600)).toBe("tablet"); // boundary
+      expect(breakpointForWidth(820)).toBe("tablet"); // iPad portrait
+      expect(breakpointForWidth(1023)).toBe("tablet"); // just under desktop
+      expect(breakpointForWidth(1024)).toBe("desktop"); // boundary
+      expect(breakpointForWidth(1366)).toBe("desktop"); // iPad landscape / Catalyst
+    });
+
+    it("responsive values are defined for every breakpoint", () => {
+      for (const bp of ["phone", "tablet", "desktop"] as const) {
+        const values = responsive[bp];
+        expect(values.screenPaddingHorizontal).toBeGreaterThan(0);
+        expect(values.shelfGridColumns).toBeGreaterThan(0);
+        expect(values.mediaCardWidth).toBeGreaterThan(0);
+        expect(values.mediaCardPosterHeight).toBeGreaterThan(0);
+        expect(values.mediaCardGap).toBeGreaterThan(0);
+      }
+    });
+
+    it("card width grows from phone to desktop", () => {
+      expect(responsive.phone.mediaCardWidth).toBeLessThan(responsive.tablet.mediaCardWidth);
+      expect(responsive.tablet.mediaCardWidth).toBeLessThan(responsive.desktop.mediaCardWidth);
+    });
   });
 
   it("color tokens are hex strings", () => {

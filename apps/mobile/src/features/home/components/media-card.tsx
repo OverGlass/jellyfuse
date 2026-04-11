@@ -1,61 +1,89 @@
+import type { MediaItem } from "@jellyfuse/api";
+import { episodeLabel } from "@jellyfuse/models";
 import { colors, duration, fontSize, fontWeight, opacity, radius, spacing } from "@jellyfuse/theme";
 import { Image } from "expo-image";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 /**
- * Poster + title + year card used in every home shelf. Pure component:
+ * Poster + title + subtitle card used in every home shelf. Pure component:
  * props in, `onPress` callback out, no reach into parent state.
- * Replaces the Rust `MediaCard` component in `jf-ui-kit/src/components/`.
+ *
+ * **Responsive**: `width` + `posterHeight` are passed in from the parent
+ * shelf (which reads them from `useBreakpoint()`). The card is otherwise
+ * size-agnostic, which lets phone / tablet / desktop share the same
+ * component with different footprints.
+ *
+ * Subtitle is the Jellyfin episode label (`"S2 · E4"`) for episodes,
+ * otherwise the release year. Falls back to a surface-colored placeholder
+ * when `item.posterUrl` is missing (deleted artwork, fresh libraries).
  */
 
-export const MEDIA_CARD_WIDTH = 120;
-export const MEDIA_CARD_POSTER_HEIGHT = 180;
-export const MEDIA_CARD_TOTAL_HEIGHT = MEDIA_CARD_POSTER_HEIGHT + 48;
-
 interface Props {
-  title: string;
-  year: number;
-  posterUrl: string;
+  item: MediaItem;
+  /** Card width + poster height come from `useBreakpoint().values`. */
+  width: number;
+  posterHeight: number;
+  /** Horizontal gap between this card and the next one in the shelf row. */
+  gap: number;
   onPress: () => void;
 }
 
-export function MediaCard({ title, year, posterUrl, onPress }: Props) {
+export function MediaCard({ item, width, posterHeight, gap, onPress }: Props) {
+  const subtitle = episodeLabel(item) ?? (item.year !== undefined ? String(item.year) : "");
+  const accessibilityLabel = subtitle ? `${item.title}, ${subtitle}` : item.title;
+
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${title}, ${year}`}
+      accessibilityLabel={accessibilityLabel}
       onPress={onPress}
-      style={({ pressed }) => [styles.root, pressed && styles.rootPressed]}
+      style={({ pressed }) => [
+        styles.root,
+        { width, marginRight: gap },
+        pressed && styles.rootPressed,
+      ]}
     >
-      <Image
-        source={posterUrl}
-        style={styles.poster}
-        contentFit="cover"
-        transition={duration.normal}
-        recyclingKey={posterUrl}
-        cachePolicy="memory-disk"
-      />
+      {item.posterUrl ? (
+        <Image
+          source={item.posterUrl}
+          style={[styles.poster, { width, height: posterHeight }]}
+          contentFit="cover"
+          transition={duration.normal}
+          recyclingKey={item.posterUrl}
+          cachePolicy="memory-disk"
+        />
+      ) : (
+        <View style={[styles.poster, styles.posterFallback, { width, height: posterHeight }]}>
+          <Text style={styles.posterFallbackGlyph}>{item.title.slice(0, 1).toUpperCase()}</Text>
+        </View>
+      )}
       <Text style={styles.title} numberOfLines={1}>
-        {title}
+        {item.title}
       </Text>
-      <Text style={styles.year}>{year}</Text>
+      {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   root: {
-    width: MEDIA_CARD_WIDTH,
-    marginRight: spacing.md,
+    // width + marginRight come from props
   },
   rootPressed: {
     opacity: opacity.pressed,
   },
   poster: {
-    width: MEDIA_CARD_WIDTH,
-    height: MEDIA_CARD_POSTER_HEIGHT,
     borderRadius: radius.md,
     backgroundColor: colors.surface,
+  },
+  posterFallback: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  posterFallbackGlyph: {
+    color: colors.textMuted,
+    fontSize: fontSize.display,
+    fontWeight: fontWeight.bold,
   },
   title: {
     color: colors.textPrimary,
@@ -63,7 +91,7 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.medium,
     marginTop: spacing.sm,
   },
-  year: {
+  subtitle: {
     color: colors.textMuted,
     fontSize: fontSize.caption,
     marginTop: 2,

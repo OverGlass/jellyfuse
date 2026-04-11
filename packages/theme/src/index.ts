@@ -56,6 +56,70 @@ export const layout = {
 export type LayoutToken = keyof typeof layout;
 
 /**
+ * Responsive breakpoints in dp. Matches the iOS size-class / Material
+ * window-size class split Jellyfuse targets: iPhone portrait → `phone`,
+ * iPad portrait → `tablet`, iPad landscape / Mac Catalyst / Android TV
+ * → `desktop`. Consumers should reach for `useBreakpoint()` in
+ * `apps/mobile/src/services/responsive` instead of comparing raw
+ * window widths.
+ *
+ * Thresholds are inclusive lower bounds (`phone >= 0`, `tablet >= 600`,
+ * `desktop >= 1024`) so a 900 dp iPad portrait window is `tablet` and
+ * a 1366 dp Catalyst / TV window is `desktop`.
+ */
+export const breakpoints = {
+  phone: 0,
+  tablet: 600,
+  desktop: 1024,
+} as const;
+export type Breakpoint = keyof typeof breakpoints;
+
+/**
+ * Per-breakpoint responsive layout values used by every screen when
+ * a single token isn't enough. Screens look these up via the
+ * `useBreakpoint()` hook → `responsive[breakpoint].xxx`.
+ *
+ * **Principle**: phone is the baseline; tablet/desktop _only_ differ
+ * where a responsive change actually matters (wider gutters, larger
+ * cards, more columns). Don't fork tokens that work at every size.
+ */
+export const responsive = {
+  phone: {
+    /** Horizontal screen gutter. */
+    screenPaddingHorizontal: layout.screenPaddingHorizontal,
+    /** Shelf grid column count on the "see all" screen. */
+    shelfGridColumns: 2,
+    /** Poster card width + aspect-ratio height. */
+    mediaCardWidth: 120,
+    mediaCardPosterHeight: 180,
+    /** Horizontal gap between cards inside a shelf row. */
+    mediaCardGap: 16,
+  },
+  tablet: {
+    screenPaddingHorizontal: 32,
+    shelfGridColumns: 4,
+    mediaCardWidth: 150,
+    mediaCardPosterHeight: 225,
+    mediaCardGap: 20,
+  },
+  desktop: {
+    screenPaddingHorizontal: 48,
+    shelfGridColumns: 6,
+    mediaCardWidth: 180,
+    mediaCardPosterHeight: 270,
+    mediaCardGap: 24,
+  },
+} as const;
+export type ResponsiveValues = (typeof responsive)[Breakpoint];
+
+/** Resolves a raw window width (dp) into one of the three breakpoints. */
+export function breakpointForWidth(width: number): Breakpoint {
+  if (width >= breakpoints.desktop) return "desktop";
+  if (width >= breakpoints.tablet) return "tablet";
+  return "phone";
+}
+
+/**
  * Corner radius scale. `full` is a sentinel large number — pass it as
  * `borderRadius` to clip a square into a circle (RN clamps to
  * `min(width, height) / 2`).

@@ -1,61 +1,101 @@
-import { colors, fontSize, fontWeight, spacing } from "@jellyfuse/theme";
+import type { MediaItem } from "@jellyfuse/api";
+import { colors, fontSize, fontWeight, opacity, spacing } from "@jellyfuse/theme";
 import { FlashList } from "@shopify/flash-list";
-import { StyleSheet, Text, View } from "react-native";
-import { MediaCard, MEDIA_CARD_TOTAL_HEIGHT } from "./media-card";
-import type { MockMediaItem } from "@/features/home/mock-shelves";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { MediaCard } from "@/features/home/components/media-card";
+import { useBreakpoint } from "@/services/responsive";
 
 /**
- * Horizontal poster shelf. Pure component: takes a title + items + an
- * `onItemPress` callback, emits no events internally, owns no state.
+ * One row on the home screen — a title, an optional "See all" chevron,
+ * and a horizontal FlashList of `MediaCard`s driven by `items`. Pure
+ * component: all data in via props, navigation flows out via the
+ * `onItemPress` + `onSeeAll` callbacks. Parent (HomeScreen) hides the
+ * whole row when `items.length === 0`, so empty states don't pollute
+ * the layout with spinners / labels.
  *
- * Uses FlashList v2 per CLAUDE.md's "FlashList for every scrollable list"
- * rule. The explicit `MEDIA_CARD_WIDTH` + height constants in the item
- * component let FlashList estimate item size accurately from day 1.
+ * **Responsive**: pulls card width / height / gap from `useBreakpoint`,
+ * so the same component lays out correctly on phone / tablet / desktop
+ * without any parent math.
  */
-
 interface Props {
   title: string;
-  items: MockMediaItem[];
-  onItemPress: (item: MockMediaItem) => void;
+  items: MediaItem[];
+  onItemPress: (item: MediaItem) => void;
+  onSeeAll?: () => void;
 }
 
-export function MediaShelf({ title, items, onItemPress }: Props) {
+export function MediaShelf({ title, items, onItemPress, onSeeAll }: Props) {
+  const { values } = useBreakpoint();
   return (
     <View style={styles.root}>
-      <Text style={styles.title}>{title}</Text>
+      <View style={[styles.headerRow, { paddingHorizontal: values.screenPaddingHorizontal }]}>
+        <Text style={styles.title}>{title}</Text>
+        {onSeeAll ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`See all ${title}`}
+            onPress={onSeeAll}
+            style={({ pressed }) => [styles.seeAll, pressed && styles.seeAllPressed]}
+          >
+            <Text style={styles.seeAllLabel}>See all →</Text>
+          </Pressable>
+        ) : null}
+      </View>
       <FlashList
         horizontal
-        data={items}
-        keyExtractor={(item) => item.id}
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.listContent}
+        data={items}
+        keyExtractor={(item, index) => `${keyFor(item)}-${index}`}
         renderItem={({ item }) => (
           <MediaCard
-            title={item.title}
-            year={item.year}
-            posterUrl={item.posterUrl}
+            item={item}
+            width={values.mediaCardWidth}
+            posterHeight={values.mediaCardPosterHeight}
+            gap={values.mediaCardGap}
             onPress={() => onItemPress(item)}
           />
         )}
+        contentContainerStyle={{ paddingHorizontal: values.screenPaddingHorizontal }}
       />
     </View>
   );
 }
 
-export const MEDIA_SHELF_HEIGHT = MEDIA_CARD_TOTAL_HEIGHT + 40;
+function keyFor(item: MediaItem): string {
+  switch (item.id.kind) {
+    case "jellyfin":
+    case "both":
+      return item.id.jellyfinId;
+    case "tmdb":
+      return `tmdb-${item.id.tmdbId}`;
+  }
+}
 
 const styles = StyleSheet.create({
   root: {
     paddingVertical: spacing.md,
   },
+  headerRow: {
+    alignItems: "baseline",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: spacing.sm,
+  },
   title: {
     color: colors.textPrimary,
     fontSize: fontSize.subtitle,
     fontWeight: fontWeight.semibold,
-    marginBottom: spacing.sm,
-    paddingHorizontal: spacing.lg,
   },
-  listContent: {
-    paddingHorizontal: spacing.lg,
+  seeAll: {
+    paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.xs,
+  },
+  seeAllPressed: {
+    opacity: opacity.pressed,
+  },
+  seeAllLabel: {
+    color: colors.accent,
+    fontSize: fontSize.caption,
+    fontWeight: fontWeight.medium,
   },
 });
