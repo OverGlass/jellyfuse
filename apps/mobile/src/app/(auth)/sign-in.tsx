@@ -15,6 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { AuthScreenHeader } from "@/features/auth/components/auth-screen-header";
 import { CloseButton } from "@/features/auth/components/close-button";
 import { AuthServerNotConfiguredError, useAuth } from "@/services/auth/state";
+import { useScreenGutters } from "@/services/responsive";
 
 /**
  * Phase 1b.2 sign-in screen — step 2 of the two-step flow. The server
@@ -28,6 +29,7 @@ import { AuthServerNotConfiguredError, useAuth } from "@/services/auth/state";
  */
 export default function SignInScreen() {
   const { serverUrl, serverVersion, signInWithCredentials } = useAuth();
+  const gutters = useScreenGutters();
   const params = useLocalSearchParams<{ mode?: string }>();
   const isAddUserMode = params.mode === "add-user";
   const [username, setUsername] = useState("");
@@ -86,7 +88,9 @@ export default function SignInScreen() {
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <View style={styles.container}>
+        <View
+          style={[styles.container, { paddingLeft: gutters.left, paddingRight: gutters.right }]}
+        >
           <AuthScreenHeader
             title={isAddUserMode ? "Add another account" : "Sign in"}
             rightAction={isAddUserMode ? <CloseButton onPress={handleCancel} /> : null}
@@ -194,7 +198,6 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: spacing.lg,
     paddingBottom: spacing.lg,
-    paddingHorizontal: spacing.lg,
   },
   subtitle: {
     color: colors.textSecondary,

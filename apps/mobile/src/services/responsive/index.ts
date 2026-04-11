@@ -5,6 +5,7 @@ import {
   type ResponsiveValues,
 } from "@jellyfuse/theme";
 import { useWindowDimensions } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export type { Breakpoint, ResponsiveValues };
 
@@ -29,4 +30,26 @@ export function useBreakpoint(): { breakpoint: Breakpoint; values: ResponsiveVal
   const { width } = useWindowDimensions();
   const breakpoint = breakpointForWidth(width);
   return { breakpoint, values: responsive[breakpoint] };
+}
+
+/**
+ * Screen gutters that also respect the notch / Dynamic Island / nav-bar
+ * insets. Returns the max of `responsive.screenPaddingHorizontal` and
+ * the live safe-area insets so content doesn't slide under the notch
+ * when the device is rotated into landscape (the Dynamic Island moves
+ * to the leading edge, and iPhone landscape also picks up the home
+ * indicator on the trailing edge).
+ *
+ * Use this at every screen container + every horizontally-scrolling
+ * list's `contentContainerStyle.paddingLeft/Right`.
+ */
+export function useScreenGutters(): { left: number; right: number; top: number; bottom: number } {
+  const { values } = useBreakpoint();
+  const insets = useSafeAreaInsets();
+  return {
+    left: Math.max(values.screenPaddingHorizontal, insets.left),
+    right: Math.max(values.screenPaddingHorizontal, insets.right),
+    top: insets.top,
+    bottom: insets.bottom,
+  };
 }

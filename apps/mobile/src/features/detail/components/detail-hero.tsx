@@ -3,7 +3,7 @@ import { mediaItemSubtitle } from "@jellyfuse/models";
 import { colors, duration, fontSize, fontWeight, radius, spacing } from "@jellyfuse/theme";
 import { Image } from "expo-image";
 import { StyleSheet, Text, View } from "react-native";
-import { useBreakpoint } from "@/services/responsive";
+import { useBreakpoint, useScreenGutters } from "@/services/responsive";
 
 /**
  * Detail screen hero — blurred backdrop tint, poster + title block
@@ -21,6 +21,7 @@ const HERO_BACKDROP_HEIGHT_TABLET = 360;
 
 export function DetailHero({ item }: Props) {
   const { breakpoint, values } = useBreakpoint();
+  const gutters = useScreenGutters();
   const isCompact = breakpoint === "phone";
   const backdropHeight = isCompact ? HERO_BACKDROP_HEIGHT_PHONE : HERO_BACKDROP_HEIGHT_TABLET;
   const posterWidth = isCompact ? 120 : values.mediaCardWidth;
@@ -46,7 +47,7 @@ export function DetailHero({ item }: Props) {
         style={[
           styles.contentRow,
           isCompact ? styles.contentRowCompact : styles.contentRowWide,
-          { paddingHorizontal: values.screenPaddingHorizontal },
+          { paddingLeft: gutters.left, paddingRight: gutters.right },
         ]}
       >
         {item.posterUrl ? (

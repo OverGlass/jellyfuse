@@ -5,7 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { DetailActionRow } from "@/features/detail/components/detail-action-row";
 import { DetailHero } from "@/features/detail/components/detail-hero";
 import { useMovieDetail } from "@/services/query";
-import { useBreakpoint } from "@/services/responsive";
+import { useScreenGutters } from "@/services/responsive";
 
 /**
  * Read-only movie detail. Fetches `/Users/{uid}/Items/{id}` via
@@ -19,7 +19,7 @@ interface Props {
 
 export function MovieDetailScreen({ itemId }: Props) {
   const query = useMovieDetail(itemId);
-  const { values } = useBreakpoint();
+  const gutters = useScreenGutters();
 
   if (query.isPending) {
     return (
@@ -51,7 +51,7 @@ export function MovieDetailScreen({ itemId }: Props) {
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <DetailHero item={item} />
-        <View style={[styles.body, { paddingHorizontal: values.screenPaddingHorizontal }]}>
+        <View style={[styles.body, { paddingLeft: gutters.left, paddingRight: gutters.right }]}>
           <DetailActionRow
             hasResume={hasResume}
             onPlay={() => {

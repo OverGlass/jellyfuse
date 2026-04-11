@@ -8,6 +8,7 @@ import { AuthScreenHeader } from "@/features/auth/components/auth-screen-header"
 import { CloseButton } from "@/features/auth/components/close-button";
 import { AddUserTile, ProfileTile } from "@/features/profile/components/profile-tile";
 import { useAuth } from "@/services/auth/state";
+import { useScreenGutters } from "@/services/responsive";
 
 /**
  * Phase 1b.4 profile picker. Rendered automatically by the root router
@@ -25,6 +26,7 @@ type PickerItem = { kind: "user"; user: AuthenticatedUser } | { kind: "add-user"
 
 export default function ProfilePickerScreen() {
   const { users, activeUser, serverUrl, serverVersion, switchUser, removeUser } = useAuth();
+  const gutters = useScreenGutters();
 
   const items: PickerItem[] = [
     ...users.map((user): PickerItem => ({ kind: "user", user })),
@@ -70,7 +72,7 @@ export default function ProfilePickerScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <View style={styles.headerContainer}>
+      <View style={{ paddingLeft: gutters.left, paddingRight: gutters.right }}>
         <AuthScreenHeader
           title="Who's watching?"
           subtitle={`${serverUrl ? serverUrl.replace(/^https?:\/\//, "") : "—"}${
@@ -83,7 +85,11 @@ export default function ProfilePickerScreen() {
         data={items}
         keyExtractor={(item) => (item.kind === "user" ? item.user.userId : "add-user")}
         numColumns={2}
-        contentContainerStyle={styles.grid}
+        contentContainerStyle={{
+          paddingLeft: gutters.left,
+          paddingRight: gutters.right,
+          paddingTop: spacing.xl,
+        }}
         renderItem={({ item }) =>
           item.kind === "user" ? (
             <View style={styles.cell}>
@@ -115,13 +121,6 @@ const styles = StyleSheet.create({
   safe: {
     backgroundColor: colors.background,
     flex: 1,
-  },
-  headerContainer: {
-    paddingHorizontal: spacing.lg,
-  },
-  grid: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xl,
   },
   cell: {
     alignItems: "center",

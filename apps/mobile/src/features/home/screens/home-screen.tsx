@@ -28,7 +28,7 @@ import {
   useNextUp,
   useRecentlyAdded,
 } from "@/services/query";
-import { useBreakpoint } from "@/services/responsive";
+import { useScreenGutters } from "@/services/responsive";
 
 /**
  * Phase 2c home screen. Real Jellyfin shelves wired through the
@@ -47,7 +47,7 @@ export function HomeScreen() {
   useKeepAwake();
 
   const { activeUser, signOutAll } = useAuth();
-  const { values } = useBreakpoint();
+  const gutters = useScreenGutters();
   const connectionStatus = useConnectionStatus();
 
   const continueWatching = useContinueWatching();
@@ -90,7 +90,8 @@ export function HomeScreen() {
               userLabel={activeUser?.displayName ?? "Signed in"}
               userAvatarUrl={activeUser?.avatarUrl}
               userColorSeed={activeUser?.userId ?? "anonymous"}
-              horizontalPadding={values.screenPaddingHorizontal}
+              paddingLeft={gutters.left}
+              paddingRight={gutters.right}
               onOpenProfiles={handleOpenProfiles}
               onSignOut={signOutAll}
             />
@@ -168,7 +169,8 @@ interface HeaderProps {
   userLabel: string;
   userAvatarUrl: string | undefined;
   userColorSeed: string;
-  horizontalPadding: number;
+  paddingLeft: number;
+  paddingRight: number;
   onOpenProfiles: () => void;
   onSignOut: () => void;
 }
@@ -177,13 +179,14 @@ function HomeHeader({
   userLabel,
   userAvatarUrl,
   userColorSeed,
-  horizontalPadding,
+  paddingLeft,
+  paddingRight,
   onOpenProfiles,
   onSignOut,
 }: HeaderProps) {
   const fallbackColor = profileColorFor(userColorSeed);
   return (
-    <View style={[styles.header, { paddingHorizontal: horizontalPadding }]}>
+    <View style={[styles.header, { paddingLeft, paddingRight }]}>
       <View style={styles.topRow}>
         <View style={styles.topTitleBlock}>
           <Text style={styles.title}>Jellyfuse</Text>

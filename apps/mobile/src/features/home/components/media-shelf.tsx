@@ -4,7 +4,7 @@ import { FlashList } from "@shopify/flash-list";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { MediaCard } from "@/features/home/components/media-card";
 import { WideMediaCard } from "@/features/home/components/wide-media-card";
-import { useBreakpoint } from "@/services/responsive";
+import { useBreakpoint, useScreenGutters } from "@/services/responsive";
 
 /**
  * One row on the home screen — a title, an optional "See all" chevron,
@@ -37,9 +37,10 @@ interface Props {
 
 export function MediaShelf({ title, items, variant = "poster", onItemPress, onSeeAll }: Props) {
   const { values } = useBreakpoint();
+  const gutters = useScreenGutters();
   return (
     <View style={styles.root}>
-      <View style={[styles.headerRow, { paddingHorizontal: values.screenPaddingHorizontal }]}>
+      <View style={[styles.headerRow, { paddingLeft: gutters.left, paddingRight: gutters.right }]}>
         <Text style={styles.title}>{title}</Text>
         {onSeeAll ? (
           <Pressable
@@ -76,7 +77,7 @@ export function MediaShelf({ title, items, variant = "poster", onItemPress, onSe
             />
           )
         }
-        contentContainerStyle={{ paddingHorizontal: values.screenPaddingHorizontal }}
+        contentContainerStyle={{ paddingLeft: gutters.left, paddingRight: gutters.right }}
       />
     </View>
   );

@@ -8,7 +8,7 @@ import { DetailHero } from "@/features/detail/components/detail-hero";
 import { EpisodeRow } from "@/features/detail/components/episode-row";
 import { SeasonTabs } from "@/features/detail/components/season-tabs";
 import { useEpisodes, useSeasons, useSeriesDetail } from "@/services/query";
-import { useBreakpoint } from "@/services/responsive";
+import { useScreenGutters } from "@/services/responsive";
 
 /**
  * Read-only series detail. Renders the shared hero + action row, then
@@ -34,7 +34,7 @@ export function SeriesDetailScreen({ itemId }: Props) {
   const resolvedActiveSeasonId = activeSeasonId ?? defaultSeasonId(seasonsQuery.data);
 
   const episodesQuery = useEpisodes(itemId, resolvedActiveSeasonId);
-  const { values } = useBreakpoint();
+  const gutters = useScreenGutters();
 
   if (seriesQuery.isPending) {
     return (
@@ -68,7 +68,7 @@ export function SeriesDetailScreen({ itemId }: Props) {
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <DetailHero item={series} />
-        <View style={[styles.body, { paddingHorizontal: values.screenPaddingHorizontal }]}>
+        <View style={[styles.body, { paddingLeft: gutters.left, paddingRight: gutters.right }]}>
           <DetailActionRow
             hasResume={hasResume}
             onPlay={() => {

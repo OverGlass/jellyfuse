@@ -15,6 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { AuthScreenHeader } from "@/features/auth/components/auth-screen-header";
 import { useAuth } from "@/services/auth/state";
 import { useSystemInfo } from "@/services/query";
+import { useScreenGutters } from "@/services/responsive";
 
 /**
  * Phase 1b.3 server-connect screen. First step of the two-step sign-in
@@ -31,6 +32,7 @@ import { useSystemInfo } from "@/services/query";
  */
 export default function ServerScreen() {
   const { setServer } = useAuth();
+  const gutters = useScreenGutters();
   const [urlDraft, setUrlDraft] = useState("");
   const [jellyseerrDraft, setJellyseerrDraft] = useState("");
   const [submittedUrl, setSubmittedUrl] = useState<string | undefined>(undefined);
@@ -64,7 +66,9 @@ export default function ServerScreen() {
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <View style={styles.container}>
+        <View
+          style={[styles.container, { paddingLeft: gutters.left, paddingRight: gutters.right }]}
+        >
           <AuthScreenHeader
             title="Connect to Jellyfin"
             subtitle="Enter your Jellyfin server URL to get started."
@@ -186,7 +190,6 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: spacing.lg,
     paddingBottom: spacing.lg,
-    paddingHorizontal: spacing.lg,
   },
   inputBlock: {
     gap: spacing.xs,
