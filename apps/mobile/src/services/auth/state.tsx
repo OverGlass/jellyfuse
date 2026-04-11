@@ -1,4 +1,4 @@
-import { authenticateByName, type AuthenticatedUser } from "@jellyfuse/api";
+import { authenticateByName, jellyseerrLogin, type AuthenticatedUser } from "@jellyfuse/api";
 import {
   createContext,
   useCallback,
@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { apiFetch, setCurrentAuthContext } from "@/services/api/client";
+import { setCurrentJellyseerrCookie } from "@/services/jellyseerr/client";
 import {
   clearSecureStorage,
   getSecureItem,
@@ -25,15 +26,22 @@ import { findUserById, removeUserById, secureUserStorage, upsertUser } from "./u
  * `crates/jf-core/src/state.rs:509-521` + `crates/jf-core/src/models.rs`
  * (Settings + authenticated_users sled tree) into a single React context.
  *
- * Phase 1b.2 (ARK-7) wires the real sign-in flow: `setServer` persists
- * the selected server URL + version, `signInWithCredentials` calls
- * `authenticateByName` via the pre-auth fetcher and upserts the result
- * into the users list. A dedicated effect keeps the module-level auth
- * context ref in `services/api/client.ts` in sync with the active user
- * so `apiFetchAuthenticated` always sees a fresh token.
+ * Phase 1b.3 (ARK-8) adds the Jellyseerr session layer alongside the
+ * Jellyfin auth — `setServer` optionally takes a Jellyseerr URL,
+ * `signInWithCredentials` chains `jellyseerrLogin` after the Jellyfin
+ * auth completes, and a companion effect keeps the `jellyseerrFetch`
+ * ref populated with the persisted `connect.sid` cookie. Jellyseerr
+ * failures are non-fatal per the Rust spec — the Jellyfin half
+ * succeeds and the user lands on the home screen either way.
  */
 
 export type AuthStatus = "loading" | "unauthenticated" | "authenticated";
+
+/** Whether the Jellyseerr side of the session is usable right now. */
+export type JellyseerrStatus =
+  | "not-configured" // no URL set
+  | "connected" // URL set + cookie present
+  | "disconnected"; // URL set but no valid cookie (failed login / expired)
 
 export class AuthServerNotConfiguredError extends Error {
   constructor() {
@@ -49,10 +57,14 @@ export interface AuthState {
   users: AuthenticatedUser[];
   activeUser: AuthenticatedUser | undefined;
   jellyseerrUrl: string | undefined;
-  jellyseerrConfigured: boolean;
+  jellyseerrStatus: JellyseerrStatus;
 
-  setServer: (url: string, version: string | undefined) => Promise<void>;
-  /** Authenticate + upsert + set active user. Throws on auth failure. */
+  setServer: (args: {
+    url: string;
+    version: string | undefined;
+    jellyseerrUrl: string | undefined;
+  }) => Promise<void>;
+  /** Authenticate + upsert + set active user, then (optionally) log in to Jellyseerr. */
   signInWithCredentials: (input: { username: string; password: string }) => Promise<void>;
   switchUser: (userId: string) => Promise<void>;
   removeUser: (userId: string) => Promise<void>;
@@ -72,6 +84,7 @@ interface InternalState {
   users: AuthenticatedUser[];
   activeUserId: string | undefined;
   jellyseerrUrl: string | undefined;
+  jellyseerrCookie: string | undefined;
 }
 
 const LOADING_STATE: InternalState = {
@@ -81,6 +94,7 @@ const LOADING_STATE: InternalState = {
   users: [],
   activeUserId: undefined,
   jellyseerrUrl: undefined,
+  jellyseerrCookie: undefined,
 };
 
 export function AuthProvider({ children }: Props) {
@@ -98,13 +112,15 @@ export function AuthProvider({ children }: Props) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [serverUrl, serverVersion, activeUserId, jellyseerrUrl, users] = await Promise.all([
-        getSecureItem(SecureStorageKey.jellyfinServerUrl),
-        getSecureItem(SecureStorageKey.jellyfinServerVersion),
-        getSecureItem(SecureStorageKey.jellyfinActiveUserId),
-        getSecureItem(SecureStorageKey.jellyseerrUrl),
-        secureUserStorage.loadUsers(),
-      ]);
+      const [serverUrl, serverVersion, activeUserId, jellyseerrUrl, jellyseerrCookie, users] =
+        await Promise.all([
+          getSecureItem(SecureStorageKey.jellyfinServerUrl),
+          getSecureItem(SecureStorageKey.jellyfinServerVersion),
+          getSecureItem(SecureStorageKey.jellyfinActiveUserId),
+          getSecureItem(SecureStorageKey.jellyseerrUrl),
+          getSecureItem(SecureStorageKey.jellyseerrCookie),
+          secureUserStorage.loadUsers(),
+        ]);
       if (cancelled) return;
       const activeUser = findUserById(users, activeUserId);
       setState({
@@ -114,6 +130,7 @@ export function AuthProvider({ children }: Props) {
         users,
         activeUserId: activeUser?.userId,
         jellyseerrUrl,
+        jellyseerrCookie,
       });
     })().catch((err: unknown) => {
       // Hydration failures should not wedge the app at splash — log and
@@ -153,19 +170,52 @@ export function AuthProvider({ children }: Props) {
     };
   }, [state.users, state.activeUserId]);
 
-  const setServer = useCallback(async (url: string, version: string | undefined) => {
-    await setSecureItem(SecureStorageKey.jellyfinServerUrl, url);
-    if (version) {
-      await setSecureItem(SecureStorageKey.jellyfinServerVersion, version);
-    } else {
-      await removeSecureItem(SecureStorageKey.jellyfinServerVersion);
-    }
-    setState((prev) => ({ ...prev, serverUrl: url, serverVersion: version }));
-  }, []);
+  // Keep the Jellyseerr cookie ref (used by `jellyseerrFetch`) in sync
+  // with the persisted cookie. Runs synchronously because the cookie is
+  // already in state — no network calls.
+  useEffect(() => {
+    setCurrentJellyseerrCookie(state.jellyseerrCookie);
+  }, [state.jellyseerrCookie]);
+
+  const setServer = useCallback(
+    async ({
+      url,
+      version,
+      jellyseerrUrl,
+    }: {
+      url: string;
+      version: string | undefined;
+      jellyseerrUrl: string | undefined;
+    }) => {
+      await setSecureItem(SecureStorageKey.jellyfinServerUrl, url);
+      if (version) {
+        await setSecureItem(SecureStorageKey.jellyfinServerVersion, version);
+      } else {
+        await removeSecureItem(SecureStorageKey.jellyfinServerVersion);
+      }
+      if (jellyseerrUrl) {
+        await setSecureItem(SecureStorageKey.jellyseerrUrl, jellyseerrUrl);
+      } else {
+        await removeSecureItem(SecureStorageKey.jellyseerrUrl);
+        // Clear any stale cookie so the old session doesn't leak after a
+        // Jellyseerr URL change.
+        await removeSecureItem(SecureStorageKey.jellyseerrCookie);
+      }
+      setState((prev) => ({
+        ...prev,
+        serverUrl: url,
+        serverVersion: version,
+        jellyseerrUrl,
+        jellyseerrCookie: jellyseerrUrl ? prev.jellyseerrCookie : undefined,
+      }));
+    },
+    [],
+  );
 
   const signInWithCredentials = useCallback(
     async ({ username, password }: { username: string; password: string }) => {
       const serverUrl = stateRef.current.serverUrl;
+      const jellyseerrUrl = stateRef.current.jellyseerrUrl;
       if (!serverUrl) {
         throw new AuthServerNotConfiguredError();
       }
@@ -181,11 +231,32 @@ export function AuthProvider({ children }: Props) {
       };
       const users = await upsertUser(secureUserStorage, user);
       await secureUserStorage.saveActiveUserId(user.userId);
+
+      // Jellyseerr login is optional — a failure here leaves the
+      // Jellyfin half intact and the user still lands on `(app)`. The
+      // cookie is cleared out so the header row shows "disconnected".
+      let jellyseerrCookie: string | undefined;
+      if (jellyseerrUrl) {
+        try {
+          const session = await jellyseerrLogin(
+            { baseUrl: jellyseerrUrl, username, password },
+            apiFetch,
+          );
+          await setSecureItem(SecureStorageKey.jellyseerrCookie, session.cookie);
+          jellyseerrCookie = session.cookie;
+        } catch (err: unknown) {
+          console.warn("jellyseerr login failed — continuing without it", err);
+          await removeSecureItem(SecureStorageKey.jellyseerrCookie);
+          jellyseerrCookie = undefined;
+        }
+      }
+
       setState((prev) => ({
         ...prev,
         status: "authenticated",
         users,
         activeUserId: user.userId,
+        jellyseerrCookie,
       }));
     },
     [],
@@ -218,11 +289,17 @@ export function AuthProvider({ children }: Props) {
       users: [],
       activeUserId: undefined,
       jellyseerrUrl: undefined,
+      jellyseerrCookie: undefined,
     });
   }, []);
 
   const value = useMemo<AuthState>(() => {
     const activeUser = findUserById(state.users, state.activeUserId);
+    const jellyseerrStatus: JellyseerrStatus = !state.jellyseerrUrl
+      ? "not-configured"
+      : state.jellyseerrCookie
+        ? "connected"
+        : "disconnected";
     return {
       status: state.status,
       serverUrl: state.serverUrl,
@@ -230,7 +307,7 @@ export function AuthProvider({ children }: Props) {
       users: state.users,
       activeUser,
       jellyseerrUrl: state.jellyseerrUrl,
-      jellyseerrConfigured: Boolean(state.jellyseerrUrl),
+      jellyseerrStatus,
       setServer,
       signInWithCredentials,
       switchUser,

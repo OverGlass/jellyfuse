@@ -6,3 +6,4 @@
 export * from "./auth-header";
 export * from "./system-info";
 export * from "./authenticate";
+export * from "./jellyseerr";

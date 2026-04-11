@@ -10,17 +10,17 @@ import { useAuth } from "@/services/auth/state";
 import { useSystemInfo } from "@/services/query";
 
 /**
- * Phase 1b.2 home screen. Replaces the hard-coded DEMO_BASE_URL with
- * the active user's server URL from `AuthProvider` — we're now serving
- * the real signed-in session instead of a demo fetcher. Shelves stay
- * mocked until Phase 2 ports the real home query keys.
+ * Phase 1b.3 home screen. Adds a JELLYSEERR meta row alongside the
+ * USER / SERVER / STATUS / PRODUCT / DEVICE rows so we can see the
+ * optional Jellyseerr session's state alongside the Jellyfin one.
+ * Shelves stay mocked until Phase 2 ports the real home query keys.
  */
 export function HomeScreen() {
   // Placeholder for player / download screens that land in Phase 3/5 —
   // `useKeepAwake` is wired from day 1 so we catch any native breakage.
   useKeepAwake();
 
-  const { serverUrl, activeUser, signOutAll } = useAuth();
+  const { serverUrl, activeUser, jellyseerrUrl, jellyseerrStatus, signOutAll } = useAuth();
   const systemInfo = useSystemInfo(serverUrl);
   const deviceId = useDeviceId();
 
@@ -40,6 +40,7 @@ export function HomeScreen() {
                 : undefined
             }
             deviceId={deviceId}
+            jellyseerrLabel={jellyseerrLabel(jellyseerrStatus, jellyseerrUrl)}
             onSignOut={signOutAll}
           />
         }
@@ -50,6 +51,20 @@ export function HomeScreen() {
       />
     </SafeAreaView>
   );
+}
+
+function jellyseerrLabel(
+  status: ReturnType<typeof useAuth>["jellyseerrStatus"],
+  url: string | undefined,
+): string {
+  switch (status) {
+    case "not-configured":
+      return "not configured";
+    case "connected":
+      return `connected · ${url?.replace(/^https?:\/\//, "") ?? "—"}`;
+    case "disconnected":
+      return "disconnected";
+  }
 }
 
 function handleItemPress(item: MockMediaItem) {
@@ -71,14 +86,23 @@ interface HeaderProps {
   status: string;
   product: string | undefined;
   deviceId: string | undefined;
+  jellyseerrLabel: string;
   onSignOut: () => void;
 }
 
-function Header({ userLabel, serverLabel, status, product, deviceId, onSignOut }: HeaderProps) {
+function Header({
+  userLabel,
+  serverLabel,
+  status,
+  product,
+  deviceId,
+  jellyseerrLabel,
+  onSignOut,
+}: HeaderProps) {
   return (
     <View style={styles.header}>
       <Text style={styles.title}>Jellyfuse</Text>
-      <Text style={styles.subtitle}>Phase 1b.2 · real sign-in flow</Text>
+      <Text style={styles.subtitle}>Phase 1b.3 · jellyseerr login + connect.sid</Text>
       <View style={styles.metaRow}>
         <Text style={styles.metaLabel}>USER</Text>
         <Text style={styles.metaValue}>{userLabel}</Text>
@@ -97,6 +121,12 @@ function Header({ userLabel, serverLabel, status, product, deviceId, onSignOut }
           <Text style={styles.metaValue}>{product}</Text>
         </View>
       ) : null}
+      <View style={styles.metaRow}>
+        <Text style={styles.metaLabel}>JELLYSEERR</Text>
+        <Text style={styles.metaValue} numberOfLines={1}>
+          {jellyseerrLabel}
+        </Text>
+      </View>
       <View style={styles.metaRow}>
         <Text style={styles.metaLabel}>DEVICE</Text>
         <Text style={styles.metaValue} numberOfLines={1}>
@@ -144,7 +174,7 @@ const styles = StyleSheet.create({
     fontSize: fontSize.caption,
     letterSpacing: 1,
     textTransform: "uppercase",
-    width: 70,
+    width: 88,
   },
   metaValue: {
     color: colors.textPrimary,

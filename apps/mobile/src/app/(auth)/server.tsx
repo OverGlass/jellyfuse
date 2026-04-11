@@ -16,18 +16,22 @@ import { useAuth } from "@/services/auth/state";
 import { useSystemInfo } from "@/services/query";
 
 /**
- * Phase 1b.2 server-connect screen. First step of the two-step sign-in
+ * Phase 1b.3 server-connect screen. First step of the two-step sign-in
  * flow — the user enters a Jellyfin server URL, we ping `/System/Info/
  * Public` to validate + identify it, show the server name + version
  * inline, and enable "Continue" only when the ping resolved.
  *
- * On continue we persist the URL + version via `AuthProvider.setServer`,
- * which flips `serverUrl` in state. The root router then sends the user
- * to `(auth)/sign-in` because `activeUser` is still undefined.
+ * An optional Jellyseerr URL field sits below. Per the Rust spec
+ * Jellyseerr is per-server (not per-user), so we persist it alongside
+ * the Jellyfin URL here rather than asking for it again on the sign-in
+ * screen. The actual Jellyseerr login runs during
+ * `signInWithCredentials` with the same credentials the user enters
+ * for Jellyfin — see `AuthProvider`.
  */
 export default function ServerScreen() {
   const { setServer } = useAuth();
   const [urlDraft, setUrlDraft] = useState("");
+  const [jellyseerrDraft, setJellyseerrDraft] = useState("");
   const [submittedUrl, setSubmittedUrl] = useState<string | undefined>(undefined);
 
   const systemInfo = useSystemInfo(submittedUrl);
@@ -40,9 +44,14 @@ export default function ServerScreen() {
 
   const handleContinue = useCallback(async () => {
     if (!submittedUrl || !systemInfo.data) return;
-    await setServer(submittedUrl, systemInfo.data.version);
+    const jellyseerrUrl = normalizeUrl(jellyseerrDraft);
+    await setServer({
+      url: submittedUrl,
+      version: systemInfo.data.version,
+      jellyseerrUrl,
+    });
     router.replace("/(auth)/sign-in");
-  }, [submittedUrl, systemInfo.data, setServer]);
+  }, [submittedUrl, systemInfo.data, jellyseerrDraft, setServer]);
 
   const errorMessage = buildErrorMessage(systemInfo);
 
@@ -71,6 +80,26 @@ export default function ServerScreen() {
               onSubmitEditing={handleCheck}
               style={styles.input}
             />
+          </View>
+
+          <View style={styles.inputBlock}>
+            <Text style={styles.label}>Jellyseerr URL (optional)</Text>
+            <TextInput
+              value={jellyseerrDraft}
+              onChangeText={setJellyseerrDraft}
+              placeholder="https://jellyseerr.example.com"
+              placeholderTextColor={colors.textMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+              textContentType="URL"
+              returnKeyType="go"
+              onSubmitEditing={handleCheck}
+              style={styles.input}
+            />
+            <Text style={styles.helper}>
+              Used for requests and suggestions. Leave empty if you don't use Jellyseerr.
+            </Text>
           </View>
 
           <Pressable
@@ -218,6 +247,11 @@ const styles = StyleSheet.create({
   resultMeta: {
     color: colors.textSecondary,
     fontSize: fontSize.body,
+  },
+  helper: {
+    color: colors.textMuted,
+    fontSize: fontSize.caption,
+    marginTop: spacing.xs,
   },
   continueButton: {
     alignItems: "center",
