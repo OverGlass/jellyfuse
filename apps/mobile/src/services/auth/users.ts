@@ -112,6 +112,7 @@ function isAuthenticatedUser(value: unknown): value is AuthenticatedUser {
     typeof v["userId"] === "string" &&
     typeof v["displayName"] === "string" &&
     typeof v["token"] === "string" &&
-    (v["avatarUrl"] === undefined || typeof v["avatarUrl"] === "string")
+    (v["avatarUrl"] === undefined || typeof v["avatarUrl"] === "string") &&
+    (v["jellyseerrCookie"] === undefined || typeof v["jellyseerrCookie"] === "string")
   );
 }

@@ -1,14 +1,6 @@
 import { authenticateByName, jellyseerrLogin, type AuthenticatedUser } from "@jellyfuse/api";
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { createContext, useContext, useEffect, useMemo, type ReactNode } from "react";
 import { apiFetch, setCurrentAuthContext } from "@/services/api/client";
 import { setCurrentJellyseerrCookie } from "@/services/jellyseerr/client";
 import {
@@ -23,16 +15,24 @@ import { findUserById, removeUserById, secureUserStorage, upsertUser } from "./u
 
 /**
  * Multi-user auth state for Jellyfuse. Ports the Rust model from
- * `crates/jf-core/src/state.rs:509-521` + `crates/jf-core/src/models.rs`
- * (Settings + authenticated_users sled tree) into a single React context.
+ * `crates/jf-core/src/state.rs` + `crates/jf-core/src/models.rs`
+ * (Settings + authenticated_users sled tree) into a React Query cache.
  *
- * Phase 1b.3 (ARK-8) adds the Jellyseerr session layer alongside the
- * Jellyfin auth — `setServer` optionally takes a Jellyseerr URL,
- * `signInWithCredentials` chains `jellyseerrLogin` after the Jellyfin
- * auth completes, and a companion effect keeps the `jellyseerrFetch`
- * ref populated with the persisted `connect.sid` cookie. Jellyseerr
- * failures are non-fatal per the Rust spec — the Jellyfin half
- * succeeds and the user lands on the home screen either way.
+ * **No async useEffects** per the project rule (see memory:
+ * `feedback_no_async_useeffect` and the React docs page
+ * https://react.dev/learn/you-might-not-need-an-effect). Every bit of
+ * async work — hydrating from secure-storage, building the auth
+ * context via expo-application, calling `authenticateByName` /
+ * `jellyseerrLogin`, persisting users — runs through React Query.
+ * The cache at `['auth', 'persisted']` is the single source of truth
+ * for the persisted shape; mutations write to secure-storage and then
+ * `setQueryData` the new shape back. `useEffect` is used only for
+ * synchronous ref-pushes that can't be expressed as derived state
+ * (module-level fetchers outside React).
+ *
+ * Per-user Jellyseerr cookie: the cookie lives on `AuthenticatedUser`
+ * because different Jellyfin users can have different Jellyseerr
+ * permissions. See memory: `project_jellyfuse_auth_architecture`.
  */
 
 export type AuthStatus = "loading" | "unauthenticated" | "authenticated";
@@ -40,8 +40,8 @@ export type AuthStatus = "loading" | "unauthenticated" | "authenticated";
 /** Whether the Jellyseerr side of the session is usable right now. */
 export type JellyseerrStatus =
   | "not-configured" // no URL set
-  | "connected" // URL set + cookie present
-  | "disconnected"; // URL set but no valid cookie (failed login / expired)
+  | "connected" // URL set + cookie present on the active user
+  | "disconnected"; // URL set but no valid cookie for the active user
 
 export class AuthServerNotConfiguredError extends Error {
   constructor() {
@@ -71,114 +71,123 @@ export interface AuthState {
   signOutAll: () => Promise<void>;
 }
 
+/**
+ * Persisted auth snapshot cached under `['auth', 'persisted']`. Reflects
+ * exactly what's currently in secure-storage — every mutation updates
+ * the cache with `setQueryData` so consumers see the change without a
+ * refetch.
+ */
+interface PersistedAuth {
+  serverUrl: string | undefined;
+  serverVersion: string | undefined;
+  users: AuthenticatedUser[];
+  activeUserId: string | undefined;
+  jellyseerrUrl: string | undefined;
+}
+
+const PERSISTED_AUTH_KEY = ["auth", "persisted"] as const;
+
+const EMPTY_PERSISTED_AUTH: PersistedAuth = {
+  serverUrl: undefined,
+  serverVersion: undefined,
+  users: [],
+  activeUserId: undefined,
+  jellyseerrUrl: undefined,
+};
+
+async function loadPersistedAuth(): Promise<PersistedAuth> {
+  const [serverUrl, serverVersion, activeUserId, jellyseerrUrl, users] = await Promise.all([
+    getSecureItem(SecureStorageKey.jellyfinServerUrl),
+    getSecureItem(SecureStorageKey.jellyfinServerVersion),
+    getSecureItem(SecureStorageKey.jellyfinActiveUserId),
+    getSecureItem(SecureStorageKey.jellyseerrUrl),
+    secureUserStorage.loadUsers(),
+  ]);
+  // Drop a dangling active pointer (user removed from the list).
+  const hasActive = activeUserId !== undefined && users.some((u) => u.userId === activeUserId);
+  return {
+    serverUrl,
+    serverVersion,
+    users,
+    activeUserId: hasActive ? activeUserId : undefined,
+    jellyseerrUrl,
+  };
+}
+
 const AuthContext = createContext<AuthState | null>(null);
 
 interface Props {
   children: ReactNode;
 }
 
-interface InternalState {
-  status: AuthStatus;
-  serverUrl: string | undefined;
-  serverVersion: string | undefined;
-  users: AuthenticatedUser[];
-  activeUserId: string | undefined;
-  jellyseerrUrl: string | undefined;
-  jellyseerrCookie: string | undefined;
+/**
+ * Wraps the app in the AuthContext. Does no async work itself — the
+ * actual queries + mutations live in `useAuthInternal` which is
+ * evaluated inside this component and then forwarded through the
+ * context to every consumer.
+ */
+export function AuthProvider({ children }: Props) {
+  const value = useAuthInternal();
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-const LOADING_STATE: InternalState = {
-  status: "loading",
-  serverUrl: undefined,
-  serverVersion: undefined,
-  users: [],
-  activeUserId: undefined,
-  jellyseerrUrl: undefined,
-  jellyseerrCookie: undefined,
-};
+/**
+ * The real query/mutation plumbing. Separated from `AuthProvider` only
+ * to keep the latter trivially `<Provider>{children}</Provider>`.
+ */
+function useAuthInternal(): AuthState {
+  const queryClient = useQueryClient();
 
-export function AuthProvider({ children }: Props) {
-  const [state, setState] = useState<InternalState>(LOADING_STATE);
-  // Mirror state in a ref so async action callbacks can read the latest
-  // values without being re-memoised on every render. Updated via effect
-  // below so the ref always trails state by exactly one commit.
-  const stateRef = useRef<InternalState>(state);
+  // ------------------------------------------------------------------
+  // Hydration query — reads secure-storage once and caches forever.
+  // ------------------------------------------------------------------
+  const persistedQuery = useQuery({
+    queryKey: PERSISTED_AUTH_KEY,
+    queryFn: loadPersistedAuth,
+    staleTime: Infinity,
+    gcTime: Infinity,
+    retry: 0,
+  });
+
+  const persisted = persistedQuery.data ?? EMPTY_PERSISTED_AUTH;
+  const activeUser = findUserById(persisted.users, persisted.activeUserId);
+
+  // ------------------------------------------------------------------
+  // Auth-context query — derives the `AuthContext` (device id, client
+  // version, device name, token) for the active user. Re-keyed by
+  // userId so a user switch automatically triggers a rebuild.
+  // ------------------------------------------------------------------
+  const contextQuery = useQuery({
+    queryKey: ["auth", "context", activeUser?.userId ?? "anon"] as const,
+    queryFn: () => (activeUser ? buildAuthContextForUser(activeUser) : null),
+    enabled: Boolean(activeUser),
+    staleTime: Infinity,
+    gcTime: Infinity,
+    retry: 0,
+  });
+
+  // ------------------------------------------------------------------
+  // Synchronous ref-pushes — these are the only useEffects in the
+  // module, and both are *sync* bodies (no async/await). They publish
+  // derived state into module-level refs so `apiFetchAuthenticated`
+  // and `jellyseerrFetch` can read the current value outside React.
+  // ------------------------------------------------------------------
   useEffect(() => {
-    stateRef.current = state;
-  }, [state]);
+    setCurrentAuthContext(contextQuery.data ?? undefined);
+  }, [contextQuery.data]);
 
-  // Hydrate from secure-storage on mount. Reads run in parallel because
-  // they hit different keys with no ordering dependency.
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const [serverUrl, serverVersion, activeUserId, jellyseerrUrl, jellyseerrCookie, users] =
-        await Promise.all([
-          getSecureItem(SecureStorageKey.jellyfinServerUrl),
-          getSecureItem(SecureStorageKey.jellyfinServerVersion),
-          getSecureItem(SecureStorageKey.jellyfinActiveUserId),
-          getSecureItem(SecureStorageKey.jellyseerrUrl),
-          getSecureItem(SecureStorageKey.jellyseerrCookie),
-          secureUserStorage.loadUsers(),
-        ]);
-      if (cancelled) return;
-      const activeUser = findUserById(users, activeUserId);
-      setState({
-        status: activeUser ? "authenticated" : "unauthenticated",
-        serverUrl,
-        serverVersion,
-        users,
-        activeUserId: activeUser?.userId,
-        jellyseerrUrl,
-        jellyseerrCookie,
-      });
-    })().catch((err: unknown) => {
-      // Hydration failures should not wedge the app at splash — log and
-      // fall through to unauthenticated so the sign-in flow can run.
-      console.warn("auth hydration failed", err);
-      if (!cancelled) {
-        setState({ ...LOADING_STATE, status: "unauthenticated" });
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    setCurrentJellyseerrCookie(activeUser?.jellyseerrCookie);
+  }, [activeUser?.jellyseerrCookie]);
 
-  // Keep the module-level auth-context ref (used by
-  // `apiFetchAuthenticated`) in sync with the active user. This runs
-  // asynchronously because `buildAuthContextForUser` reads the device id
-  // via expo-application — the brief window before the ref is set is
-  // harmless because no authenticated calls fire until the user is in
-  // the (app) group.
-  useEffect(() => {
-    const activeUser = findUserById(state.users, state.activeUserId);
-    if (!activeUser) {
-      setCurrentAuthContext(undefined);
-      return;
-    }
-    let cancelled = false;
-    buildAuthContextForUser(activeUser)
-      .then((ctx) => {
-        if (!cancelled) setCurrentAuthContext(ctx);
-      })
-      .catch((err: unknown) => {
-        console.warn("auth context build failed", err);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [state.users, state.activeUserId]);
+  // ------------------------------------------------------------------
+  // Mutations — each reads the current persisted cache, mutates
+  // secure-storage, and writes the new cache via `setQueryData`.
+  // Consumers get an awaitable function via `mutateAsync`.
+  // ------------------------------------------------------------------
 
-  // Keep the Jellyseerr cookie ref (used by `jellyseerrFetch`) in sync
-  // with the persisted cookie. Runs synchronously because the cookie is
-  // already in state — no network calls.
-  useEffect(() => {
-    setCurrentJellyseerrCookie(state.jellyseerrCookie);
-  }, [state.jellyseerrCookie]);
-
-  const setServer = useCallback(
-    async ({
+  const setServerMutation = useMutation({
+    mutationFn: async ({
       url,
       version,
       jellyseerrUrl,
@@ -186,7 +195,10 @@ export function AuthProvider({ children }: Props) {
       url: string;
       version: string | undefined;
       jellyseerrUrl: string | undefined;
-    }) => {
+    }): Promise<PersistedAuth> => {
+      const current =
+        queryClient.getQueryData<PersistedAuth>(PERSISTED_AUTH_KEY) ?? EMPTY_PERSISTED_AUTH;
+
       await setSecureItem(SecureStorageKey.jellyfinServerUrl, url);
       if (version) {
         await setSecureItem(SecureStorageKey.jellyfinServerVersion, version);
@@ -197,126 +209,161 @@ export function AuthProvider({ children }: Props) {
         await setSecureItem(SecureStorageKey.jellyseerrUrl, jellyseerrUrl);
       } else {
         await removeSecureItem(SecureStorageKey.jellyseerrUrl);
-        // Clear any stale cookie so the old session doesn't leak after a
-        // Jellyseerr URL change.
-        await removeSecureItem(SecureStorageKey.jellyseerrCookie);
       }
-      setState((prev) => ({
-        ...prev,
+
+      // If the Jellyseerr URL changed, every stored cookie is now
+      // pointing at a stale/invalid session — drop them from every
+      // user record so `jellyseerrFetch` stops sending them.
+      const urlChanged = jellyseerrUrl !== current.jellyseerrUrl;
+      let users = current.users;
+      if (urlChanged && users.some((u) => u.jellyseerrCookie !== undefined)) {
+        users = users.map(({ jellyseerrCookie: _drop, ...rest }) => rest);
+        await secureUserStorage.saveUsers(users);
+      }
+
+      return {
+        ...current,
         serverUrl: url,
         serverVersion: version,
         jellyseerrUrl,
-        jellyseerrCookie: jellyseerrUrl ? prev.jellyseerrCookie : undefined,
-      }));
+        users,
+      };
     },
-    [],
-  );
+    onSuccess: (data) => {
+      queryClient.setQueryData(PERSISTED_AUTH_KEY, data);
+    },
+  });
 
-  const signInWithCredentials = useCallback(
-    async ({ username, password }: { username: string; password: string }) => {
-      const serverUrl = stateRef.current.serverUrl;
-      const jellyseerrUrl = stateRef.current.jellyseerrUrl;
+  const signInMutation = useMutation({
+    mutationFn: async (input: { username: string; password: string }): Promise<PersistedAuth> => {
+      const current =
+        queryClient.getQueryData<PersistedAuth>(PERSISTED_AUTH_KEY) ?? EMPTY_PERSISTED_AUTH;
+      const { serverUrl, jellyseerrUrl } = current;
       if (!serverUrl) {
         throw new AuthServerNotConfiguredError();
       }
+
       const authContext = await buildPreAuthContext();
-      const result = await authenticateByName(
-        { baseUrl: serverUrl, username, password, authContext },
+      const jellyfinResult = await authenticateByName(
+        { baseUrl: serverUrl, username: input.username, password: input.password, authContext },
         apiFetch,
       );
-      const user: AuthenticatedUser = {
-        userId: result.userId,
-        displayName: result.displayName,
-        token: result.token,
-      };
-      const users = await upsertUser(secureUserStorage, user);
-      await secureUserStorage.saveActiveUserId(user.userId);
 
       // Jellyseerr login is optional — a failure here leaves the
-      // Jellyfin half intact and the user still lands on `(app)`. The
-      // cookie is cleared out so the header row shows "disconnected".
+      // Jellyfin half intact and the user still lands on `(app)`.
+      // The cookie is **per-user** and travels on the
+      // `AuthenticatedUser` record (see memory:
+      // project_jellyfuse_auth_architecture).
       let jellyseerrCookie: string | undefined;
       if (jellyseerrUrl) {
         try {
           const session = await jellyseerrLogin(
-            { baseUrl: jellyseerrUrl, username, password },
+            { baseUrl: jellyseerrUrl, username: input.username, password: input.password },
             apiFetch,
           );
-          await setSecureItem(SecureStorageKey.jellyseerrCookie, session.cookie);
           jellyseerrCookie = session.cookie;
         } catch (err: unknown) {
           console.warn("jellyseerr login failed — continuing without it", err);
-          await removeSecureItem(SecureStorageKey.jellyseerrCookie);
           jellyseerrCookie = undefined;
         }
       }
 
-      setState((prev) => ({
-        ...prev,
-        status: "authenticated",
+      const user: AuthenticatedUser = {
+        userId: jellyfinResult.userId,
+        displayName: jellyfinResult.displayName,
+        token: jellyfinResult.token,
+        ...(jellyseerrCookie !== undefined ? { jellyseerrCookie } : {}),
+      };
+      const users = await upsertUser(secureUserStorage, user);
+      await secureUserStorage.saveActiveUserId(user.userId);
+
+      return {
+        ...current,
         users,
         activeUserId: user.userId,
-        jellyseerrCookie,
-      }));
+      };
     },
-    [],
-  );
+    onSuccess: (data) => {
+      queryClient.setQueryData(PERSISTED_AUTH_KEY, data);
+    },
+  });
 
-  const switchUser = useCallback(async (userId: string) => {
-    await secureUserStorage.saveActiveUserId(userId);
-    setState((prev) => {
-      if (!prev.users.some((u) => u.userId === userId)) return prev;
-      return { ...prev, status: "authenticated", activeUserId: userId };
-    });
-  }, []);
+  const switchUserMutation = useMutation({
+    mutationFn: async (userId: string): Promise<PersistedAuth> => {
+      const current =
+        queryClient.getQueryData<PersistedAuth>(PERSISTED_AUTH_KEY) ?? EMPTY_PERSISTED_AUTH;
+      if (!current.users.some((u) => u.userId === userId)) {
+        return current;
+      }
+      await secureUserStorage.saveActiveUserId(userId);
+      return { ...current, activeUserId: userId };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(PERSISTED_AUTH_KEY, data);
+    },
+  });
 
-  const removeUser = useCallback(async (userId: string) => {
-    const { users, nextActiveUserId } = await removeUserById(secureUserStorage, userId);
-    setState((prev) => ({
-      ...prev,
-      status: nextActiveUserId ? "authenticated" : "unauthenticated",
-      users,
-      activeUserId: nextActiveUserId,
-    }));
-  }, []);
+  const removeUserMutation = useMutation({
+    mutationFn: async (userId: string): Promise<PersistedAuth> => {
+      const current =
+        queryClient.getQueryData<PersistedAuth>(PERSISTED_AUTH_KEY) ?? EMPTY_PERSISTED_AUTH;
+      const { users, nextActiveUserId } = await removeUserById(secureUserStorage, userId);
+      return {
+        ...current,
+        users,
+        activeUserId: nextActiveUserId,
+      };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(PERSISTED_AUTH_KEY, data);
+    },
+  });
 
-  const signOutAll = useCallback(async () => {
-    await clearSecureStorage();
-    setState({
-      status: "unauthenticated",
-      serverUrl: undefined,
-      serverVersion: undefined,
-      users: [],
-      activeUserId: undefined,
-      jellyseerrUrl: undefined,
-      jellyseerrCookie: undefined,
-    });
-  }, []);
+  const signOutAllMutation = useMutation({
+    mutationFn: async (): Promise<PersistedAuth> => {
+      await clearSecureStorage();
+      return EMPTY_PERSISTED_AUTH;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(PERSISTED_AUTH_KEY, data);
+    },
+  });
 
-  const value = useMemo<AuthState>(() => {
-    const activeUser = findUserById(state.users, state.activeUserId);
-    const jellyseerrStatus: JellyseerrStatus = !state.jellyseerrUrl
+  return useMemo<AuthState>(() => {
+    const status: AuthStatus = persistedQuery.isPending
+      ? "loading"
+      : activeUser
+        ? "authenticated"
+        : "unauthenticated";
+    const jellyseerrStatus: JellyseerrStatus = !persisted.jellyseerrUrl
       ? "not-configured"
-      : state.jellyseerrCookie
+      : activeUser?.jellyseerrCookie
         ? "connected"
         : "disconnected";
     return {
-      status: state.status,
-      serverUrl: state.serverUrl,
-      serverVersion: state.serverVersion,
-      users: state.users,
+      status,
+      serverUrl: persisted.serverUrl,
+      serverVersion: persisted.serverVersion,
+      users: persisted.users,
       activeUser,
-      jellyseerrUrl: state.jellyseerrUrl,
+      jellyseerrUrl: persisted.jellyseerrUrl,
       jellyseerrStatus,
-      setServer,
-      signInWithCredentials,
-      switchUser,
-      removeUser,
-      signOutAll,
+      setServer: (args) => setServerMutation.mutateAsync(args).then(() => undefined),
+      signInWithCredentials: (args) => signInMutation.mutateAsync(args).then(() => undefined),
+      switchUser: (userId) => switchUserMutation.mutateAsync(userId).then(() => undefined),
+      removeUser: (userId) => removeUserMutation.mutateAsync(userId).then(() => undefined),
+      signOutAll: () => signOutAllMutation.mutateAsync().then(() => undefined),
     };
-  }, [state, setServer, signInWithCredentials, switchUser, removeUser, signOutAll]);
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  }, [
+    persistedQuery.isPending,
+    persisted,
+    activeUser,
+    setServerMutation,
+    signInMutation,
+    switchUserMutation,
+    removeUserMutation,
+    signOutAllMutation,
+  ]);
 }
 
 export function useAuth(): AuthState {

@@ -3,20 +3,28 @@ import type { FetchLike } from "./system-info";
 
 /**
  * Authenticated user payload returned by Jellyfin after a successful
- * `AuthenticateByName` call. Field names match the Rust
+ * `AuthenticateByName` call. Field names mostly match the Rust
  * `AuthenticatedUser` struct in `crates/jf-core/src/models.rs:736-748`
  * so the port stays mechanically equivalent — we can diff the behaviour
  * against the Rust spec line-by-line.
  *
- * `avatarUrl` is filled after a follow-up `GET /Users/{userId}` call in
- * Phase 1b.4 that reads the `PrimaryImageTag` and builds the image URL.
- * It stays undefined until then.
+ * Two deviations from Rust:
+ *
+ * - `avatarUrl` is filled after a follow-up `GET /Users/{userId}` call
+ *   in Phase 1b.4 that reads the `PrimaryImageTag` and builds the image
+ *   URL. Stays undefined until then.
+ * - `jellyseerrCookie` is per-user (not stored globally on `Settings`
+ *   like the Rust predecessor does). Different Jellyfin users can map
+ *   to different Jellyseerr accounts with different permissions /
+ *   request limits, so the cookie must travel with each user record.
+ *   See memory: `project_jellyfuse_auth_architecture`.
  */
 export interface AuthenticatedUser {
   userId: string;
   displayName: string;
   token: string;
   avatarUrl?: string;
+  jellyseerrCookie?: string;
 }
 
 export class AuthenticateHttpError extends Error {

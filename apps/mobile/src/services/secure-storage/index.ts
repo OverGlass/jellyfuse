@@ -10,15 +10,19 @@ import * as SecureStore from "expo-secure-store";
  * app sharing a keychain group on Apple (shared App Group containers land
  * in Phase 10 for widgets).
  *
- * Multi-user shape (Phase 1b.1 — ARK-6):
- * - `jellyfinUsers` holds the entire `AuthenticatedUser[]` serialised as
- *   JSON. There is no separate per-user key; the array is the source of
- *   truth. Mirrors the Rust `authenticated_users` sled tree at
- *   `crates/jf-desktop/src/settings.rs:76-100`.
+ * Multi-user shape (Phase 1b.1 — ARK-6, corrected in Phase 1b.3):
+ * - `jellyfinUsers` holds the entire `AuthenticatedUser[]` serialised
+ *   as JSON. There is no separate per-user key; the array is the
+ *   source of truth. Mirrors the Rust `authenticated_users` sled tree
+ *   at `crates/jf-desktop/src/settings.rs:76-100`. Each entry includes
+ *   its own `jellyseerrCookie` — cookies are per-user because
+ *   different Jellyfin accounts can have different Jellyseerr perms.
  * - `jellyfinActiveUserId` points at the currently active user. A
  *   dangling id (user removed) is treated as "no active user".
- * - `jellyseerrCookie` is a single string, global to the app — Jellyseerr
- *   sessions are not per-user (see memory: project_jellyfuse_auth_architecture).
+ * - `jellyseerrUrl` is a single string, per-server — one Jellyseerr
+ *   instance serves the whole Jellyfin server. Only the *cookie* is
+ *   per-user, not the URL. See memory:
+ *   `project_jellyfuse_auth_architecture`.
  */
 
 const KEY_PREFIX = "jellyfuse.";
@@ -29,7 +33,6 @@ export const SecureStorageKey = {
   jellyfinUsers: `${KEY_PREFIX}jellyfin.users`,
   jellyfinActiveUserId: `${KEY_PREFIX}jellyfin.activeUserId`,
   jellyseerrUrl: `${KEY_PREFIX}jellyseerr.url`,
-  jellyseerrCookie: `${KEY_PREFIX}jellyseerr.cookie`,
   deviceId: `${KEY_PREFIX}device.id`,
 } as const;
 
