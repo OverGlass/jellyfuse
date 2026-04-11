@@ -38,3 +38,4 @@ function escape(value: string): string {
 }
 
 export * from "./system-info";
+export * from "./authenticate";
