@@ -141,9 +141,7 @@ function handleOpenProfiles() {
 }
 
 function handleSeeAll(shelfKey: ShelfKey) {
-  // Phase 2e will route to /shelf/[shelfKey] — warn for now so the
-  // chevron is visibly wired but not yet functional.
-  console.warn(`see-all tapped: ${shelfKey}`);
+  router.push(`/shelf/${shelfKey}`);
 }
 
 function handleItemPress(item: MediaItem) {

@@ -155,6 +155,129 @@ export async function fetchLatestTv(
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
+// Paged "see all" fetcher — used by the shelf grid screen
+// ──────────────────────────────────────────────────────────────────────────────
+
+/** Shelf identifier the grid screen can page through. */
+export type ShelfPageKey =
+  | "continue-watching"
+  | "next-up"
+  | "recently-added"
+  | "latest-movies"
+  | "latest-tv";
+
+export interface ShelfPageFetchArgs {
+  baseUrl: string;
+  userId: string;
+  shelfKey: ShelfPageKey;
+  startIndex: number;
+  limit: number;
+}
+
+export interface ShelfPage {
+  items: MediaItem[];
+  totalRecordCount: number;
+  nextStartIndex: number | undefined;
+}
+
+/**
+ * Single-page fetcher for the shelf "see all" grid. Pages through the
+ * Jellyfin library using `StartIndex` / `Limit` query params. Each
+ * shelf maps onto a different endpoint + filter set; the grid screen
+ * wraps this in a `useInfiniteQuery` via `useShelfInfinite`.
+ *
+ * `/Users/{uid}/Items/Resume` and `/Shows/NextUp` both return a
+ * windowed result so paging works against them too; `/Items/Latest`
+ * doesn't support paging properly (returns only recent items), so
+ * "recently-added" reuses the `/Users/{uid}/Items?SortBy=DateCreated`
+ * path with all item types — gives stable pagination over the full
+ * library ordered by add-date. Matches the Rust `get_all_movies`
+ * pattern in jf-api.
+ */
+export async function fetchShelfPage(
+  args: ShelfPageFetchArgs,
+  fetcher: FetchLike,
+  signal?: AbortSignal,
+): Promise<ShelfPage> {
+  const url = buildShelfPageUrl(args);
+  const response = await fetcher(url, signal ? { signal } : undefined);
+  if (!response.ok) {
+    throw new ShelfHttpError(args.shelfKey, response.status);
+  }
+  const raw = await response.json();
+  if (typeof raw !== "object" || raw === null) {
+    throw new ShelfParseError(args.shelfKey, "response is not an object");
+  }
+  const r = raw as { Items?: unknown; TotalRecordCount?: unknown };
+  if (!Array.isArray(r.Items)) {
+    throw new ShelfParseError(args.shelfKey, "missing 'Items' array");
+  }
+  const items = r.Items.map((item, i) => {
+    if (!isRawJfItem(item)) {
+      throw new ShelfParseError(args.shelfKey, `item at index ${i} has unexpected shape`);
+    }
+    return mapJfItem(args.baseUrl, item);
+  });
+  const total = typeof r.TotalRecordCount === "number" ? r.TotalRecordCount : items.length;
+  const consumed = args.startIndex + items.length;
+  const nextStartIndex = items.length === 0 || consumed >= total ? undefined : consumed;
+  return { items, totalRecordCount: total, nextStartIndex };
+}
+
+function buildShelfPageUrl(args: ShelfPageFetchArgs): string {
+  const startIndex = String(args.startIndex);
+  const limit = String(args.limit);
+  switch (args.shelfKey) {
+    case "continue-watching":
+      return buildUrl(args.baseUrl, `/Users/${args.userId}/Items/Resume`, {
+        MediaTypes: "Video",
+        Recursive: "true",
+        StartIndex: startIndex,
+        Limit: limit,
+        Fields: RESUME_FIELDS,
+      });
+    case "next-up":
+      return buildUrl(args.baseUrl, `/Shows/NextUp`, {
+        UserId: args.userId,
+        StartIndex: startIndex,
+        Limit: limit,
+        Fields: NEXT_UP_FIELDS,
+      });
+    case "recently-added":
+      // Stable pagination requires a real sorted query, not /Items/Latest.
+      return buildUrl(args.baseUrl, `/Users/${args.userId}/Items`, {
+        IncludeItemTypes: "Movie,Series",
+        SortBy: "DateCreated",
+        SortOrder: "Descending",
+        Recursive: "true",
+        StartIndex: startIndex,
+        Limit: limit,
+        Fields: DEFAULT_FIELDS,
+      });
+    case "latest-movies":
+      return buildUrl(args.baseUrl, `/Users/${args.userId}/Items`, {
+        IncludeItemTypes: "Movie",
+        SortBy: "DateCreated",
+        SortOrder: "Descending",
+        Recursive: "true",
+        StartIndex: startIndex,
+        Limit: limit,
+        Fields: DEFAULT_FIELDS,
+      });
+    case "latest-tv":
+      return buildUrl(args.baseUrl, `/Users/${args.userId}/Items`, {
+        IncludeItemTypes: "Series",
+        SortBy: "DateCreated",
+        SortOrder: "Descending",
+        Recursive: "true",
+        StartIndex: startIndex,
+        Limit: limit,
+        Fields: DEFAULT_FIELDS,
+      });
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 // Shared fetch plumbing
 // ──────────────────────────────────────────────────────────────────────────────
 
