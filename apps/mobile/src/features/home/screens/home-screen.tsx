@@ -63,7 +63,7 @@ export function HomeScreen() {
       variant: "wide",
       query: continueWatching,
     },
-    { key: "next-up", title: "Next Up", variant: "wide", query: nextUp },
+    { key: "next-up", title: "Next Up", variant: "poster", query: nextUp },
     { key: "recently-added", title: "Recently Added", variant: "poster", query: recentlyAdded },
     { key: "latest-movies", title: "Latest Movies", variant: "poster", query: latestMovies },
     { key: "latest-tv", title: "Latest TV", variant: "poster", query: latestTv },
