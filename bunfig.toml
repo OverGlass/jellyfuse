@@ -1,0 +1,5 @@
+# Bun's default isolated linker creates per-package node_modules, which
+# Expo's native module detection flags as duplicate native modules. The
+# hoisted linker matches the npm/yarn monorepo layout Expo expects.
+[install]
+linker = "hoisted"
