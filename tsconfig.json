@@ -1,0 +1,10 @@
+{
+  "extends": "./tooling/tsconfig-base/tsconfig.base.json",
+  "include": [],
+  "references": [
+    { "path": "./packages/models" },
+    { "path": "./packages/query-keys" },
+    { "path": "./packages/api" },
+    { "path": "./packages/theme" }
+  ]
+}

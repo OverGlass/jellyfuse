@@ -1,0 +1,11 @@
+{
+  "name": "@jellyfuse/vitest-preset",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "index.ts",
+  "files": ["index.ts"],
+  "peerDependencies": {
+    "vitest": "^2.1.3"
+  }
+}

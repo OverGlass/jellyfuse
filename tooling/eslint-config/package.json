@@ -1,0 +1,10 @@
+{
+  "name": "@jellyfuse/eslint-config",
+  "version": "0.0.0",
+  "private": true,
+  "main": "index.js",
+  "files": ["index.js"],
+  "peerDependencies": {
+    "eslint": "^9.12.0"
+  }
+}

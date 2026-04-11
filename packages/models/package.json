@@ -1,0 +1,22 @@
+{
+  "name": "@jellyfuse/models",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsgo -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "lint": "echo '(eslint wired in Phase 0b)'"
+  },
+  "devDependencies": {
+    "@jellyfuse/tsconfig-base": "workspace:*",
+    "@jellyfuse/vitest-preset": "workspace:*",
+    "@typescript/native-preview": "^7.0.0-dev",
+    "vitest": "^2.1.3"
+  }
+}

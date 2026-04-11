@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Typecheck / Lint / Test / Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.12
+
+      - name: Install deps
+        run: bun install --frozen-lockfile
+
+      - name: Format check (oxfmt)
+        run: bun run format:check
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Test
+        run: bun run test
+
+  # Prebuild dry-runs: fast-fail on config breakage before native builds.
+  # Native builds themselves are done in EAS.
+  prebuild:
+    name: Expo prebuild dry-run
+    runs-on: macos-14
+    needs: verify
+    if: github.event_name == 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - { name: ios, cmd: 'bun run --filter @jellyfuse/mobile prebuild:ios:dry' }
+          - { name: android, cmd: 'bun run --filter @jellyfuse/mobile prebuild:android:dry' }
+          - { name: tvos, cmd: 'EXPO_TV=1 bun run --filter @jellyfuse/mobile prebuild:ios:dry' }
+          - { name: androidtv, cmd: 'EXPO_TV=1 bun run --filter @jellyfuse/mobile prebuild:android:dry' }
+          - { name: catalyst, cmd: 'bun run --filter @jellyfuse/mobile prebuild:catalyst:dry' }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.12
+      - name: Install deps
+        run: bun install --frozen-lockfile
+      - name: Skip if mobile app not yet scaffolded
+        id: check
+        run: |
+          if [ ! -f apps/mobile/package.json ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Prebuild ${{ matrix.target.name }}
+        if: steps.check.outputs.skip != 'true'
+        run: ${{ matrix.target.cmd }}

@@ -1,0 +1,19 @@
+# Git invokes hooks in a non-interactive shell that doesn't source .zshrc,
+# so we re-prepend ~/.bun/bin to PATH for every command. This keeps the hooks
+# working whether you installed Bun via the official script, Homebrew, or a
+# package manager — as long as it's on the standard path already, this is a
+# no-op; if only .bun exists, it gets picked up.
+pre-commit:
+  parallel: true
+  commands:
+    format:
+      glob: '*.{ts,tsx,js,jsx,mjs,cjs,json}'
+      run: PATH="$HOME/.bun/bin:$PATH" bunx --bun oxfmt --check {staged_files}
+    typecheck:
+      glob: '*.{ts,tsx}'
+      run: PATH="$HOME/.bun/bin:$PATH" bun run typecheck
+
+commit-msg:
+  commands:
+    commitlint:
+      run: PATH="$HOME/.bun/bin:$PATH" bunx --bun commitlint --edit {1}

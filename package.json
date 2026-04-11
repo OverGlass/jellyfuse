@@ -1,0 +1,33 @@
+{
+  "name": "jellyfuse",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Jellyfuse — native Jellyfin + Jellyseerr client (React Native, cross-platform).",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "modules/*",
+    "tooling/*"
+  ],
+  "scripts": {
+    "typecheck": "bun run --filter '*' typecheck",
+    "lint": "bun run --filter '*' lint",
+    "test": "bun run --filter '*' test",
+    "format": "oxfmt -w .",
+    "format:check": "oxfmt --check .",
+    "prepare": "lefthook install || true"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.5.0",
+    "@commitlint/config-conventional": "^19.5.0",
+    "lefthook": "^1.8.1",
+    "@typescript/native-preview": "^7.0.0-dev",
+    "oxfmt": "^0.1.0",
+    "vitest": "^2.1.3"
+  },
+  "packageManager": "bun@1.3.12",
+  "engines": {
+    "bun": ">=1.3.0",
+    "node": ">=20"
+  }
+}
