@@ -6,19 +6,30 @@ import * as SecureStore from "expo-secure-store";
  * ABI so any future swap to a custom Nitro module is a two-file change —
  * nothing in the app imports `expo-secure-store` directly.
  *
- * The underlying keys are namespaced with `jellyfuse.` to avoid collisions
- * with any other app that might share the keychain group on Apple (shared
- * App Group containers land in Phase 10 for widgets).
+ * Keys are namespaced with `jellyfuse.` to avoid collisions with any other
+ * app sharing a keychain group on Apple (shared App Group containers land
+ * in Phase 10 for widgets).
+ *
+ * Multi-user shape (Phase 1b.1 — ARK-6):
+ * - `jellyfinUsers` holds the entire `AuthenticatedUser[]` serialised as
+ *   JSON. There is no separate per-user key; the array is the source of
+ *   truth. Mirrors the Rust `authenticated_users` sled tree at
+ *   `crates/jf-desktop/src/settings.rs:76-100`.
+ * - `jellyfinActiveUserId` points at the currently active user. A
+ *   dangling id (user removed) is treated as "no active user".
+ * - `jellyseerrCookie` is a single string, global to the app — Jellyseerr
+ *   sessions are not per-user (see memory: project_jellyfuse_auth_architecture).
  */
 
 const KEY_PREFIX = "jellyfuse.";
 
-/** Canonical secure-storage keys used across the app. */
 export const SecureStorageKey = {
-  authToken: `${KEY_PREFIX}auth.token`,
-  authUserId: `${KEY_PREFIX}auth.userId`,
-  authUserName: `${KEY_PREFIX}auth.userName`,
-  authServerUrl: `${KEY_PREFIX}auth.serverUrl`,
+  jellyfinServerUrl: `${KEY_PREFIX}jellyfin.serverUrl`,
+  jellyfinServerVersion: `${KEY_PREFIX}jellyfin.serverVersion`,
+  jellyfinUsers: `${KEY_PREFIX}jellyfin.users`,
+  jellyfinActiveUserId: `${KEY_PREFIX}jellyfin.activeUserId`,
+  jellyseerrUrl: `${KEY_PREFIX}jellyseerr.url`,
+  jellyseerrCookie: `${KEY_PREFIX}jellyseerr.cookie`,
   deviceId: `${KEY_PREFIX}device.id`,
 } as const;
 
@@ -40,7 +51,7 @@ export async function removeSecureItem(key: SecureStorageKey): Promise<void> {
   await SecureStore.deleteItemAsync(key);
 }
 
-/** Remove every Jellyfuse-owned secure-storage entry. Used on sign-out. */
+/** Remove every Jellyfuse-owned secure-storage entry. Used on sign-out-all. */
 export async function clearSecureStorage(): Promise<void> {
   await Promise.all(Object.values(SecureStorageKey).map((key) => SecureStore.deleteItemAsync(key)));
 }

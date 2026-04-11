@@ -43,8 +43,8 @@ describe("authenticateByName", () => {
     const result = await authenticateByName(baseInput, fetcher);
     expect(result).toEqual({
       userId: "user-xyz",
-      userName: "alice",
-      accessToken: "tok-123",
+      displayName: "alice",
+      token: "tok-123",
     });
   });
 

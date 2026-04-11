@@ -24,7 +24,7 @@ export function HomeScreen() {
   // `useKeepAwake` is wired from day 1 so we catch any native breakage.
   useKeepAwake();
 
-  const { signOut } = useAuth();
+  const { signOutAll } = useAuth();
   const systemInfo = useSystemInfo(DEMO_BASE_URL);
   const deviceId = useDeviceId();
 
@@ -43,7 +43,7 @@ export function HomeScreen() {
                 : undefined
             }
             deviceId={deviceId}
-            onSignOut={signOut}
+            onSignOut={signOutAll}
           />
         }
         renderItem={({ item }: { item: MockShelf }) => (

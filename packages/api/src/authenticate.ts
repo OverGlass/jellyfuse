@@ -3,14 +3,20 @@ import type { FetchLike } from "./system-info";
 
 /**
  * Authenticated user payload returned by Jellyfin after a successful
- * `AuthenticateByName` call. Mirrors the shape we actually need — the
- * Rust crate extracts the same three fields from `AuthenticationResult`
- * in `crates/jf-api/src/jellyfin.rs`.
+ * `AuthenticateByName` call. Field names match the Rust
+ * `AuthenticatedUser` struct in `crates/jf-core/src/models.rs:736-748`
+ * so the port stays mechanically equivalent — we can diff the behaviour
+ * against the Rust spec line-by-line.
+ *
+ * `avatarUrl` is filled after a follow-up `GET /Users/{userId}` call in
+ * Phase 1b.4 that reads the `PrimaryImageTag` and builds the image URL.
+ * It stays undefined until then.
  */
 export interface AuthenticatedUser {
   userId: string;
-  userName: string;
-  accessToken: string;
+  displayName: string;
+  token: string;
+  avatarUrl?: string;
 }
 
 export class AuthenticateHttpError extends Error {
@@ -85,8 +91,8 @@ export async function authenticateByName(
   }
   return {
     userId: raw.User.Id,
-    userName: raw.User.Name,
-    accessToken: raw.AccessToken,
+    displayName: raw.User.Name,
+    token: raw.AccessToken,
   };
 }
 
