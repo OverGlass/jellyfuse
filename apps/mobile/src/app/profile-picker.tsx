@@ -1,9 +1,11 @@
 import type { AuthenticatedUser } from "@jellyfuse/api";
-import { colors, fontSize, fontWeight, spacing } from "@jellyfuse/theme";
+import { colors, spacing } from "@jellyfuse/theme";
 import { FlashList } from "@shopify/flash-list";
 import { router } from "expo-router";
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { Alert, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { AuthScreenHeader } from "@/features/auth/components/auth-screen-header";
+import { CloseButton } from "@/features/auth/components/close-button";
 import { AddUserTile, ProfileTile } from "@/features/profile/components/profile-tile";
 import { useAuth } from "@/services/auth/state";
 
@@ -22,7 +24,7 @@ import { useAuth } from "@/services/auth/state";
 type PickerItem = { kind: "user"; user: AuthenticatedUser } | { kind: "add-user" };
 
 export default function ProfilePickerScreen() {
-  const { users, serverUrl, serverVersion, switchUser, removeUser } = useAuth();
+  const { users, activeUser, serverUrl, serverVersion, switchUser, removeUser } = useAuth();
 
   const items: PickerItem[] = [
     ...users.map((user): PickerItem => ({ kind: "user", user })),
@@ -37,6 +39,16 @@ export default function ProfilePickerScreen() {
 
   function handleAddUser() {
     router.push("/(auth)/sign-in?mode=add-user");
+  }
+
+  // Only show a close button when there's somewhere to dismiss *to* —
+  // i.e. when the picker was pushed over (app) as a modal from the
+  // home header. On cold launch "who's watching" is the only thing on
+  // the stack and a close button would strand the user.
+  const canDismiss = router.canGoBack();
+
+  function handleDismiss() {
+    router.back();
   }
 
   function handleRemove(user: AuthenticatedUser) {
@@ -58,12 +70,14 @@ export default function ProfilePickerScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Who's watching?</Text>
-        <Text style={styles.subtitle}>
-          {serverUrl ? serverUrl.replace(/^https?:\/\//, "") : "—"}
-          {serverVersion ? ` · ${serverVersion}` : ""}
-        </Text>
+      <View style={styles.headerContainer}>
+        <AuthScreenHeader
+          title="Who's watching?"
+          subtitle={`${serverUrl ? serverUrl.replace(/^https?:\/\//, "") : "—"}${
+            serverVersion ? ` · ${serverVersion}` : ""
+          }`}
+          rightAction={canDismiss ? <CloseButton onPress={handleDismiss} /> : null}
+        />
       </View>
       <FlashList
         data={items}
@@ -74,8 +88,10 @@ export default function ProfilePickerScreen() {
           item.kind === "user" ? (
             <View style={styles.cell}>
               <ProfileTile
+                colorSeed={item.user.userId}
                 displayName={item.user.displayName}
                 avatarUrl={item.user.avatarUrl}
+                isActive={activeUser?.userId === item.user.userId}
                 onPress={() => {
                   void handleSelect(item.user);
                 }}
@@ -100,19 +116,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     flex: 1,
   },
-  header: {
-    gap: spacing.xs,
+  headerContainer: {
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xl,
-  },
-  title: {
-    color: colors.textPrimary,
-    fontSize: fontSize.display,
-    fontWeight: fontWeight.bold,
-  },
-  subtitle: {
-    color: colors.textMuted,
-    fontSize: fontSize.body,
   },
   grid: {
     paddingHorizontal: spacing.lg,

@@ -1,4 +1,4 @@
-import { colors, fontSize, fontWeight, spacing } from "@jellyfuse/theme";
+import { colors, duration, fontSize, fontWeight, opacity, radius, spacing } from "@jellyfuse/theme";
 import { Image } from "expo-image";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -31,7 +31,7 @@ export function MediaCard({ title, year, posterUrl, onPress }: Props) {
         source={posterUrl}
         style={styles.poster}
         contentFit="cover"
-        transition={200}
+        transition={duration.normal}
         recyclingKey={posterUrl}
         cachePolicy="memory-disk"
       />
@@ -49,12 +49,12 @@ const styles = StyleSheet.create({
     marginRight: spacing.md,
   },
   rootPressed: {
-    opacity: 0.75,
+    opacity: opacity.pressed,
   },
   poster: {
     width: MEDIA_CARD_WIDTH,
     height: MEDIA_CARD_POSTER_HEIGHT,
-    borderRadius: spacing.sm,
+    borderRadius: radius.md,
     backgroundColor: colors.surface,
   },
   title: {

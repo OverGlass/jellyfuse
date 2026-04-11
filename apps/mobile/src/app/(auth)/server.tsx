@@ -1,4 +1,4 @@
-import { colors, fontSize, fontWeight, spacing } from "@jellyfuse/theme";
+import { colors, fontSize, fontWeight, opacity, radius, spacing } from "@jellyfuse/theme";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
@@ -12,6 +12,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { AuthScreenHeader } from "@/features/auth/components/auth-screen-header";
 import { useAuth } from "@/services/auth/state";
 import { useSystemInfo } from "@/services/query";
 
@@ -64,8 +65,10 @@ export default function ServerScreen() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <View style={styles.container}>
-          <Text style={styles.title}>Connect to Jellyfin</Text>
-          <Text style={styles.subtitle}>Enter your Jellyfin server URL to get started.</Text>
+          <AuthScreenHeader
+            title="Connect to Jellyfin"
+            subtitle="Enter your Jellyfin server URL to get started."
+          />
 
           <View style={styles.inputBlock}>
             <Text style={styles.label}>Server URL</Text>
@@ -182,17 +185,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     gap: spacing.lg,
-    padding: spacing.lg,
-  },
-  title: {
-    color: colors.textPrimary,
-    fontSize: fontSize.display,
-    fontWeight: fontWeight.bold,
-    marginTop: spacing.xxl,
-  },
-  subtitle: {
-    color: colors.textSecondary,
-    fontSize: fontSize.bodyLarge,
+    paddingBottom: spacing.lg,
+    paddingHorizontal: spacing.lg,
   },
   inputBlock: {
     gap: spacing.xs,
@@ -205,7 +199,7 @@ const styles = StyleSheet.create({
   },
   input: {
     backgroundColor: colors.surface,
-    borderRadius: spacing.sm,
+    borderRadius: radius.md,
     color: colors.textPrimary,
     fontSize: fontSize.bodyLarge,
     paddingHorizontal: spacing.md,
@@ -214,15 +208,15 @@ const styles = StyleSheet.create({
   button: {
     alignItems: "center",
     backgroundColor: colors.accent,
-    borderRadius: spacing.sm,
+    borderRadius: radius.md,
     justifyContent: "center",
     paddingVertical: spacing.md,
   },
   buttonMuted: {
-    opacity: 0.5,
+    opacity: opacity.disabled,
   },
   buttonLabel: {
-    color: colors.textPrimary,
+    color: colors.accentContrast,
     fontSize: fontSize.bodyLarge,
     fontWeight: fontWeight.semibold,
   },
@@ -237,7 +231,7 @@ const styles = StyleSheet.create({
   },
   resultBlock: {
     backgroundColor: colors.surface,
-    borderRadius: spacing.sm,
+    borderRadius: radius.md,
     gap: spacing.sm,
     padding: spacing.md,
   },
@@ -258,20 +252,20 @@ const styles = StyleSheet.create({
   continueButton: {
     alignItems: "center",
     backgroundColor: colors.accent,
-    borderRadius: spacing.sm,
+    borderRadius: radius.md,
     marginTop: spacing.sm,
     paddingVertical: spacing.md,
   },
   continueButtonPressed: {
-    opacity: 0.75,
+    opacity: opacity.pressed,
   },
   continueLabel: {
-    color: colors.textPrimary,
+    color: colors.accentContrast,
     fontSize: fontSize.bodyLarge,
     fontWeight: fontWeight.semibold,
   },
   error: {
-    color: "#ef4444",
+    color: colors.danger,
     fontSize: fontSize.body,
   },
 });

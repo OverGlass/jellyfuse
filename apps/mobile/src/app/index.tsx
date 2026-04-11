@@ -29,7 +29,7 @@ export default function IndexRoute() {
     return <Redirect href="/(auth)/server" />;
   }
   if (users.length > 0) {
-    return <Redirect href="/(auth)/profile-picker" />;
+    return <Redirect href="/profile-picker" />;
   }
   return <Redirect href="/(auth)/sign-in" />;
 }

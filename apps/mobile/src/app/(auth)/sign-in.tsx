@@ -1,4 +1,4 @@
-import { colors, fontSize, fontWeight, spacing } from "@jellyfuse/theme";
+import { colors, fontSize, fontWeight, layout, opacity, radius, spacing } from "@jellyfuse/theme";
 import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import {
@@ -12,6 +12,8 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { AuthScreenHeader } from "@/features/auth/components/auth-screen-header";
+import { CloseButton } from "@/features/auth/components/close-button";
 import { AuthServerNotConfiguredError, useAuth } from "@/services/auth/state";
 
 /**
@@ -25,7 +27,7 @@ import { AuthServerNotConfiguredError, useAuth } from "@/services/auth/state";
  * → root router redirects to `(app)`.
  */
 export default function SignInScreen() {
-  const { serverUrl, serverVersion, users, signInWithCredentials } = useAuth();
+  const { serverUrl, serverVersion, signInWithCredentials } = useAuth();
   const params = useLocalSearchParams<{ mode?: string }>();
   const isAddUserMode = params.mode === "add-user";
   const [username, setUsername] = useState("");
@@ -46,8 +48,11 @@ export default function SignInScreen() {
     setError(undefined);
     try {
       await signInWithCredentials({ username: username.trim(), password });
-      // Root router picks up the status change and redirects to (app) —
-      // no explicit navigation from here.
+      // Explicitly re-evaluate the root decision tree. On cold sign-in
+      // this lands on (app) via the root redirect chain; in add-user
+      // mode (where we were already authenticated) this dismisses the
+      // pushed (auth) stack so the newly added user lands back on home.
+      router.replace("/");
     } catch (err: unknown) {
       setError(buildErrorMessage(err));
     } finally {
@@ -82,26 +87,26 @@ export default function SignInScreen() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <View style={styles.container}>
-          <Text style={styles.title}>{isAddUserMode ? "Add another account" : "Sign in"}</Text>
-          {isAddUserMode ? (
-            <Pressable accessibilityRole="button" onPress={handleCancel}>
-              <Text style={styles.subtitle}>
-                {serverUrl ? serverUrl.replace(/^https?:\/\//, "") : "—"}
-                {serverVersion ? ` · ${serverVersion}` : ""}
-              </Text>
-              <Text style={styles.changeServer}>
-                {users.length > 0 ? "← Back to profiles" : "← Back"}
-              </Text>
-            </Pressable>
-          ) : (
-            <Pressable accessibilityRole="button" onPress={handleChangeServer}>
-              <Text style={styles.subtitle}>
-                {serverUrl ? serverUrl.replace(/^https?:\/\//, "") : "—"}
-                {serverVersion ? ` · ${serverVersion}` : ""}
-              </Text>
-              <Text style={styles.changeServer}>Change server</Text>
-            </Pressable>
-          )}
+          <AuthScreenHeader
+            title={isAddUserMode ? "Add another account" : "Sign in"}
+            rightAction={isAddUserMode ? <CloseButton onPress={handleCancel} /> : null}
+            extras={
+              isAddUserMode ? (
+                <Text style={styles.subtitle}>
+                  {serverUrl ? serverUrl.replace(/^https?:\/\//, "") : "—"}
+                  {serverVersion ? ` · ${serverVersion}` : ""}
+                </Text>
+              ) : (
+                <Pressable accessibilityRole="button" onPress={handleChangeServer}>
+                  <Text style={styles.subtitle}>
+                    {serverUrl ? serverUrl.replace(/^https?:\/\//, "") : "—"}
+                    {serverVersion ? ` · ${serverVersion}` : ""}
+                  </Text>
+                  <Text style={styles.changeServer}>Change server</Text>
+                </Pressable>
+              )
+            }
+          />
 
           <View style={styles.inputBlock}>
             <Text style={styles.label}>Username</Text>
@@ -188,13 +193,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     gap: spacing.lg,
-    padding: spacing.lg,
-  },
-  title: {
-    color: colors.textPrimary,
-    fontSize: fontSize.display,
-    fontWeight: fontWeight.bold,
-    marginTop: spacing.xxl,
+    paddingBottom: spacing.lg,
+    paddingHorizontal: spacing.lg,
   },
   subtitle: {
     color: colors.textSecondary,
@@ -216,7 +216,7 @@ const styles = StyleSheet.create({
   },
   input: {
     backgroundColor: colors.surface,
-    borderRadius: spacing.sm,
+    borderRadius: radius.md,
     color: colors.textPrimary,
     fontSize: fontSize.bodyLarge,
     paddingHorizontal: spacing.md,
@@ -225,21 +225,21 @@ const styles = StyleSheet.create({
   button: {
     alignItems: "center",
     backgroundColor: colors.accent,
-    borderRadius: spacing.sm,
+    borderRadius: radius.md,
     justifyContent: "center",
-    minHeight: 52,
+    minHeight: layout.buttonHeight,
     paddingVertical: spacing.md,
   },
   buttonMuted: {
-    opacity: 0.5,
+    opacity: opacity.disabled,
   },
   buttonLabel: {
-    color: colors.textPrimary,
+    color: colors.accentContrast,
     fontSize: fontSize.bodyLarge,
     fontWeight: fontWeight.semibold,
   },
   error: {
-    color: "#ef4444",
+    color: colors.danger,
     fontSize: fontSize.body,
   },
 });

@@ -1,14 +1,13 @@
 import { Stack } from "expo-router";
 
 /**
- * `(auth)` route group — server connect, sign in, profile picker.
+ * `(auth)` route group — server connect and sign in. The profile
+ * picker lives at the root level (not here) so it can be presented
+ * as a modal over `(app)` from the home header — see the root
+ * `_layout.tsx` for the modal screen registration.
  *
  * No state-based redirects here: the root `app/index.tsx` owns the
- * single routing decision tree, and the profile picker is reachable
- * from the home header avatar button even while the user is
- * authenticated. A layout-level `<Redirect>` to `/` here would break
- * that "switch user" flow the moment the authenticated user tapped
- * the button.
+ * single routing decision tree.
  */
 export default function AuthLayout() {
   return <Stack screenOptions={{ headerShown: false }} />;

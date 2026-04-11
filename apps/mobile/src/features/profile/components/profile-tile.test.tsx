@@ -3,10 +3,18 @@ import { AddUserTile, ProfileTile } from "./profile-tile";
 
 describe("<ProfileTile />", () => {
   const defaults = {
+    colorSeed: "user-alice",
     displayName: "alice",
+    isActive: false,
     onPress: () => {},
     onLongPress: () => {},
   };
+
+  it("marks the tile as selected in the accessibility state when active", () => {
+    render(<ProfileTile {...defaults} avatarUrl={undefined} isActive={true} />);
+    const tile = screen.getByLabelText("alice");
+    expect(tile.props.accessibilityState?.selected).toBe(true);
+  });
 
   it("renders the display name", () => {
     render(<ProfileTile {...defaults} avatarUrl={undefined} />);

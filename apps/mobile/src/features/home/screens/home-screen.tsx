@@ -1,4 +1,13 @@
-import { colors, fontSize, fontWeight, spacing } from "@jellyfuse/theme";
+import {
+  colors,
+  duration,
+  fontSize,
+  fontWeight,
+  opacity,
+  profileColorFor,
+  radius,
+  spacing,
+} from "@jellyfuse/theme";
 import { FlashList } from "@shopify/flash-list";
 import { Image } from "expo-image";
 import { useKeepAwake } from "expo-keep-awake";
@@ -42,6 +51,7 @@ export function HomeScreen() {
           <Header
             userLabel={activeUser?.displayName ?? "Signed in"}
             userAvatarUrl={activeUser?.avatarUrl}
+            userColorSeed={activeUser?.userId ?? "anonymous"}
             serverLabel={serverUrl?.replace(/^https?:\/\//, "") ?? "—"}
             status={statusLabel(systemInfo)}
             product={
@@ -65,7 +75,7 @@ export function HomeScreen() {
 }
 
 function handleOpenProfiles() {
-  router.push("/(auth)/profile-picker");
+  router.push("/profile-picker");
 }
 
 function jellyseerrLabel(
@@ -99,6 +109,7 @@ function statusLabel(query: ReturnType<typeof useSystemInfo>): string {
 interface HeaderProps {
   userLabel: string;
   userAvatarUrl: string | undefined;
+  userColorSeed: string;
   serverLabel: string;
   status: string;
   product: string | undefined;
@@ -111,6 +122,7 @@ interface HeaderProps {
 function Header({
   userLabel,
   userAvatarUrl,
+  userColorSeed,
   serverLabel,
   status,
   product,
@@ -119,6 +131,7 @@ function Header({
   onOpenProfiles,
   onSignOut,
 }: HeaderProps) {
+  const fallbackColor = profileColorFor(userColorSeed);
   return (
     <View style={styles.header}>
       <View style={styles.topRow}>
@@ -130,14 +143,18 @@ function Header({
           accessibilityRole="button"
           accessibilityLabel={`Switch profile (currently ${userLabel})`}
           onPress={onOpenProfiles}
-          style={({ pressed }) => [styles.avatarButton, pressed && styles.avatarButtonPressed]}
+          style={({ pressed }) => [
+            styles.avatarButton,
+            !userAvatarUrl && { backgroundColor: fallbackColor },
+            pressed && styles.avatarButtonPressed,
+          ]}
         >
           {userAvatarUrl ? (
             <Image
               source={userAvatarUrl}
               style={styles.avatarImage}
               contentFit="cover"
-              transition={200}
+              transition={duration.normal}
               recyclingKey={userAvatarUrl}
               cachePolicy="memory-disk"
             />
@@ -219,7 +236,7 @@ const styles = StyleSheet.create({
   avatarButton: {
     alignItems: "center",
     backgroundColor: colors.surface,
-    borderRadius: 20,
+    borderRadius: radius.full,
     height: 40,
     justifyContent: "center",
     marginLeft: spacing.md,
@@ -228,16 +245,16 @@ const styles = StyleSheet.create({
     width: 40,
   },
   avatarButtonPressed: {
-    opacity: 0.75,
+    opacity: opacity.pressed,
   },
   avatarImage: {
     height: 40,
     width: 40,
   },
   avatarLetter: {
-    color: colors.textSecondary,
+    color: colors.textPrimary,
     fontSize: fontSize.bodyLarge,
-    fontWeight: fontWeight.semibold,
+    fontWeight: fontWeight.bold,
   },
   metaRow: {
     flexDirection: "row",
@@ -257,13 +274,13 @@ const styles = StyleSheet.create({
   signOut: {
     alignSelf: "flex-start",
     backgroundColor: colors.surface,
-    borderRadius: spacing.sm,
+    borderRadius: radius.md,
     marginTop: spacing.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
   signOutPressed: {
-    opacity: 0.75,
+    opacity: opacity.pressed,
   },
   signOutLabel: {
     color: colors.textSecondary,
