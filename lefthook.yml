@@ -7,10 +7,11 @@ pre-commit:
   parallel: true
   commands:
     format:
-      glob: '*.{ts,tsx,js,jsx,mjs,cjs,json}'
-      run: PATH="$HOME/.bun/bin:$PATH" bunx --bun oxfmt --check {staged_files}
+      # Whole-repo check: oxfmt runs in <10ms on our tree and avoids
+      # lefthook's staged-files glob quirks with nested monorepo paths.
+      run: PATH="$HOME/.bun/bin:$PATH" bun run format:check
     typecheck:
-      glob: '*.{ts,tsx}'
+      glob: '**/*.{ts,tsx}'
       run: PATH="$HOME/.bun/bin:$PATH" bun run typecheck
 
 commit-msg:

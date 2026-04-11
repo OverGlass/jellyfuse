@@ -2,6 +2,7 @@
   "expo": {
     "name": "Jellyfuse",
     "slug": "jellyfuse",
+    "owner": "arkbase",
     "version": "0.0.0",
     "orientation": "default",
     "scheme": "jellyfuse",
@@ -39,6 +40,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "39dc1c25-4366-41f4-bcc8-1257afc85d72"
+      }
     }
   }
 }
