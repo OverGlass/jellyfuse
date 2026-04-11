@@ -1,8 +1,7 @@
 import { authenticateByName, jellyseerrLogin, type AuthenticatedUser } from "@jellyfuse/api";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createContext, useContext, useEffect, useMemo, type ReactNode } from "react";
-import { apiFetch, setCurrentAuthContext } from "@/services/api/client";
-import { setCurrentJellyseerrCookie } from "@/services/jellyseerr/client";
+import { createContext, useContext, useMemo, type ReactNode } from "react";
+import { apiFetch } from "@/services/api/client";
 import {
   clearSecureStorage,
   getSecureItem,
@@ -10,25 +9,32 @@ import {
   SecureStorageKey,
   setSecureItem,
 } from "@/services/secure-storage";
-import { buildAuthContextForUser, buildPreAuthContext } from "./auth-context-builder";
-import { findUserById, removeUserById, secureUserStorage, upsertUser } from "./users";
+import { buildPreAuthContext } from "./auth-context-builder";
+import {
+  EMPTY_PERSISTED_AUTH,
+  findActiveUser,
+  PERSISTED_AUTH_KEY,
+  type PersistedAuth,
+} from "./persisted-auth";
+import { removeUserById, secureUserStorage, upsertUser } from "./users";
 
 /**
  * Multi-user auth state for Jellyfuse. Ports the Rust model from
  * `crates/jf-core/src/state.rs` + `crates/jf-core/src/models.rs`
  * (Settings + authenticated_users sled tree) into a React Query cache.
  *
- * **No async useEffects** per the project rule (see memory:
+ * **No useEffects at all** per the project rule (see memory:
  * `feedback_no_async_useeffect` and the React docs page
  * https://react.dev/learn/you-might-not-need-an-effect). Every bit of
  * async work — hydrating from secure-storage, building the auth
- * context via expo-application, calling `authenticateByName` /
- * `jellyseerrLogin`, persisting users — runs through React Query.
- * The cache at `['auth', 'persisted']` is the single source of truth
- * for the persisted shape; mutations write to secure-storage and then
- * `setQueryData` the new shape back. `useEffect` is used only for
- * synchronous ref-pushes that can't be expressed as derived state
- * (module-level fetchers outside React).
+ * context, calling `authenticateByName` / `jellyseerrLogin`,
+ * persisting users — runs through React Query. The cache at
+ * `['auth', 'persisted']` is the single source of truth; mutations
+ * write to secure-storage and then `setQueryData` the new shape back.
+ *
+ * Out-of-React fetchers (`apiFetchAuthenticated`, `jellyseerrFetch`)
+ * read the cache via `queryClient.getQueryData` + `fetchQuery` —
+ * no module-level refs, no synchronous ref-push side effects.
  *
  * Per-user Jellyseerr cookie: the cookie lives on `AuthenticatedUser`
  * because different Jellyfin users can have different Jellyseerr
@@ -71,30 +77,6 @@ export interface AuthState {
   signOutAll: () => Promise<void>;
 }
 
-/**
- * Persisted auth snapshot cached under `['auth', 'persisted']`. Reflects
- * exactly what's currently in secure-storage — every mutation updates
- * the cache with `setQueryData` so consumers see the change without a
- * refetch.
- */
-interface PersistedAuth {
-  serverUrl: string | undefined;
-  serverVersion: string | undefined;
-  users: AuthenticatedUser[];
-  activeUserId: string | undefined;
-  jellyseerrUrl: string | undefined;
-}
-
-const PERSISTED_AUTH_KEY = ["auth", "persisted"] as const;
-
-const EMPTY_PERSISTED_AUTH: PersistedAuth = {
-  serverUrl: undefined,
-  serverVersion: undefined,
-  users: [],
-  activeUserId: undefined,
-  jellyseerrUrl: undefined,
-};
-
 async function loadPersistedAuth(): Promise<PersistedAuth> {
   const [serverUrl, serverVersion, activeUserId, jellyseerrUrl, users] = await Promise.all([
     getSecureItem(SecureStorageKey.jellyfinServerUrl),
@@ -122,9 +104,8 @@ interface Props {
 
 /**
  * Wraps the app in the AuthContext. Does no async work itself — the
- * actual queries + mutations live in `useAuthInternal` which is
- * evaluated inside this component and then forwarded through the
- * context to every consumer.
+ * queries + mutations live in `useAuthInternal` which is evaluated
+ * inside this component and forwarded through the context.
  */
 export function AuthProvider({ children }: Props) {
   const value = useAuthInternal();
@@ -150,35 +131,7 @@ function useAuthInternal(): AuthState {
   });
 
   const persisted = persistedQuery.data ?? EMPTY_PERSISTED_AUTH;
-  const activeUser = findUserById(persisted.users, persisted.activeUserId);
-
-  // ------------------------------------------------------------------
-  // Auth-context query — derives the `AuthContext` (device id, client
-  // version, device name, token) for the active user. Re-keyed by
-  // userId so a user switch automatically triggers a rebuild.
-  // ------------------------------------------------------------------
-  const contextQuery = useQuery({
-    queryKey: ["auth", "context", activeUser?.userId ?? "anon"] as const,
-    queryFn: () => (activeUser ? buildAuthContextForUser(activeUser) : null),
-    enabled: Boolean(activeUser),
-    staleTime: Infinity,
-    gcTime: Infinity,
-    retry: 0,
-  });
-
-  // ------------------------------------------------------------------
-  // Synchronous ref-pushes — these are the only useEffects in the
-  // module, and both are *sync* bodies (no async/await). They publish
-  // derived state into module-level refs so `apiFetchAuthenticated`
-  // and `jellyseerrFetch` can read the current value outside React.
-  // ------------------------------------------------------------------
-  useEffect(() => {
-    setCurrentAuthContext(contextQuery.data ?? undefined);
-  }, [contextQuery.data]);
-
-  useEffect(() => {
-    setCurrentJellyseerrCookie(activeUser?.jellyseerrCookie);
-  }, [activeUser?.jellyseerrCookie]);
+  const activeUser = findActiveUser(persisted);
 
   // ------------------------------------------------------------------
   // Mutations — each reads the current persisted cache, mutates
@@ -252,8 +205,7 @@ function useAuthInternal(): AuthState {
       // Jellyseerr login is optional — a failure here leaves the
       // Jellyfin half intact and the user still lands on `(app)`.
       // The cookie is **per-user** and travels on the
-      // `AuthenticatedUser` record (see memory:
-      // project_jellyfuse_auth_architecture).
+      // `AuthenticatedUser` record.
       let jellyseerrCookie: string | undefined;
       if (jellyseerrUrl) {
         try {
@@ -322,6 +274,9 @@ function useAuthInternal(): AuthState {
   const signOutAllMutation = useMutation({
     mutationFn: async (): Promise<PersistedAuth> => {
       await clearSecureStorage();
+      // Evict every auth-context entry so the next signed-in user
+      // gets a fresh fetchQuery build rather than a stale cached one.
+      queryClient.removeQueries({ queryKey: ["auth", "context"] });
       return EMPTY_PERSISTED_AUTH;
     },
     onSuccess: (data) => {

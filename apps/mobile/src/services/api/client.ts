@@ -1,5 +1,12 @@
 import { buildAuthHeader, type AuthContext, type FetchLike } from "@jellyfuse/api";
 import { fetch as nitroFetch } from "react-native-nitro-fetch";
+import { buildAuthContextForUser } from "@/services/auth/auth-context-builder";
+import {
+  findActiveUser,
+  PERSISTED_AUTH_KEY,
+  type PersistedAuth,
+} from "@/services/auth/persisted-auth";
+import { queryClient } from "@/services/query/client";
 
 /**
  * App-side HTTP fetchers. Always routed through `react-native-nitro-fetch`
@@ -10,13 +17,15 @@ import { fetch as nitroFetch } from "react-native-nitro-fetch";
  * Two variants:
  *
  * - `apiFetch` — pre-auth. Used by `useSystemInfo` on the server-connect
- *   screen, and by `authenticateByName` during sign-in.
+ *   screen, and by `authenticateByName` / `jellyseerrLogin` during
+ *   sign-in.
  *
- * - `apiFetchAuthenticated` — post-auth. Injects the Jellyfin
- *   `X-Emby-Authorization` header built from the **currently active**
- *   user's token + device id. The context lives in a module-level ref
- *   that `AuthProvider` keeps in sync via an effect whenever the active
- *   user changes; call sites don't thread the token through every layer.
+ * - `apiFetchAuthenticated` — post-auth. Reads the active user from the
+ *   React Query cache at `['auth', 'persisted']`, resolves the auth
+ *   context via `queryClient.fetchQuery(['auth', 'context', userId])`,
+ *   and injects `X-Emby-Authorization` on every request. No
+ *   module-level refs, no useEffect — the cache is the single source
+ *   of truth, read via React Query's out-of-React helpers.
  *
  * Packages in `packages/api` stay pure TS and take the fetcher as an
  * argument, which keeps them unit-testable against MSW / fake fetchers
@@ -27,33 +36,35 @@ export const apiFetch: FetchLike = (input, init) => {
   return nitroFetch(input, init);
 };
 
-let currentAuthContext: AuthContext | undefined;
-
-/**
- * Register (or clear) the auth context used by `apiFetchAuthenticated`.
- * Called by `AuthProvider` whenever the active user changes. Clearing
- * (`undefined`) is used on sign-out and during user-switch transitions.
- */
-export function setCurrentAuthContext(ctx: AuthContext | undefined): void {
-  currentAuthContext = ctx;
+export class NoActiveUserError extends Error {
+  constructor() {
+    super("apiFetchAuthenticated called with no active user in the auth cache");
+    this.name = "NoActiveUserError";
+  }
 }
 
-/**
- * Jellyfin-authenticated fetcher. Every call is wrapped to inject the
- * `X-Emby-Authorization` header; callers don't build auth headers by
- * hand. Throws if invoked before the auth context has been registered —
- * that's always a programming error (a screen in the `(app)` group
- * fired a query before `AuthProvider` hydrated).
- */
-export const apiFetchAuthenticated: FetchLike = (input, init) => {
-  if (!currentAuthContext) {
-    throw new Error(
-      "apiFetchAuthenticated called with no auth context — use apiFetch for pre-auth endpoints",
-    );
+export const apiFetchAuthenticated: FetchLike = async (input, init) => {
+  const persisted = queryClient.getQueryData<PersistedAuth>(PERSISTED_AUTH_KEY);
+  const activeUser = findActiveUser(persisted);
+  if (!activeUser) {
+    throw new NoActiveUserError();
   }
-  // Widen the init locally so we can set headers. FetchLike's init is
-  // intentionally narrow (signal-only); Nitro Fetch + the global fetch
-  // both accept the broader init shape at runtime.
+
+  // `fetchQuery` returns a cached context instantly when available and
+  // builds+caches on the first call per user. De-duped across concurrent
+  // callers by React Query, and re-keyed by userId so a user switch
+  // gives us a fresh context automatically.
+  const authContext = await queryClient.fetchQuery<AuthContext>({
+    queryKey: ["auth", "context", activeUser.userId] as const,
+    queryFn: () => buildAuthContextForUser(activeUser),
+    staleTime: Infinity,
+    gcTime: Infinity,
+    retry: 0,
+  });
+
+  // Widen init locally so we can set headers — FetchLike's init is
+  // intentionally narrow (signal-only); Nitro Fetch accepts the broader
+  // shape at runtime.
   const wideInit = (init ?? {}) as {
     signal?: AbortSignal;
     method?: string;
@@ -62,7 +73,7 @@ export const apiFetchAuthenticated: FetchLike = (input, init) => {
   };
   const headers: Record<string, string> = {
     ...wideInit.headers,
-    "X-Emby-Authorization": buildAuthHeader(currentAuthContext),
+    "X-Emby-Authorization": buildAuthHeader(authContext),
   };
   return nitroFetch(input, { ...wideInit, headers });
 };
