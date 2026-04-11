@@ -1,16 +1,15 @@
-import { Redirect, Stack } from "expo-router";
-import { useAuth } from "@/services/auth/state";
+import { Stack } from "expo-router";
 
 /**
  * `(auth)` route group — server connect, sign in, profile picker.
- * If the user is already authenticated, bounce them out to `(app)`.
+ *
+ * No state-based redirects here: the root `app/index.tsx` owns the
+ * single routing decision tree, and the profile picker is reachable
+ * from the home header avatar button even while the user is
+ * authenticated. A layout-level `<Redirect>` to `/` here would break
+ * that "switch user" flow the moment the authenticated user tapped
+ * the button.
  */
 export default function AuthLayout() {
-  const { status } = useAuth();
-  if (status === "authenticated") {
-    // Bounce back to the root router — single source of routing
-    // truth, mirrors the pattern in (app)/_layout.tsx.
-    return <Redirect href="/" />;
-  }
   return <Stack screenOptions={{ headerShown: false }} />;
 }
