@@ -3,8 +3,11 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "main": "index.ts",
-  "files": ["index.ts"],
+  "main": "./index.mjs",
+  "exports": {
+    ".": "./index.mjs"
+  },
+  "files": ["index.mjs"],
   "peerDependencies": {
     "vitest": "^2.1.3"
   }

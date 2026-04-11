@@ -1,10 +1,26 @@
 import { describe, expect, it } from "vitest"
-import { spacing } from "./index.js"
+import { colors, fontSize, fontWeight, spacing } from "./index.js"
 
 describe("@jellyfuse/theme", () => {
-  it("exposes monotonically increasing spacing scale", () => {
+  it("spacing scale is monotonically increasing", () => {
     const values = Object.values(spacing)
-    const sorted = [...values].sort((a, b) => a - b)
-    expect(values).toEqual(sorted)
+    expect(values).toEqual([...values].sort((a, b) => a - b))
+  })
+
+  it("fontSize scale is monotonically increasing", () => {
+    const values = Object.values(fontSize)
+    expect(values).toEqual([...values].sort((a, b) => a - b))
+  })
+
+  it("fontWeight values are valid React Native weight strings", () => {
+    for (const weight of Object.values(fontWeight)) {
+      expect(weight).toMatch(/^[1-9]00$/)
+    }
+  })
+
+  it("color tokens are hex strings", () => {
+    for (const [name, value] of Object.entries(colors)) {
+      expect(value, `${name} must be a hex color`).toMatch(/^#[0-9a-fA-F]{6}$/)
+    }
   })
 })
