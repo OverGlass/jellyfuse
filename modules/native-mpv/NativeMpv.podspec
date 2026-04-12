@@ -54,24 +54,22 @@ Pod::Spec.new do |s|
   other_ldflags = MPVKIT_LIBS.map { |name| "-l#{name}" }.join(" ")
 
   s.pod_target_xcconfig = {
-    # MPVKit headers (mpv/client.h, ffmpeg headers, codec dep headers).
-    # Uses the device slice — headers are identical across slices.
+    # $(inherited) on every path setting so we APPEND to the Pods
+    # project defaults rather than clobbering them — without it,
+    # Swift can't find NitroModules and the build fails with
+    # "cannot find type 'HybridObject' in scope".
     "HEADER_SEARCH_PATHS" => [
+      "$(inherited)",
       "$(PODS_TARGET_SRCROOT)/vendor/ios/mpvkit-device/include",
       "${PODS_ROOT}/RCT-Folly",
     ].join(" "),
-    # Custom modulemap lives IN the include dir (alongside the headers)
-    # so modulemap header paths resolve relative to the same directory.
-    # The fetch script writes `module.modulemap` into both device and
-    # simulator include dirs; SWIFT_INCLUDE_PATHS picks the right one
-    # per-SDK via the same conditional as LIBRARY_SEARCH_PATHS.
-    "SWIFT_INCLUDE_PATHS[sdk=iphoneos*]"         => "$(PODS_TARGET_SRCROOT)/vendor/ios/mpvkit-device/include",
-    "SWIFT_INCLUDE_PATHS[sdk=iphonesimulator*]"  => "$(PODS_TARGET_SRCROOT)/vendor/ios/mpvkit-simulator/include",
-    "LIBRARY_SEARCH_PATHS[sdk=iphoneos*]"        => mpvkit_device,
-    "LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]" => mpvkit_sim,
-    "OTHER_LDFLAGS"                              => other_ldflags,
+    "SWIFT_INCLUDE_PATHS[sdk=iphoneos*]"         => "$(inherited) $(PODS_TARGET_SRCROOT)/vendor/ios/mpvkit-device/include",
+    "SWIFT_INCLUDE_PATHS[sdk=iphonesimulator*]"  => "$(inherited) $(PODS_TARGET_SRCROOT)/vendor/ios/mpvkit-simulator/include",
+    "LIBRARY_SEARCH_PATHS[sdk=iphoneos*]"        => "$(inherited) " + mpvkit_device,
+    "LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]" => "$(inherited) " + mpvkit_sim,
+    "OTHER_LDFLAGS"                              => "$(inherited) " + other_ldflags,
     "GCC_PREPROCESSOR_DEFINITIONS" => "$(inherited) FOLLY_NO_CONFIG FOLLY_CFG_NO_COROUTINES",
-    "OTHER_CPLUSPLUSFLAGS"         => "-DFOLLY_NO_CONFIG -DFOLLY_MOBILE=1 -DFOLLY_USE_LIBCPP=1",
+    "OTHER_CPLUSPLUSFLAGS"         => "$(inherited) -DFOLLY_NO_CONFIG -DFOLLY_MOBILE=1 -DFOLLY_USE_LIBCPP=1",
   }
 
   # System frameworks libmpv + ffmpeg + deps pull in transitively.
