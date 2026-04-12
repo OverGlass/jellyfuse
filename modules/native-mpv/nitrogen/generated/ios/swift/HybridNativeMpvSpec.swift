@@ -10,7 +10,7 @@ import NitroModules
 /// See ``HybridNativeMpvSpec``
 public protocol HybridNativeMpvSpec_protocol: HybridObject {
   // Properties
-  
+  var instanceId: String { get }
 
   // Methods
   func load(streamUrl: String, options: MpvLoadOptions) throws -> Void

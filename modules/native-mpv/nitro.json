@@ -13,6 +13,12 @@
         "language": "swift",
         "implementationClassName": "HybridNativeMpv"
       }
+    },
+    "MpvVideoView": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridMpvVideoView"
+      }
     }
   },
   "ignorePaths": ["node_modules", "vendor"]

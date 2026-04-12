@@ -11,6 +11,7 @@
 #import <type_traits>
 
 #include "HybridNativeMpvSpecSwift.hpp"
+#include "HybridMpvVideoViewSpecSwift.hpp"
 
 @interface NativeMpvAutolinking : NSObject
 @end
@@ -25,6 +26,13 @@
     "NativeMpv",
     []() -> std::shared_ptr<HybridObject> {
       std::shared_ptr<HybridNativeMpvSpec> hybridObject = NativeMpv::NativeMpvAutolinking::createNativeMpv();
+      return hybridObject;
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "MpvVideoView",
+    []() -> std::shared_ptr<HybridObject> {
+      std::shared_ptr<HybridMpvVideoViewSpec> hybridObject = NativeMpv::NativeMpvAutolinking::createMpvVideoView();
       return hybridObject;
     }
   );

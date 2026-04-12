@@ -60,7 +60,7 @@ namespace margelo::nitro::nativempv {
 
     public:
       // Properties
-      
+      virtual std::string getInstanceId() = 0;
 
     public:
       // Methods

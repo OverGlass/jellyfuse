@@ -8,6 +8,8 @@
 #pragma once
 
 // Forward declarations of C++ defined types
+// Forward declaration of `HybridMpvVideoViewSpec` to properly resolve imports.
+namespace margelo::nitro::nativempv { class HybridMpvVideoViewSpec; }
 // Forward declaration of `HybridNativeMpvSpec` to properly resolve imports.
 namespace margelo::nitro::nativempv { class HybridNativeMpvSpec; }
 // Forward declaration of `MpvAudioTrack` to properly resolve imports.
@@ -22,6 +24,7 @@ namespace margelo::nitro::nativempv { enum class MpvPlaybackState; }
 namespace margelo::nitro::nativempv { struct MpvSubtitleTrack; }
 
 // Include C++ defined types
+#include "HybridMpvVideoViewSpec.hpp"
 #include "HybridNativeMpvSpec.hpp"
 #include "MpvAudioTrack.hpp"
 #include "MpvListener.hpp"
@@ -46,6 +49,8 @@ namespace margelo::nitro::nativempv { struct MpvSubtitleTrack; }
 #include <NitroModules/DateToChronoDate.hpp>
 
 // Forward declarations of Swift defined types
+// Forward declaration of `HybridMpvVideoViewSpec_cxx` to properly resolve imports.
+namespace NativeMpv { class HybridMpvVideoViewSpec_cxx; }
 // Forward declaration of `HybridNativeMpvSpec_cxx` to properly resolve imports.
 namespace NativeMpv { class HybridNativeMpvSpec_cxx; }
 

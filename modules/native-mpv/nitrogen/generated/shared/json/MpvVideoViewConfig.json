@@ -1,0 +1,9 @@
+{
+  "uiViewClassName": "MpvVideoView",
+  "supportsRawText": false,
+  "bubblingEventTypes": {},
+  "directEventTypes": {},
+  "validAttributes": {
+    "hybridRef": true
+  }
+}
