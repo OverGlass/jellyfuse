@@ -18,6 +18,9 @@ export function TrickplayThumbnail({ trickplay, positionSeconds, offsetX }: Prop
   const { sheetUrl, cropX, cropY } = trickplayTileFor(trickplay, positionSeconds);
   const { width, height } = trickplay;
 
+  // Clamp so the thumbnail doesn't go off-screen
+  const clampedLeft = Math.max(0, offsetX - width / 2);
+
   return (
     <View
       style={[
@@ -25,7 +28,7 @@ export function TrickplayThumbnail({ trickplay, positionSeconds, offsetX }: Prop
         {
           width,
           height,
-          left: offsetX - width / 2,
+          left: clampedLeft,
         },
       ]}
     >

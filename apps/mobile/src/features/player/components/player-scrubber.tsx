@@ -25,21 +25,33 @@ interface Props {
 export function PlayerScrubber({ position, duration, chapters, trickplay, onSeek }: Props) {
   const [trackWidth, setTrackWidth] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  // JS-side drag position for time display + trickplay (avoids
+  // reading shared value during render → no Reanimated warning).
+  const [dragSeconds, setDragSeconds] = useState(0);
   const dragProgress = useSharedValue(0);
 
   const progress = duration > 0 ? position / duration : 0;
 
+  function onDragUpdate(p: number) {
+    setDragSeconds(p * duration);
+  }
+
   const panGesture = Gesture.Pan()
     .onStart((e) => {
+      "worklet";
       const p = Math.max(0, Math.min(1, e.x / trackWidth));
       dragProgress.value = p;
       runOnJS(setIsDragging)(true);
+      runOnJS(onDragUpdate)(p);
     })
     .onUpdate((e) => {
+      "worklet";
       const p = Math.max(0, Math.min(1, e.x / trackWidth));
       dragProgress.value = p;
+      runOnJS(onDragUpdate)(p);
     })
     .onEnd(() => {
+      "worklet";
       const seekTo = dragProgress.value * duration;
       runOnJS(onSeek)(seekTo);
       runOnJS(setIsDragging)(false);
@@ -47,6 +59,7 @@ export function PlayerScrubber({ position, duration, chapters, trickplay, onSeek
     .hitSlop({ top: 40, bottom: 40, left: 10, right: 10 });
 
   const tapGesture = Gesture.Tap().onEnd((e) => {
+    "worklet";
     if (trackWidth <= 0 || duration <= 0) return;
     const p = Math.max(0, Math.min(1, e.x / trackWidth));
     const seekTo = p * duration;
@@ -67,9 +80,7 @@ export function PlayerScrubber({ position, duration, chapters, trickplay, onSeek
     <View style={styles.root}>
       {/* Time display */}
       <View style={styles.timeRow}>
-        <Text style={styles.time}>
-          {formatTime(isDragging ? dragProgress.value * duration : position)}
-        </Text>
+        <Text style={styles.time}>{formatTime(isDragging ? dragSeconds : position)}</Text>
         <Text style={styles.time}>{formatTime(duration)}</Text>
       </View>
 
@@ -105,8 +116,8 @@ export function PlayerScrubber({ position, duration, chapters, trickplay, onSeek
           {isDragging && trickplay ? (
             <TrickplayThumbnail
               trickplay={trickplay}
-              positionSeconds={dragProgress.value * duration}
-              offsetX={dragProgress.value * trackWidth}
+              positionSeconds={dragSeconds}
+              offsetX={duration > 0 ? (dragSeconds / duration) * trackWidth : 0}
             />
           ) : null}
         </View>
