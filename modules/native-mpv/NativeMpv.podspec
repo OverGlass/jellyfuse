@@ -35,7 +35,7 @@ Pod::Spec.new do |s|
   s.license      = { :type => "MIT" }
   s.authors      = "Arkbase"
 
-  s.platforms    = { :ios => "16.0" }
+  s.platforms    = { :ios => min_ios_version_supported }
   s.source       = { :git => ".", :tag => s.version.to_s }
 
   s.source_files = [
@@ -54,10 +54,14 @@ Pod::Spec.new do |s|
   other_ldflags = MPVKIT_LIBS.map { |name| "-l#{name}" }.join(" ")
 
   s.pod_target_xcconfig = {
+    # MPVKit headers (mpv/client.h, ffmpeg headers, codec dep headers).
+    # Uses the device slice — headers are identical across slices.
     "HEADER_SEARCH_PATHS" => [
       "$(PODS_TARGET_SRCROOT)/vendor/ios/mpvkit-device/include",
       "${PODS_ROOT}/RCT-Folly",
     ].join(" "),
+    # Custom modulemap directory so `import Libmpv` works in Swift.
+    "SWIFT_INCLUDE_PATHS"                        => "$(PODS_TARGET_SRCROOT)/ios/Libmpv",
     "LIBRARY_SEARCH_PATHS[sdk=iphoneos*]"        => mpvkit_device,
     "LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]" => mpvkit_sim,
     "OTHER_LDFLAGS"                              => other_ldflags,

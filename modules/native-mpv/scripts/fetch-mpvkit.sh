@@ -71,7 +71,7 @@ if [[ -f "${CACHE_DEVICE}/libmpv.a" && -f "${CACHE_SIM}/libmpv.a" && -f "${CACHE
 else
   echo "Downloading MPVKit ${MPVKIT_VERSION} to shared cache ${CACHE_ROOT}..."
   rm -rf "${CACHE_DEVICE}" "${CACHE_SIM}"
-  mkdir -p "${CACHE_DEVICE}" "${CACHE_SIM}"
+  mkdir -p "${CACHE_DEVICE}/include" "${CACHE_SIM}/include"
   TMP="$(mktemp -d)"
   trap 'rm -rf "${TMP}"' EXIT
 
@@ -93,6 +93,16 @@ else
       [[ -f "${BIN}" ]] || continue
       LOWER="$(echo "${FW_NAME}" | tr '[:upper:]' '[:lower:]' | sed 's/^lib//')"
       cp "${BIN}" "${CACHE_DEVICE}/lib${LOWER}.a"
+      # Copy headers + modulemap from the framework (Libmpv has mpv/*.h)
+      HEADERS="${SLICE_DIR}/${FW_NAME}.framework/Headers"
+      MODULEMAP="${SLICE_DIR}/${FW_NAME}.framework/Modules/module.modulemap"
+      if [[ -d "${HEADERS}" ]]; then
+        cp -R "${HEADERS}"/* "${CACHE_DEVICE}/include/" 2>/dev/null || true
+      fi
+      if [[ -f "${MODULEMAP}" ]]; then
+        mkdir -p "${CACHE_DEVICE}/include"
+        cp "${MODULEMAP}" "${CACHE_DEVICE}/include/${FW_NAME}.modulemap" 2>/dev/null || true
+      fi
       break
     done
 
@@ -106,6 +116,15 @@ else
       [[ -f "${BIN}" ]] || continue
       LOWER="$(echo "${FW_NAME}" | tr '[:upper:]' '[:lower:]' | sed 's/^lib//')"
       cp "${BIN}" "${CACHE_SIM}/lib${LOWER}.a"
+      HEADERS="${SLICE_DIR}/${FW_NAME}.framework/Headers"
+      MODULEMAP="${SLICE_DIR}/${FW_NAME}.framework/Modules/module.modulemap"
+      if [[ -d "${HEADERS}" ]]; then
+        cp -R "${HEADERS}"/* "${CACHE_SIM}/include/" 2>/dev/null || true
+      fi
+      if [[ -f "${MODULEMAP}" ]]; then
+        mkdir -p "${CACHE_SIM}/include"
+        cp "${MODULEMAP}" "${CACHE_SIM}/include/${FW_NAME}.modulemap" 2>/dev/null || true
+      fi
       break
     done
 

@@ -18,6 +18,7 @@
   "dependencies": {
     "@jellyfuse/api": "workspace:*",
     "@jellyfuse/models": "workspace:*",
+    "@jellyfuse/native-mpv": "workspace:*",
     "@jellyfuse/query-keys": "workspace:*",
     "@jellyfuse/theme": "workspace:*",
     "@react-native-masked-view/masked-view": "^0.3.2",
