@@ -42,53 +42,57 @@ export function usePlaybackInfo(jellyfinId: string | undefined): UseQueryResult<
 }
 
 /**
- * Fetches intro-skipper segments (intro/recap/credits) from the
- * Jellyfin plugin. Returns undefined if the plugin isn't installed
- * or the item has no segments. Never errors — silently returns undefined.
+ * Fetches intro-skipper segments. Returns null if the plugin isn't
+ * installed or the item has no segments. Never errors.
+ * React Query requires null, not undefined, from queryFn.
  */
 export function useIntroSkipperSegments(
   jellyfinId: string | undefined,
-): UseQueryResult<IntroSkipperSegments | undefined> {
+): UseQueryResult<IntroSkipperSegments | null> {
   const { serverUrl } = useAuth();
 
   return useQuery({
     queryKey: queryKeys.introSkipper(jellyfinId ?? ""),
-    queryFn: ({ signal }) => {
-      if (!serverUrl || !jellyfinId) return undefined;
-      return fetchIntroSkipperSegments(
+    queryFn: async ({ signal }) => {
+      if (!serverUrl || !jellyfinId) return null;
+      const segments = await fetchIntroSkipperSegments(
         { baseUrl: serverUrl, itemId: jellyfinId },
         apiFetchAuthenticated,
         signal,
       );
+      return segments ?? null;
     },
     enabled: Boolean(serverUrl && jellyfinId),
-    staleTime: 0,
+    staleTime: 5 * 60 * 1000,
     gcTime: 60_000,
     retry: 0,
   });
 }
 
 /**
- * Fetches trickplay metadata (tile dimensions, interval, sheet URLs).
- * Returns undefined if trickplay is not generated for this item.
+ * Fetches trickplay metadata. Returns null if trickplay isn't
+ * generated for this item. React Query requires null, not undefined.
  */
 export function useTrickplayInfo(
   jellyfinId: string | undefined,
-): UseQueryResult<TrickplayData | undefined> {
-  const { serverUrl } = useAuth();
+): UseQueryResult<TrickplayData | null> {
+  const { serverUrl, activeUser } = useAuth();
+  const userId = activeUser?.userId;
+  const token = activeUser?.token;
 
   return useQuery({
     queryKey: queryKeys.trickplayInfo(jellyfinId ?? ""),
-    queryFn: ({ signal }) => {
-      if (!serverUrl || !jellyfinId) return undefined;
-      return fetchTrickplayInfo(
-        { baseUrl: serverUrl, itemId: jellyfinId },
+    queryFn: async ({ signal }) => {
+      if (!serverUrl || !userId || !token || !jellyfinId) return null;
+      const data = await fetchTrickplayInfo(
+        { baseUrl: serverUrl, userId, token, itemId: jellyfinId },
         apiFetchAuthenticated,
         signal,
       );
+      return data ?? null;
     },
-    enabled: Boolean(serverUrl && jellyfinId),
-    staleTime: 5 * 60 * 1000, // Trickplay data is static per item
+    enabled: Boolean(serverUrl && userId && token && jellyfinId),
+    staleTime: 5 * 60 * 1000,
     gcTime: 60_000,
     retry: 0,
   });
