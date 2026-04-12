@@ -2,12 +2,14 @@
 // Pure component — position/duration come from props, seek fires
 // a callback. Chapter markers render as small vertical lines.
 
+import type { TrickplayData } from "@jellyfuse/api";
 import type { Chapter } from "@jellyfuse/models";
 import { colors, fontSize, fontWeight, radius, spacing } from "@jellyfuse/theme";
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue } from "react-native-reanimated";
+import { TrickplayThumbnail } from "./trickplay-thumbnail";
 
 const TRACK_HEIGHT = 4;
 const THUMB_SIZE = 16;
@@ -16,10 +18,11 @@ interface Props {
   position: number;
   duration: number;
   chapters?: Chapter[];
+  trickplay?: TrickplayData;
   onSeek: (seconds: number) => void;
 }
 
-export function PlayerScrubber({ position, duration, chapters, onSeek }: Props) {
+export function PlayerScrubber({ position, duration, chapters, trickplay, onSeek }: Props) {
   const [trackWidth, setTrackWidth] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const dragProgress = useSharedValue(0);
@@ -97,6 +100,15 @@ export function PlayerScrubber({ position, duration, chapters, onSeek }: Props) 
 
           {/* Thumb — visible on drag */}
           {isDragging ? <Animated.View style={[styles.thumb, thumbStyle]} /> : null}
+
+          {/* Trickplay thumbnail — shown above scrubber during drag */}
+          {isDragging && trickplay ? (
+            <TrickplayThumbnail
+              trickplay={trickplay}
+              positionSeconds={dragProgress.value * duration}
+              offsetX={dragProgress.value * trackWidth}
+            />
+          ) : null}
         </View>
       </GestureDetector>
     </View>

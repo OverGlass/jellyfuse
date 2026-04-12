@@ -3,13 +3,19 @@ import { ticksToSeconds } from "@jellyfuse/models";
 import { colors } from "@jellyfuse/theme";
 import { useKeepAwake } from "expo-keep-awake";
 import { router } from "expo-router";
+import { useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { resolvePlayback } from "@/services/playback/resolver";
 import { useMovieDetail } from "@/services/query";
 import { ControlsOverlay } from "../components/controls-overlay";
 import { SkipSegmentPill } from "../components/skip-segment-pill";
+import { TrackPicker } from "../components/track-picker";
 import { useMpvPlayer } from "../hooks/use-mpv-player";
-import { usePlaybackInfo } from "../hooks/use-playback-info";
+import {
+  useIntroSkipperSegments,
+  usePlaybackInfo,
+  useTrickplayInfo,
+} from "../hooks/use-playback-info";
 import { useReportingSession } from "../hooks/use-reporting-session";
 import { useAuth } from "@/services/auth/state";
 
@@ -23,12 +29,15 @@ export function PlayerScreen({ jellyfinId }: Props) {
   const { serverUrl } = useAuth();
   const detail = useMovieDetail(jellyfinId);
   const playbackInfoQuery = usePlaybackInfo(jellyfinId);
+  const introSkipperQuery = useIntroSkipperSegments(jellyfinId);
+  const trickplayQuery = useTrickplayInfo(jellyfinId);
 
   // Pure derivation — resolvePlayback is a pure function, not async
   const resolved = playbackInfoQuery.data
     ? resolvePlayback({
         playbackInfo: playbackInfoQuery.data,
         settings: { preferredAudioLanguage: "eng", subtitleMode: "Off" },
+        introSkipperSegments: introSkipperQuery.data ?? undefined,
       })
     : null;
 
@@ -46,6 +55,8 @@ export function PlayerScreen({ jellyfinId }: Props) {
     resolved,
     baseUrl: serverUrl,
   });
+
+  const [trackPickerOpen, setTrackPickerOpen] = useState(false);
 
   const isLoading = playbackInfoQuery.isPending || (player.isBuffering && !player.isPlaying);
 
@@ -104,16 +115,28 @@ export function PlayerScreen({ jellyfinId }: Props) {
         position={player.position}
         duration={player.duration}
         chapters={resolved?.chapters}
-        audioStreams={resolved?.audioStreams}
-        subtitleTracks={resolved?.subtitleTracks}
+        trickplay={trickplayQuery.data ?? undefined}
         onPlayPause={player.isPlaying ? player.pause : player.play}
         onSeek={player.seek}
         onSkipForward={player.skipForward}
         onSkipBackward={player.skipBackward}
         onDismiss={() => router.back()}
-        onSetAudioTrack={player.setAudioTrack}
-        onSetSubtitleTrack={player.setSubtitleTrack}
+        onOpenTrackPicker={
+          resolved?.audioStreams.length || resolved?.subtitleTracks.length
+            ? () => setTrackPickerOpen(true)
+            : undefined
+        }
+      />
+
+      {/* Track picker bottom sheet */}
+      <TrackPicker
+        visible={trackPickerOpen}
+        audioStreams={resolved?.audioStreams ?? []}
+        subtitleTracks={resolved?.subtitleTracks ?? []}
+        onSelectAudio={player.setAudioTrack}
+        onSelectSubtitle={player.setSubtitleTrack}
         onDisableSubtitles={player.disableSubtitles}
+        onClose={() => setTrackPickerOpen(false)}
       />
     </View>
   );
