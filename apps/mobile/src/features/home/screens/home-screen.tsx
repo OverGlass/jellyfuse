@@ -219,13 +219,23 @@ function HomeHeader({
           )}
         </Pressable>
       </View>
-      <Pressable
-        accessibilityRole="button"
-        onPress={onSignOut}
-        style={({ pressed }) => [styles.signOut, pressed && styles.signOutPressed]}
-      >
-        <Text style={styles.signOutLabel}>Sign out</Text>
-      </Pressable>
+      <View style={{ flexDirection: "row", gap: spacing.sm }}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={onSignOut}
+          style={({ pressed }) => [styles.signOut, pressed && styles.signOutPressed]}
+        >
+          <Text style={styles.signOutLabel}>Sign out</Text>
+        </Pressable>
+        {/* TODO: remove after Phase 3a validation */}
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.push("/test-mpv")}
+          style={({ pressed }) => [styles.signOut, pressed && styles.signOutPressed]}
+        >
+          <Text style={styles.signOutLabel}>Test MPV</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }

@@ -297,13 +297,53 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         }
     }
 
+    // Cached values so we can fire progress with both pos + dur
+    private var currentPosition: Double = 0
+    private var currentDuration: Double = 0
+
     private func handlePropertyChange(_ event: mpv_event) {
-        // TODO(phase-3a): decode the property payload, update
-        // `currentPosition` / `currentDuration` in local state, and
-        // fire the relevant subscribers on the JS thread. This will
-        // fill in gradually as we test against real MPV property
-        // streams — the audio-only validation target is progress +
-        // state change + ended firing correctly.
+        guard let dataPtr = event.data else { return }
+        let prop = dataPtr.assumingMemoryBound(to: mpv_event_property.self).pointee
+        guard let namePtr = prop.name else { return }
+        let name = String(cString: namePtr)
+
+        switch name {
+        case "playback-time":
+            guard prop.format == MPV_FORMAT_DOUBLE, let valPtr = prop.data else { return }
+            currentPosition = valPtr.assumingMemoryBound(to: Double.self).pointee
+            let snap = progressSubs
+            for s in snap { s.callback(currentPosition, currentDuration) }
+
+        case "duration":
+            guard prop.format == MPV_FORMAT_DOUBLE, let valPtr = prop.data else { return }
+            currentDuration = valPtr.assumingMemoryBound(to: Double.self).pointee
+
+        case "pause":
+            guard prop.format == MPV_FORMAT_FLAG, let valPtr = prop.data else { return }
+            let paused = valPtr.assumingMemoryBound(to: Int32.self).pointee != 0
+            let state: MpvPlaybackState = paused ? .paused : .playing
+            fireState(state)
+
+        case "eof-reached":
+            guard prop.format == MPV_FORMAT_FLAG, let valPtr = prop.data else { return }
+            let eof = valPtr.assumingMemoryBound(to: Int32.self).pointee != 0
+            if eof { fireEnded(); fireState(.ended) }
+
+        case "paused-for-cache":
+            guard prop.format == MPV_FORMAT_FLAG, let valPtr = prop.data else { return }
+            let buffering = valPtr.assumingMemoryBound(to: Int32.self).pointee != 0
+            let snap = bufferingSubs
+            for s in snap { s.callback(buffering, 0) }
+
+        case "cache-buffering-state":
+            guard prop.format == MPV_FORMAT_DOUBLE, let valPtr = prop.data else { return }
+            let progress = valPtr.assumingMemoryBound(to: Double.self).pointee / 100.0
+            let snap = bufferingSubs
+            for s in snap { s.callback(progress < 1.0, progress) }
+
+        default:
+            break
+        }
     }
 
     // MARK: Firing listeners
