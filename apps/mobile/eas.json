@@ -12,7 +12,8 @@
         "EXPO_PUBLIC_ENV": "development"
       },
       "ios": {
-        "resourceClass": "m-medium"
+        "resourceClass": "m-medium",
+        "image": "macos-sequoia-15.6-xcode-16.4"
       },
       "android": {
         "buildType": "apk"
