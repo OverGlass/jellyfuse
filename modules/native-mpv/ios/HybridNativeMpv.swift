@@ -14,6 +14,7 @@
 //  no render context + no IOSurface bridge).
 //
 
+import AVFoundation
 import Foundation
 import Libmpv
 import NitroModules
@@ -100,16 +101,13 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
     public func load(streamUrl: String, options: MpvLoadOptions) throws {
         guard let mpv = self.mpv else { throw mpvError("mpv handle is nil") }
 
-        // Apply start-up options *before* we fire loadfile so the
-        // first frame/packet lands at the right position.
+        NSLog("[NativeMpv] load: %@", streamUrl)
+
+        // `start` is a loadfile option — must be set BEFORE loadfile.
+        // Other options (user-agent, speed, volume) are also pre-load.
         if let start = options.startPositionSeconds {
-            try setProperty(name: "start", value: String(start))
-        }
-        if let aid = options.audioTrackIndex {
-            try setProperty(name: "aid", value: String(aid))
-        }
-        if let sid = options.subtitleTrackIndex {
-            try setProperty(name: "sid", value: String(sid))
+            NSLog("[NativeMpv] setting start=%f", start)
+            try setProperty(name: "start", value: String(format: "%.3f", start))
         }
         if let rate = options.playbackRate {
             try setProperty(name: "speed", value: String(rate))
@@ -132,6 +130,17 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         free(loadfile); free(url)
         if rc < 0 {
             throw mpvError("loadfile failed: \(String(cString: mpv_error_string(rc)))")
+        }
+
+        // Track selection AFTER loadfile — matching the Rust pattern.
+        // mpv can't select tracks before a file is loaded.
+        if let aid = options.audioTrackIndex {
+            NSLog("[NativeMpv] setting aid=%d", Int(aid))
+            mpv_set_property_string(mpv, "aid", String(Int(aid)))
+        }
+        if let sid = options.subtitleTrackIndex {
+            NSLog("[NativeMpv] setting sid=%d", Int(sid))
+            mpv_set_property_string(mpv, "sid", String(Int(sid)))
         }
     }
 
@@ -253,16 +262,23 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
     private func createMpvHandle() -> OpaquePointer? {
         guard let mpv = mpv_create() else { return nil }
 
+        // Audio session: .playback ignores the silent switch and
+        // allows background audio. Standard for media players.
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
+        try? AVAudioSession.sharedInstance().setActive(true)
+
         // Defaults matching the Rust backend:
         // - videotoolbox-copy hwdec fixed the color correctness issue
         //   (see commit 51fec4ba in the Rust repo).
         // - vid=no until phase 3b plugs in a render context; otherwise
         //   libmpv will try to open a window on its own.
         _ = mpv_set_option_string(mpv, "hwdec", "videotoolbox-copy")
-        // vo=libmpv — required for mpv_render_context (Phase 3b).
-        // vid=no initially — MpvVideoView sets vid=auto on attach.
         _ = mpv_set_option_string(mpv, "vo", "libmpv")
         _ = mpv_set_option_string(mpv, "vid", "no")
+        // Start paused — prevents mpv from freezing when vo=libmpv
+        // has no render context yet. MpvGLView.attach() unpauses
+        // after creating the render context.
+        _ = mpv_set_option_string(mpv, "pause", "yes")
         _ = mpv_set_option_string(mpv, "audio-device", "auto")
         _ = mpv_set_option_string(mpv, "cache", "yes")
         _ = mpv_set_option_string(mpv, "demuxer-max-bytes", "50MiB")
@@ -410,12 +426,8 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         }
     }
 
-    private func mpvError(_ message: String) -> NSError {
-        NSError(
-            domain: "jellyfuse.native-mpv",
-            code: 1,
-            userInfo: [NSLocalizedDescriptionKey: message]
-        )
+    private func mpvError(_ message: String) -> RuntimeError {
+        RuntimeError(message)
     }
 
     private func makeListener(_ remove: @escaping () -> Void) -> MpvListener {

@@ -128,7 +128,7 @@ export async function fetchPlaybackInfo(
   }
 
   const json = (await res.json()) as Record<string, unknown>;
-  return parsePlaybackInfo(args.itemId, args.baseUrl, json);
+  return parsePlaybackInfo(args.itemId, args.baseUrl, json, args.token);
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -139,6 +139,7 @@ function parsePlaybackInfo(
   itemId: string,
   baseUrl: string,
   json: Record<string, unknown>,
+  token?: string,
 ): PlaybackInfo {
   const sources = json["MediaSources"];
   if (!Array.isArray(sources) || sources.length === 0) {
@@ -159,18 +160,20 @@ function parsePlaybackInfo(
   let method: PlayMethod;
   let streamUrl: string;
 
+  // api_key in the URL is required — mpv fetches the stream directly
+  // and can't use HTTP headers for auth (matching Rust jellyfin.rs:1049-1071).
+  const authParams: Record<string, string> = {
+    Static: "true",
+    MediaSourceId: mediaSourceId,
+    ...(token ? { api_key: token } : {}),
+  };
+
   if (supportsDirectPlay) {
     method = "DirectPlay";
-    streamUrl = buildUrl(baseUrl, `/Videos/${itemId}/stream`, {
-      Static: "true",
-      MediaSourceId: mediaSourceId,
-    });
+    streamUrl = buildUrl(baseUrl, `/Videos/${itemId}/stream`, authParams);
   } else if (supportsDirectStream) {
     method = "DirectStream";
-    streamUrl = buildUrl(baseUrl, `/Videos/${itemId}/stream.${container}`, {
-      Static: "true",
-      MediaSourceId: mediaSourceId,
-    });
+    streamUrl = buildUrl(baseUrl, `/Videos/${itemId}/stream.${container}`, authParams);
   } else if (transcodingUrl) {
     method = "Transcode";
     streamUrl = `${trimSlash(baseUrl)}${transcodingUrl}`;

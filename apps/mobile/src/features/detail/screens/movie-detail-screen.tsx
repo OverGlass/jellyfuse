@@ -1,4 +1,5 @@
 import { colors, fontSize, layout, spacing } from "@jellyfuse/theme";
+import { router } from "expo-router";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import Animated, { useAnimatedScrollHandler, useSharedValue } from "react-native-reanimated";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -11,10 +12,9 @@ import { useMovieDetail } from "@/services/query";
 import { useScreenGutters } from "@/services/responsive";
 
 /**
- * Read-only movie detail. Fetches `/Users/{uid}/Items/{id}` via
- * `useMovieDetail` and renders hero + overview + action row. Play is
- * a placeholder (console warn) until Phase 3 ships the MPV player;
- * Download / Request placeholders land in Phase 5 / Phase 4.
+ * Movie detail screen. Prefetches the player route so tapping Play
+ * opens instantly (screen rendered off-screen, React Query hooks
+ * already fired). Download / Request placeholders land in Phase 5/4.
  */
 interface Props {
   itemId: string;
@@ -22,6 +22,7 @@ interface Props {
 
 export function MovieDetailScreen({ itemId }: Props) {
   const query = useMovieDetail(itemId);
+
   const gutters = useScreenGutters();
   const insets = useSafeAreaInsets();
   const scrollY = useSharedValue(0);
@@ -71,9 +72,7 @@ export function MovieDetailScreen({ itemId }: Props) {
           <DetailMetaRow item={item} />
           <DetailActionRow
             hasResume={hasResume}
-            onPlay={() => {
-              console.warn(`play movie ${itemId}`);
-            }}
+            onPlay={() => router.push(`/player/${itemId}`)}
             onDownload={() => {
               console.warn(`download movie ${itemId}`);
             }}
