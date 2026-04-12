@@ -58,7 +58,7 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
 
     // MARK: Initialization
 
-    public required init() {
+    public required override init() {
         super.init()
         self.mpv = createMpvHandle()
     }
