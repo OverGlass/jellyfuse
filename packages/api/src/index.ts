@@ -9,3 +9,4 @@ export * from "./authenticate";
 export * from "./jellyseerr";
 export * from "./shelves";
 export * from "./detail";
+export * from "./playback";
