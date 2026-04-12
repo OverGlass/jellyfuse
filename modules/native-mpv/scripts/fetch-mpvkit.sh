@@ -140,6 +140,24 @@ else
     fi
   done
 
+  # ── clean up system-shadowing headers ────────────────────────────────
+  # The vendored include/ dirs contain FFmpeg, GnuTLS, OpenSSL, etc.
+  # headers that we DON'T need (our Swift code only uses mpv/*.h).
+  # Some of these shadow system headers (notably FFmpeg's time.h
+  # shadows <time.h>, breaking <ctime> → time_t resolution in the
+  # C++ STL on Xcode 26). We keep ONLY the mpv/ subdirectory and
+  # the module.modulemap — everything else is deleted.
+  for DIR in "${CACHE_DEVICE}/include" "${CACHE_SIM}/include"; do
+    if [[ -d "${DIR}/mpv" ]]; then
+      KEEP="$(mktemp -d)"
+      cp -R "${DIR}/mpv" "${KEEP}/mpv"
+      rm -rf "${DIR:?}"
+      mkdir -p "${DIR}"
+      mv "${KEEP}/mpv" "${DIR}/mpv"
+      rm -rf "${KEEP}"
+    fi
+  done
+
   # ── write a Swift-compatible modulemap for `import Libmpv` ────────────
   # Placed in the include dir so header paths resolve relative to the
   # modulemap file (Xcode's rule). SWIFT_INCLUDE_PATHS in the podspec
