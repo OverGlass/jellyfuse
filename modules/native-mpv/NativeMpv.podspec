@@ -69,11 +69,14 @@ Pod::Spec.new do |s|
     "LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]" => "$(inherited) " + mpvkit_sim,
     "OTHER_LDFLAGS"                              => "$(inherited) " + other_ldflags,
     "GCC_PREPROCESSOR_DEFINITIONS" => "$(inherited) FOLLY_NO_CONFIG FOLLY_CFG_NO_COROUTINES",
-    # -include forces <ctime> and <unistd.h> before every .cpp file
-    # in this pod. Fixes Xcode 26 C++ interop where POSIX types
-    # (time_t, tm, nanosleep, timespec) aren't implicitly visible
-    # in the nitrogen-generated bridge .cpp files.
-    "OTHER_CPLUSPLUSFLAGS"         => "$(inherited) -include ctime -include unistd.h -DFOLLY_NO_CONFIG -DFOLLY_MOBILE=1 -DFOLLY_USE_LIBCPP=1",
+    # -fno-modules disables Clang's modular include system for the
+    # .cpp files in this pod. Xcode 26's objcxx interop compiles C++
+    # in a modular context where POSIX types (time_t, tm, nanosleep)
+    # aren't transitively exported from the C++ STL module — an
+    # Apple SDK bug. Disabling modules for C++ falls back to textual
+    # includes where the transitive chain works normally. Swift
+    # modules are unaffected (they use a separate import system).
+    "OTHER_CPLUSPLUSFLAGS"         => "$(inherited) -fno-modules -DFOLLY_NO_CONFIG -DFOLLY_MOBILE=1 -DFOLLY_USE_LIBCPP=1",
   }
 
   # System frameworks libmpv + ffmpeg + deps pull in transitively.
