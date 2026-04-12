@@ -10,7 +10,6 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 
 const TRACK_HEIGHT = 4;
-const TRACK_HEIGHT_ACTIVE = 6;
 const THUMB_SIZE = 16;
 
 interface Props {
@@ -74,14 +73,14 @@ export function PlayerScrubber({ position, duration, chapters, onSeek }: Props) 
       {/* Scrubber track */}
       <GestureDetector gesture={gesture}>
         <View
-          style={[styles.trackContainer, isDragging && styles.trackContainerActive]}
+          style={styles.trackContainer}
           onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}
         >
           {/* Background track */}
-          <View style={[styles.track, isDragging && styles.trackActive]} />
+          <View style={styles.track} />
 
           {/* Fill */}
-          <Animated.View style={[styles.fill, isDragging && styles.fillActive, fillStyle]} />
+          <Animated.View style={[styles.fill, fillStyle]} />
 
           {/* Chapter markers */}
           {chapters?.map((chapter) => {
@@ -133,16 +132,10 @@ const styles = StyleSheet.create({
     height: 44,
     justifyContent: "center",
   },
-  trackContainerActive: {
-    height: 48,
-  },
   track: {
     height: TRACK_HEIGHT,
     borderRadius: radius.sm,
     backgroundColor: "rgba(255,255,255,0.2)",
-  },
-  trackActive: {
-    height: TRACK_HEIGHT_ACTIVE,
   },
   fill: {
     position: "absolute",
@@ -150,9 +143,6 @@ const styles = StyleSheet.create({
     height: TRACK_HEIGHT,
     borderRadius: radius.sm,
     backgroundColor: colors.accent,
-  },
-  fillActive: {
-    height: TRACK_HEIGHT_ACTIVE,
   },
   chapterMarker: {
     position: "absolute",
