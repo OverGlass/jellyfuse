@@ -68,13 +68,12 @@ Pod::Spec.new do |s|
     "LIBRARY_SEARCH_PATHS[sdk=iphoneos*]"        => "$(inherited) " + mpvkit_device,
     "LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]" => "$(inherited) " + mpvkit_sim,
     "OTHER_LDFLAGS"                              => "$(inherited) " + other_ldflags,
-    # Prefix header fixes Xcode 26 C++ interop: POSIX types (time_t,
-    # tm, nanosleep) aren't implicitly visible in the objcxx interop
-    # context. The pch pre-includes <ctime> + <unistd.h> so the C++
-    # STL headers find them.
-    "GCC_PREFIX_HEADER"            => "$(PODS_TARGET_SRCROOT)/ios/NativeMpv-Prefix.pch",
     "GCC_PREPROCESSOR_DEFINITIONS" => "$(inherited) FOLLY_NO_CONFIG FOLLY_CFG_NO_COROUTINES",
-    "OTHER_CPLUSPLUSFLAGS"         => "$(inherited) -DFOLLY_NO_CONFIG -DFOLLY_MOBILE=1 -DFOLLY_USE_LIBCPP=1",
+    # -include forces <ctime> and <unistd.h> before every .cpp file
+    # in this pod. Fixes Xcode 26 C++ interop where POSIX types
+    # (time_t, tm, nanosleep, timespec) aren't implicitly visible
+    # in the nitrogen-generated bridge .cpp files.
+    "OTHER_CPLUSPLUSFLAGS"         => "$(inherited) -include ctime -include unistd.h -DFOLLY_NO_CONFIG -DFOLLY_MOBILE=1 -DFOLLY_USE_LIBCPP=1",
   }
 
   # System frameworks libmpv + ffmpeg + deps pull in transitively.
