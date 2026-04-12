@@ -75,22 +75,22 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         // Apply start-up options *before* we fire loadfile so the
         // first frame/packet lands at the right position.
         if let start = options.startPositionSeconds {
-            try setProperty("start", String(start))
+            try setProperty(name: "start", value: String(start))
         }
         if let aid = options.audioTrackIndex {
-            try setProperty("aid", String(aid))
+            try setProperty(name: "aid", value: String(aid))
         }
         if let sid = options.subtitleTrackIndex {
-            try setProperty("sid", String(sid))
+            try setProperty(name: "sid", value: String(sid))
         }
         if let rate = options.playbackRate {
-            try setProperty("speed", String(rate))
+            try setProperty(name: "speed", value: String(rate))
         }
         if let volume = options.volume {
-            try setProperty("volume", String(volume))
+            try setProperty(name: "volume", value: String(volume))
         }
         if let ua = options.userAgent {
-            try setProperty("user-agent", ua)
+            try setProperty(name: "user-agent", value: ua)
         }
 
         // `loadfile <url>` — same invocation as the Rust backend.
@@ -114,11 +114,11 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
     // MARK: Transport (protocol)
 
     public func play() throws {
-        try setProperty("pause", "no")
+        try setProperty(name: "pause", value: "no")
     }
 
     public func pause() throws {
-        try setProperty("pause", "yes")
+        try setProperty(name: "pause", value: "yes")
     }
 
     public func seek(positionSeconds: Double) throws {
@@ -128,25 +128,25 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
     // MARK: Tracks / rate / volume (protocol)
 
     public func setAudioTrack(trackId: Double) throws {
-        try setProperty("aid", String(Int(trackId)))
+        try setProperty(name: "aid", value: String(Int(trackId)))
     }
 
     public func setSubtitleTrack(trackId: Double) throws {
-        try setProperty("sid", String(Int(trackId)))
+        try setProperty(name: "sid", value: String(Int(trackId)))
     }
 
     public func disableSubtitles() throws {
-        try setProperty("sid", "no")
+        try setProperty(name: "sid", value: "no")
     }
 
     public func setRate(rate: Double) throws {
         let clamped = max(0.25, min(3.0, rate))
-        try setProperty("speed", String(clamped))
+        try setProperty(name: "speed", value: String(clamped))
     }
 
     public func setVolume(volume: Double) throws {
         let clamped = max(0, min(100, volume))
-        try setProperty("volume", String(clamped))
+        try setProperty(name: "volume", value: String(clamped))
     }
 
     // MARK: Generic property bridge (protocol)
@@ -322,7 +322,7 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
 
     private func runCommand(_ args: [String]) throws {
         guard let mpv = self.mpv else { throw mpvError("mpv handle is nil") }
-        var cArgs = args.map { strdup($0) }
+        let cArgs = args.map { strdup($0) }
         defer { cArgs.forEach { free($0) } }
         var buf: [UnsafePointer<CChar>?] = cArgs.map { UnsafePointer($0) }
         buf.append(nil)
