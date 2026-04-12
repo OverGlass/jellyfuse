@@ -1,0 +1,41 @@
+{
+  "name": "@jellyfuse/native-mpv",
+  "version": "0.0.0",
+  "private": true,
+  "description": "MPV player Nitro module for Jellyfuse (iOS). Vendors MPVKit static libs.",
+  "files": [
+    "src",
+    "ios",
+    "nitrogen",
+    "nitro.json",
+    "NativeMpv.podspec",
+    "scripts/fetch-mpvkit.sh",
+    "vendor"
+  ],
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "fetch-mpvkit": "bash ./scripts/fetch-mpvkit.sh",
+    "nitrogen": "nitrogen",
+    "typecheck": "tsgo -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@jellyfuse/tsconfig-base": "workspace:*",
+    "@typescript/native-preview": "^7.0.0-dev",
+    "nitrogen": "^0.35.0",
+    "react-native-nitro-modules": "^0.35.0"
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*",
+    "react-native-nitro-modules": ">=0.35.0 <1.0.0"
+  }
+}
