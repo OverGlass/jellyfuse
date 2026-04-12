@@ -1,0 +1,16 @@
+// NativeMpv-Prefix.pch
+// Prefix header for the NativeMpv pod's C++ compilation units.
+//
+// Xcode 26's C++ ↔ Swift interop (SWIFT_OBJC_INTEROP_MODE=objcxx)
+// compiles the nitrogen-generated bridge files in a context where
+// POSIX types (time_t, tm, nanosleep, timespec) are not implicitly
+// available from the C++ standard library headers. Including
+// <ctime> and <cstring> here ensures every .cpp file in this pod
+// sees them before the STL headers pull them in transitively.
+
+#ifdef __cplusplus
+#include <ctime>
+#include <cstring>
+#include <cstdlib>
+#include <unistd.h>
+#endif
