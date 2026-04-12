@@ -23,6 +23,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ios: {
     bundleIdentifier: "com.jellyfuse.app",
     supportsTablet: true,
+    appleTeamId: "39TMVBW2CY",
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
     },
