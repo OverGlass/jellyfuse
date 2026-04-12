@@ -43,7 +43,26 @@ final class MpvGLView: UIView {
 
     // ── Display link ────────────────────────────────────────────────────
     private var displayLink: CADisplayLink?
-    private var needsRender: Bool = false
+    // Atomic flag — set from mpv's update callback thread, read from
+    // the main thread's CADisplayLink. Using os_unfair_lock for
+    // thread-safe access (plain Bool was a data race that could
+    // cause the render loop to stall after minutes of playback).
+    private var _needsRender: Bool = false
+    private var renderLock = os_unfair_lock()
+
+    private var needsRender: Bool {
+        get {
+            os_unfair_lock_lock(&renderLock)
+            let val = _needsRender
+            os_unfair_lock_unlock(&renderLock)
+            return val
+        }
+        set {
+            os_unfair_lock_lock(&renderLock)
+            _needsRender = newValue
+            os_unfair_lock_unlock(&renderLock)
+        }
+    }
 
     // ── Layer ───────────────────────────────────────────────────────────
     override class var layerClass: AnyClass { CAEAGLLayer.self }
@@ -247,15 +266,19 @@ final class MpvGLView: UIView {
     }
 
     @objc private func renderFrame() {
-        guard needsRender, let renderCtx = renderCtx else { return }
+        guard let renderCtx = renderCtx else { return }
+
+        // Always call mpv_render_context_update — this is the
+        // authoritative check for whether mpv has a new frame.
+        // The needsRender flag is just a hint to avoid the overhead
+        // of this call on every display link tick when idle.
+        let flags = mpv_render_context_update(renderCtx)
+        let hasFrame = flags & UInt64(MPV_RENDER_UPDATE_FRAME.rawValue) != 0
+        guard hasFrame || needsRender else { return }
         needsRender = false
 
         guard let ctx = eaglContext else { return }
         EAGLContext.setCurrent(ctx)
-
-        // Check if mpv actually has a frame to render
-        let flags = mpv_render_context_update(renderCtx)
-        guard flags & UInt64(MPV_RENDER_UPDATE_FRAME.rawValue) != 0 else { return }
 
         guard backingWidth > 0, backingHeight > 0 else { return }
 
