@@ -242,6 +242,24 @@ export interface ResolvedStream {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
+// Playback reporting — ported from `crates/jf-core/src/models.rs::PendingReport`
+// ──────────────────────────────────────────────────────────────────────────────
+
+export type PendingReportKind =
+  | { type: "start"; positionTicks: number; playMethod: PlayMethod }
+  | { type: "progress"; positionTicks: number; isPaused: boolean; playMethod: PlayMethod }
+  | { type: "stopped"; positionTicks: number };
+
+export interface PendingReport {
+  itemId: string;
+  playSessionId: string;
+  mediaSourceId: string;
+  kind: PendingReportKind;
+  /** Unix milliseconds — used as sort key for FIFO ordering. */
+  occurredAtMs: number;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 // Tick helpers
 // ──────────────────────────────────────────────────────────────────────────────
 
