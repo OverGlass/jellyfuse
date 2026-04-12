@@ -58,11 +58,17 @@ Pod::Spec.new do |s|
     # project defaults rather than clobbering them — without it,
     # Swift can't find NitroModules and the build fails with
     # "cannot find type 'HybridObject' in scope".
+    #
+    # MPVKit headers are added via -isystem (not -I) because the
+    # vendored include/ contains an FFmpeg `time.h` that shadows
+    # the system `<time.h>`. With -I the shadow breaks `<ctime>` →
+    # `time_t` resolution. -isystem searches AFTER system headers
+    # so the real `<time.h>` wins and the C++ STL compiles correctly.
     "HEADER_SEARCH_PATHS" => [
       "$(inherited)",
-      "$(PODS_TARGET_SRCROOT)/vendor/ios/mpvkit-device/include",
       "${PODS_ROOT}/RCT-Folly",
     ].join(" "),
+    "OTHER_CFLAGS" => "$(inherited) -isystem $(PODS_TARGET_SRCROOT)/vendor/ios/mpvkit-device/include",
     "SWIFT_INCLUDE_PATHS[sdk=iphoneos*]"         => "$(inherited) $(PODS_TARGET_SRCROOT)/vendor/ios/mpvkit-device/include",
     "SWIFT_INCLUDE_PATHS[sdk=iphonesimulator*]"  => "$(inherited) $(PODS_TARGET_SRCROOT)/vendor/ios/mpvkit-simulator/include",
     "LIBRARY_SEARCH_PATHS[sdk=iphoneos*]"        => "$(inherited) " + mpvkit_device,
@@ -107,4 +113,21 @@ Pod::Spec.new do |s|
   add_nitrogen_files(s)
 
   install_modules_dependencies(s)
+
+  # ── Xcode 26 workaround ─────────────────────────────────────────────
+  # Nitrogen's autolinking + install_modules_dependencies both merge
+  # into pod_target_xcconfig and may overwrite our earlier settings.
+  # Apply the Xcode 26 fix AFTER all merges so it sticks.
+  #
+  # The C++ STL module on iOS SDK 26.2 doesn't re-export POSIX types
+  # (time_t, tm, nanosleep) under the objcxx interop context.
+  # Disabling Clang modules for this pod's C++ files falls back to
+  # textual includes where the transitive chain works normally.
+  # Swift modules are a separate system and stay unaffected.
+  xcconfig = s.attributes_hash["pod_target_xcconfig"] || {}
+  # Disable Clang modules entirely for this pod. All generated files
+  # use #include / #import (not @import), so modules aren't needed.
+  # Swift has its own module system that's unaffected.
+  xcconfig["CLANG_ENABLE_MODULES"] = "NO"
+  s.pod_target_xcconfig = xcconfig
 end
