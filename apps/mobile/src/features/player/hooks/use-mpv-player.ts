@@ -59,6 +59,7 @@ export function useMpvPlayer(
   });
 
   const onStateChange = useEffectEvent((state: string) => {
+    console.log("[player] state change:", state);
     setIsPlaying(state === "playing");
   });
 

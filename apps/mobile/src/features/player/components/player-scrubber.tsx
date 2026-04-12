@@ -42,7 +42,7 @@ export function PlayerScrubber({ position, duration, chapters, onSeek }: Props) 
       runOnJS(onSeek)(seekTo);
       runOnJS(setIsDragging)(false);
     })
-    .hitSlop({ top: 20, bottom: 20 });
+    .hitSlop({ top: 40, bottom: 40, left: 10, right: 10 });
 
   const tapGesture = Gesture.Tap().onEnd((e) => {
     if (trackWidth <= 0 || duration <= 0) return;
@@ -130,11 +130,11 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
   },
   trackContainer: {
-    height: 24,
+    height: 44,
     justifyContent: "center",
   },
   trackContainerActive: {
-    height: 28,
+    height: 48,
   },
   track: {
     height: TRACK_HEIGHT,
