@@ -138,3 +138,119 @@ function formatRuntime(minutes: number): string {
   const rem = minutes % 60;
   return rem === 0 ? `${hours}h` : `${hours}h ${rem}m`;
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Playback — ported from `crates/jf-core/src/models.rs`
+// ──────────────────────────────────────────────────────────────────────────────
+
+export type PlayMethod = "DirectPlay" | "DirectStream" | "Transcode";
+
+export type SubtitleMode = "Off" | "OnlyForced" | "Always";
+
+export interface AudioStream {
+  /** Jellyfin stream index. */
+  index: number;
+  language: string | undefined;
+  displayTitle: string;
+  codec: string;
+  channels: number | undefined;
+  isDefault: boolean;
+}
+
+export interface SubtitleTrack {
+  /** Jellyfin stream index. */
+  index: number;
+  language: string | undefined;
+  displayTitle: string;
+  codec: string | undefined;
+  isDefault: boolean;
+  isForced: boolean;
+  /** Absolute URL for external subtitles (srt/vtt/ass). Undefined for embedded. */
+  deliveryUrl: string | undefined;
+}
+
+export interface Chapter {
+  /** Start position in Jellyfin ticks (10,000 ticks = 1 ms). */
+  startPositionTicks: number;
+  name: string;
+}
+
+export interface TrickplayInfo {
+  width: number;
+  height: number;
+  tileWidth: number;
+  tileHeight: number;
+  thumbnailCount: number;
+  /** Milliseconds between thumbnails. */
+  interval: number;
+}
+
+export interface SkipSegment {
+  /** Seconds. */
+  start: number;
+  /** Seconds. */
+  end: number;
+}
+
+export interface IntroSkipperSegments {
+  introduction: SkipSegment | undefined;
+  recap: SkipSegment | undefined;
+  credits: SkipSegment | undefined;
+}
+
+/**
+ * Parsed result from `POST /Items/{id}/PlaybackInfo`. Contains
+ * everything the resolver needs to decide how to play.
+ */
+export interface PlaybackInfo {
+  mediaSourceId: string;
+  playSessionId: string;
+  method: PlayMethod;
+  streamUrl: string;
+  subtitles: SubtitleTrack[];
+  audioStreams: AudioStream[];
+  /** Total duration in Jellyfin ticks. */
+  durationTicks: number;
+  trickplay: TrickplayInfo | undefined;
+  chapters: Chapter[];
+}
+
+/**
+ * Output of the playback resolver — everything `NativeMpv.load()`
+ * and the playback reporter need.
+ */
+export interface ResolvedStream {
+  streamUrl: string;
+  playMethod: PlayMethod;
+  mediaSourceId: string;
+  playSessionId: string;
+  /** Selected audio stream index, or undefined for mpv auto-select. */
+  audioStreamIndex: number | undefined;
+  /** Selected subtitle stream index, or undefined for none. */
+  subtitleStreamIndex: number | undefined;
+  /** External subtitle URL if applicable. */
+  subtitleDeliveryUrl: string | undefined;
+  /** All available audio streams for the track picker UI. */
+  audioStreams: AudioStream[];
+  /** All available subtitle tracks for the track picker UI. */
+  subtitleTracks: SubtitleTrack[];
+  /** Duration in seconds. */
+  durationSeconds: number;
+  chapters: Chapter[];
+  trickplay: TrickplayInfo | undefined;
+  introSkipperSegments: IntroSkipperSegments | undefined;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Tick helpers
+// ──────────────────────────────────────────────────────────────────────────────
+
+const TICKS_PER_SECOND = 10_000_000;
+
+export function ticksToSeconds(ticks: number): number {
+  return ticks / TICKS_PER_SECOND;
+}
+
+export function secondsToTicks(seconds: number): number {
+  return Math.round(seconds * TICKS_PER_SECOND);
+}
