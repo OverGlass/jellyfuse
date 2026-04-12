@@ -1,0 +1,16 @@
+{
+  "cxxNamespace": ["nativempv"],
+  "ios": {
+    "iosModuleName": "NativeMpv"
+  },
+  "android": {
+    "androidNamespace": ["nativempv"],
+    "androidCxxLibName": "nativempv"
+  },
+  "autolinking": {
+    "NativeMpv": {
+      "swift": "HybridNativeMpv"
+    }
+  },
+  "ignorePaths": ["node_modules", "vendor"]
+}
