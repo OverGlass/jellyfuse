@@ -6,6 +6,7 @@
 // Tap detection uses plain Pressable (not RNGH) so it doesn't block
 // the overlay buttons. Double-tap is detected via timestamp tracking.
 
+import type { TrickplayData } from "@jellyfuse/api";
 import type { AudioStream, Chapter, SubtitleTrack } from "@jellyfuse/models";
 import { colors, fontSize, fontWeight, opacity, radius, spacing } from "@jellyfuse/theme";
 import { Activity, useRef, useState } from "react";
@@ -24,16 +25,13 @@ interface Props {
   position: number;
   duration: number;
   chapters?: Chapter[];
-  audioStreams?: AudioStream[];
-  subtitleTracks?: SubtitleTrack[];
+  trickplay?: TrickplayData;
   onPlayPause: () => void;
   onSeek: (seconds: number) => void;
   onSkipForward: () => void;
   onSkipBackward: () => void;
   onDismiss: () => void;
-  onSetAudioTrack?: (trackId: number) => void;
-  onSetSubtitleTrack?: (trackId: number) => void;
-  onDisableSubtitles?: () => void;
+  onOpenTrackPicker?: () => void;
 }
 
 export function ControlsOverlay({
@@ -43,11 +41,13 @@ export function ControlsOverlay({
   position,
   duration,
   chapters,
+  trickplay,
   onPlayPause,
   onSeek,
   onSkipForward,
   onSkipBackward,
   onDismiss,
+  onOpenTrackPicker,
 }: Props) {
   const insets = useSafeAreaInsets();
   const { width: screenWidth } = useWindowDimensions();
@@ -156,6 +156,17 @@ export function ControlsOverlay({
                 {title}
               </Text>
             </View>
+            {onOpenTrackPicker ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Audio and subtitle tracks"
+                onPress={onOpenTrackPicker}
+                hitSlop={12}
+                style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
+              >
+                <Text style={styles.trackBtnText}>CC</Text>
+              </Pressable>
+            ) : null}
           </View>
 
           {/* ── Center: play/pause + skip ──────────────────────────── */}
@@ -206,6 +217,7 @@ export function ControlsOverlay({
               position={position}
               duration={duration}
               chapters={chapters}
+              trickplay={trickplay}
               onSeek={(s) => {
                 onSeek(s);
                 handleInteraction();
@@ -254,6 +266,11 @@ const styles = StyleSheet.create({
   },
   titleBlock: {
     flex: 1,
+  },
+  trackBtnText: {
+    color: colors.textPrimary,
+    fontSize: fontSize.caption,
+    fontWeight: fontWeight.bold,
   },
   title: {
     color: colors.textPrimary,

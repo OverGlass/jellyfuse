@@ -4,8 +4,10 @@
 import type {
   AudioStream,
   Chapter,
+  IntroSkipperSegments,
   PlayMethod,
   PlaybackInfo,
+  SkipSegment,
   SubtitleTrack,
 } from "@jellyfuse/models";
 import type { FetchLike } from "./system-info";
@@ -232,6 +234,142 @@ function parsePlaybackInfo(
     trickplay: undefined, // Fetched separately via /Videos/{id}/Trickplay in Phase 3e
     chapters,
   };
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Trickplay — `GET /Videos/{id}/Trickplay` metadata
+// ──────────────────────────────────────────────────────────────────────────────
+
+export interface TrickplayData {
+  width: number;
+  height: number;
+  tileWidth: number;
+  tileHeight: number;
+  thumbnailCount: number;
+  interval: number;
+  /** Base URL for tile sheets: `{baseUrl}/Videos/{id}/Trickplay/{width}/{index}.jpg` */
+  sheetBaseUrl: string;
+}
+
+/**
+ * Fetch trickplay metadata. Returns the highest-resolution trickplay
+ * track available. Returns undefined if trickplay is not generated
+ * for this item.
+ */
+export async function fetchTrickplayInfo(
+  args: { baseUrl: string; itemId: string },
+  fetcher: FetchLike,
+  signal?: AbortSignal,
+): Promise<TrickplayData | undefined> {
+  try {
+    const url = `${trimSlash(args.baseUrl)}/Videos/${args.itemId}/Trickplay`;
+    const res = await fetcher(url, { signal });
+    if (!res.ok) return undefined;
+
+    const json = (await res.json()) as Record<string, unknown>;
+
+    // Response shape: { "MediaSourceId": { "320": { Width, Height, ... } } }
+    // Pick the first media source, then the highest resolution track.
+    const sources = Object.values(json) as Record<string, unknown>[];
+    if (sources.length === 0) return undefined;
+
+    const tracks = sources[0] as Record<string, Record<string, unknown>> | undefined;
+    if (!tracks) return undefined;
+
+    // Pick highest resolution (largest key number)
+    const resolutions = Object.keys(tracks)
+      .map(Number)
+      .filter((n) => !Number.isNaN(n))
+      .sort((a, b) => b - a);
+
+    if (resolutions.length === 0) return undefined;
+
+    const bestRes = resolutions[0]!;
+    const track = tracks[String(bestRes)]!;
+
+    return {
+      width: Number(track["Width"] ?? bestRes),
+      height: Number(track["Height"] ?? 0),
+      tileWidth: Number(track["TileWidth"] ?? 10),
+      tileHeight: Number(track["TileHeight"] ?? 10),
+      thumbnailCount: Number(track["ThumbnailCount"] ?? 0),
+      interval: Number(track["Interval"] ?? 10000),
+      sheetBaseUrl: `${trimSlash(args.baseUrl)}/Videos/${args.itemId}/Trickplay/${bestRes}`,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Given a position in seconds, compute which trickplay tile to show.
+ * Returns the sheet URL and crop coordinates within the sheet.
+ */
+export function trickplayTileFor(
+  data: TrickplayData,
+  positionSeconds: number,
+): { sheetUrl: string; cropX: number; cropY: number } {
+  const tileIndex = Math.floor((positionSeconds * 1000) / data.interval);
+  const clamped = Math.max(0, Math.min(tileIndex, data.thumbnailCount - 1));
+
+  const tilesPerSheet = data.tileWidth * data.tileHeight;
+  const sheetIndex = Math.floor(clamped / tilesPerSheet);
+  const indexInSheet = clamped % tilesPerSheet;
+
+  const col = indexInSheet % data.tileWidth;
+  const row = Math.floor(indexInSheet / data.tileWidth);
+
+  return {
+    sheetUrl: `${data.sheetBaseUrl}/${sheetIndex}.jpg`,
+    cropX: col * data.width,
+    cropY: row * data.height,
+  };
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Intro-skipper segments — `GET /Items/{id}/Intros` (plugin endpoint)
+// ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Fetch intro/recap/credits segments from the Jellyfin intro-skipper
+ * plugin. Returns undefined if the plugin is not installed or the
+ * item has no segments. Never throws — silently returns undefined.
+ */
+export async function fetchIntroSkipperSegments(
+  args: { baseUrl: string; itemId: string },
+  fetcher: FetchLike,
+  signal?: AbortSignal,
+): Promise<IntroSkipperSegments | undefined> {
+  try {
+    const url = `${trimSlash(args.baseUrl)}/Episode/${args.itemId}/IntroSkipperSegments`;
+    const res = await fetcher(url, { signal });
+    if (!res.ok) return undefined;
+
+    const json = (await res.json()) as Record<string, unknown>;
+    return parseIntroSkipperSegments(json);
+  } catch {
+    return undefined;
+  }
+}
+
+function parseIntroSkipperSegments(
+  json: Record<string, unknown>,
+): IntroSkipperSegments | undefined {
+  function parseSegment(key: string): SkipSegment | undefined {
+    const seg = json[key] as Record<string, unknown> | undefined;
+    if (!seg) return undefined;
+    const start = Number(seg["ShowSkipPromptAt"] ?? seg["Start"] ?? 0);
+    const end = Number(seg["HideSkipPromptAt"] ?? seg["End"] ?? 0);
+    if (end <= start) return undefined;
+    return { start, end };
+  }
+
+  const introduction = parseSegment("Introduction");
+  const recap = parseSegment("Recap");
+  const credits = parseSegment("Credits");
+
+  if (!introduction && !recap && !credits) return undefined;
+  return { introduction, recap, credits };
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

@@ -84,6 +84,8 @@ export const queryKeys = {
 
   // Playback (Phase 3) / Requests (Phase 4) ----------------------------
   playbackInfo: (userId: string, itemId: string) => ["playback", userId, "info", itemId] as const,
+  introSkipper: (itemId: string) => ["playback", "intro-skipper", itemId] as const,
+  trickplayInfo: (itemId: string) => ["playback", "trickplay", itemId] as const,
   downloadProgress: (tmdbId: number) => ["download-progress", tmdbId] as const,
   downloadProgressMap: () => ["download-progress-map"] as const,
   qualityProfiles: () => ["quality-profiles"] as const,
