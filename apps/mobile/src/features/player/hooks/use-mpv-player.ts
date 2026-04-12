@@ -97,25 +97,27 @@ export function useMpvPlayer(
     };
   }, []); // Mount/unmount only — callbacks are stable via useEffectEvent
 
-  // ── Load stream when resolved data arrives ────────────────────────
+  // ── Load stream when URL changes ──────────────────────────────────
+  // Depend on the URL string (primitive), not the resolved object —
+  // `resolvePlayback()` creates a new object each render which would
+  // cause an infinite load loop.
+
+  const streamUrl = resolved?.streamUrl;
 
   useEffect(() => {
-    if (!resolved || !mpvRef.current) return;
+    if (!streamUrl || !mpvRef.current) return;
 
-    console.log("[player] loading stream:", resolved.streamUrl);
+    console.log("[player] loading stream:", streamUrl);
 
-    // TODO: map Jellyfin stream indices to mpv track IDs (aid/sid).
-    // Jellyfin indices count all stream types; mpv counts per-type.
-    // For now, let mpv auto-select default tracks.
     try {
-      mpvRef.current.load(resolved.streamUrl, {
+      mpvRef.current.load(streamUrl, {
         startPositionSeconds,
       });
     } catch (e) {
       console.error("[player] load failed:", e);
       onError(e instanceof Error ? e.message : String(e));
     }
-  }, [resolved, startPositionSeconds]);
+  }, [streamUrl, startPositionSeconds]);
 
   // ── Imperative controls ───────────────────────────────────────────
 

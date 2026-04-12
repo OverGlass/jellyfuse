@@ -237,7 +237,8 @@ function parsePlaybackInfo(
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Trickplay — `GET /Videos/{id}/Trickplay` metadata
+// Trickplay — parsed from GET /Users/{userId}/Items/{itemId} response
+// (matches Rust `get_trickplay_info` — tile data lives on the item details).
 // ──────────────────────────────────────────────────────────────────────────────
 
 export interface TrickplayData {
@@ -247,54 +248,55 @@ export interface TrickplayData {
   tileHeight: number;
   thumbnailCount: number;
   interval: number;
-  /** Base URL for tile sheets: `{baseUrl}/Videos/{id}/Trickplay/{width}/{index}.jpg` */
-  sheetBaseUrl: string;
+  /** Full URL pattern with {sheet} placeholder — auth token included. */
+  sheetUrlTemplate: string;
 }
 
 /**
- * Fetch trickplay metadata. Returns the highest-resolution trickplay
- * track available. Returns undefined if trickplay is not generated
- * for this item.
+ * Fetch trickplay metadata by reading the `Trickplay` field from
+ * the item detail response. Jellyfin doesn't have a dedicated
+ * trickplay endpoint — the tile layout is embedded in item details.
+ *
+ * Picks the smallest width (matches Rust behavior — smaller sheets
+ * load faster and are enough for scrub preview).
  */
 export async function fetchTrickplayInfo(
-  args: { baseUrl: string; itemId: string },
+  args: { baseUrl: string; userId: string; token: string; itemId: string },
   fetcher: FetchLike,
   signal?: AbortSignal,
 ): Promise<TrickplayData | undefined> {
   try {
-    const url = `${trimSlash(args.baseUrl)}/Videos/${args.itemId}/Trickplay`;
+    const url = `${trimSlash(args.baseUrl)}/Users/${args.userId}/Items/${args.itemId}`;
     const res = await fetcher(url, { signal });
     if (!res.ok) return undefined;
 
     const json = (await res.json()) as Record<string, unknown>;
+    const trickplay = json["Trickplay"] as Record<string, Record<string, unknown>> | undefined;
+    if (!trickplay) return undefined;
 
-    // Response shape: { "MediaSourceId": { "320": { Width, Height, ... } } }
-    // Pick the first media source, then the highest resolution track.
-    const sources = Object.values(json) as Record<string, unknown>[];
-    if (sources.length === 0) return undefined;
+    // Flatten all media sources and find smallest width track
+    let best: { width: number; data: Record<string, unknown> } | undefined;
+    for (const sourceMap of Object.values(trickplay)) {
+      if (typeof sourceMap !== "object" || sourceMap === null) continue;
+      for (const [widthStr, data] of Object.entries(sourceMap)) {
+        const width = Number(widthStr);
+        if (Number.isNaN(width)) continue;
+        if (!best || width < best.width) {
+          best = { width, data: data as Record<string, unknown> };
+        }
+      }
+    }
 
-    const tracks = sources[0] as Record<string, Record<string, unknown>> | undefined;
-    if (!tracks) return undefined;
-
-    // Pick highest resolution (largest key number)
-    const resolutions = Object.keys(tracks)
-      .map(Number)
-      .filter((n) => !Number.isNaN(n))
-      .sort((a, b) => b - a);
-
-    if (resolutions.length === 0) return undefined;
-
-    const bestRes = resolutions[0]!;
-    const track = tracks[String(bestRes)]!;
+    if (!best) return undefined;
 
     return {
-      width: Number(track["Width"] ?? bestRes),
-      height: Number(track["Height"] ?? 0),
-      tileWidth: Number(track["TileWidth"] ?? 10),
-      tileHeight: Number(track["TileHeight"] ?? 10),
-      thumbnailCount: Number(track["ThumbnailCount"] ?? 0),
-      interval: Number(track["Interval"] ?? 10000),
-      sheetBaseUrl: `${trimSlash(args.baseUrl)}/Videos/${args.itemId}/Trickplay/${bestRes}`,
+      width: best.width,
+      height: Number(best.data["Height"] ?? 0),
+      tileWidth: Number(best.data["TileWidth"] ?? 10),
+      tileHeight: Number(best.data["TileHeight"] ?? 10),
+      thumbnailCount: Number(best.data["ThumbnailCount"] ?? 0),
+      interval: Number(best.data["Interval"] ?? 10000),
+      sheetUrlTemplate: `${trimSlash(args.baseUrl)}/Videos/${args.itemId}/Trickplay/${best.width}/{sheet}.jpg?ApiKey=${args.token}&MediaSourceId=${args.itemId}`,
     };
   } catch {
     return undefined;
@@ -320,7 +322,7 @@ export function trickplayTileFor(
   const row = Math.floor(indexInSheet / data.tileWidth);
 
   return {
-    sheetUrl: `${data.sheetBaseUrl}/${sheetIndex}.jpg`,
+    sheetUrl: data.sheetUrlTemplate.replace("{sheet}", String(sheetIndex)),
     cropX: col * data.width,
     cropY: row * data.height,
   };
