@@ -79,7 +79,10 @@ namespace margelo::nitro::nativempv {
 
   public:
     // Properties
-    
+    inline std::string getInstanceId() noexcept override {
+      auto __result = _swiftPart.getInstanceId();
+      return __result;
+    }
 
   public:
     // Methods

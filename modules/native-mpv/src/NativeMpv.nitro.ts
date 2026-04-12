@@ -97,6 +97,12 @@ export interface MpvSubtitleTrack {
  * always call `release()` before unmount.
  */
 export interface NativeMpv extends HybridObject<{ ios: "swift" }> {
+  /**
+   * Unique identifier for this player instance. Used to connect a
+   * `MpvVideoView` to this player via `attachPlayer(instanceId)`.
+   */
+  readonly instanceId: string;
+
   // ── lifecycle ──────────────────────────────────────────────────────────
   /**
    * Load a stream URL. Tears down any previous load. Transitions

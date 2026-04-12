@@ -121,7 +121,12 @@ open class HybridNativeMpvSpec_cxx {
   }
 
   // Properties
-  
+  public final var instanceId: std.string {
+    @inline(__always)
+    get {
+      return std.string(self.__implementation.instanceId)
+    }
+  }
 
   // Methods
   @inline(__always)

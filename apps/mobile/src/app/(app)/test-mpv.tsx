@@ -1,4 +1,10 @@
-import { createNativeMpv, type NativeMpv, type MpvListener } from "@jellyfuse/native-mpv";
+import {
+  createNativeMpv,
+  MpvVideoView,
+  callback,
+  type NativeMpv,
+  type MpvListener,
+} from "@jellyfuse/native-mpv";
 import { colors, fontSize, fontWeight, radius, spacing } from "@jellyfuse/theme";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -6,14 +12,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { BackButton } from "@/features/common/components/back-button";
 
 /**
- * Throwaway test screen for Phase 3a audio-only validation.
- * Creates a NativeMpv hybrid object, loads a public audio URL,
- * and displays the state + progress from the native event stream.
- * Delete this file once Phase 3b ships the real player screen.
+ * Throwaway test screen for Phase 3 validation.
+ * Phase 3a: audio-only via NativeMpv hybrid object.
+ * Phase 3b: video rendering via MpvVideoView + GL render context.
+ * Delete this file once Phase 3e ships the real player screen.
  */
 
-// Public domain audio — Big Buck Bunny soundtrack (MP3)
-const TEST_URL = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3";
+// Big Buck Bunny — public domain MP4 (video)
+const TEST_URL = "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8";
 
 export default function TestMpvScreen() {
   const mpvRef = useRef<NativeMpv | null>(null);
@@ -108,8 +114,28 @@ export default function TestMpvScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.container}>
-        <Text style={styles.title}>MPV Audio Test</Text>
-        <Text style={styles.subtitle}>Phase 3a — audio-only smoke test</Text>
+        <Text style={styles.title}>MPV Video Test</Text>
+        <Text style={styles.subtitle}>Phase 3b — video render context</Text>
+
+        {/* Video view — connects to the player via hybridRef */}
+        {state !== "idle" && state !== "released" ? (
+          <MpvVideoView
+            style={styles.videoView}
+            hybridRef={callback((ref) => {
+              if (ref && mpvRef.current) {
+                try {
+                  ref.attachPlayer(mpvRef.current.instanceId);
+                } catch (e) {
+                  console.error("[test-mpv] attachPlayer error:", e);
+                }
+              }
+            })}
+          />
+        ) : (
+          <View style={styles.videoPlaceholder}>
+            <Text style={styles.placeholderText}>Press Create → Load to start video</Text>
+          </View>
+        )}
 
         <View style={styles.status}>
           <Text style={styles.label}>State</Text>
@@ -154,9 +180,25 @@ function Btn({ label, onPress }: { label: string; onPress: () => void }) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
-  container: { flex: 1, padding: spacing.lg, paddingTop: spacing.xxl, gap: spacing.lg },
+  container: { flex: 1, padding: spacing.lg, paddingTop: spacing.xxl, gap: spacing.md },
   title: { color: colors.textPrimary, fontSize: fontSize.display, fontWeight: fontWeight.bold },
   subtitle: { color: colors.textMuted, fontSize: fontSize.body },
+  videoView: {
+    width: "100%",
+    aspectRatio: 16 / 9,
+    backgroundColor: "#000",
+    borderRadius: radius.md,
+    overflow: "hidden",
+  },
+  videoPlaceholder: {
+    width: "100%",
+    aspectRatio: 16 / 9,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  placeholderText: { color: colors.textMuted, fontSize: fontSize.body },
   status: { flexDirection: "row", gap: spacing.md },
   label: { color: colors.textMuted, fontSize: fontSize.body, width: 80 },
   value: { color: colors.textPrimary, fontSize: fontSize.body, fontWeight: fontWeight.semibold },
@@ -170,5 +212,5 @@ const styles = StyleSheet.create({
   },
   btnPressed: { opacity: 0.75 },
   btnLabel: { color: colors.textPrimary, fontSize: fontSize.body, fontWeight: fontWeight.medium },
-  url: { color: colors.textMuted, fontSize: fontSize.caption, marginTop: spacing.lg },
+  url: { color: colors.textMuted, fontSize: fontSize.caption, marginTop: spacing.sm },
 });

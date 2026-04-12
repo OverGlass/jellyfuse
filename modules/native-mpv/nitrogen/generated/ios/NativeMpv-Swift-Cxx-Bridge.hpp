@@ -8,6 +8,8 @@
 #pragma once
 
 // Forward declarations of C++ defined types
+// Forward declaration of `HybridMpvVideoViewSpec` to properly resolve imports.
+namespace margelo::nitro::nativempv { class HybridMpvVideoViewSpec; }
 // Forward declaration of `HybridNativeMpvSpec` to properly resolve imports.
 namespace margelo::nitro::nativempv { class HybridNativeMpvSpec; }
 // Forward declaration of `MpvAudioTrack` to properly resolve imports.
@@ -20,10 +22,13 @@ namespace margelo::nitro::nativempv { enum class MpvPlaybackState; }
 namespace margelo::nitro::nativempv { struct MpvSubtitleTrack; }
 
 // Forward declarations of Swift defined types
+// Forward declaration of `HybridMpvVideoViewSpec_cxx` to properly resolve imports.
+namespace NativeMpv { class HybridMpvVideoViewSpec_cxx; }
 // Forward declaration of `HybridNativeMpvSpec_cxx` to properly resolve imports.
 namespace NativeMpv { class HybridNativeMpvSpec_cxx; }
 
 // Include C++ defined types
+#include "HybridMpvVideoViewSpec.hpp"
 #include "HybridNativeMpvSpec.hpp"
 #include "MpvAudioTrack.hpp"
 #include "MpvListener.hpp"
@@ -43,6 +48,27 @@ namespace NativeMpv { class HybridNativeMpvSpec_cxx; }
  */
 namespace margelo::nitro::nativempv::bridge::swift {
 
+  // pragma MARK: std::shared_ptr<HybridMpvVideoViewSpec>
+  /**
+   * Specialized version of `std::shared_ptr<HybridMpvVideoViewSpec>`.
+   */
+  using std__shared_ptr_HybridMpvVideoViewSpec_ = std::shared_ptr<HybridMpvVideoViewSpec>;
+  std::shared_ptr<HybridMpvVideoViewSpec> create_std__shared_ptr_HybridMpvVideoViewSpec_(void* NON_NULL swiftUnsafePointer) noexcept;
+  void* NON_NULL get_std__shared_ptr_HybridMpvVideoViewSpec_(std__shared_ptr_HybridMpvVideoViewSpec_ cppType);
+  
+  // pragma MARK: std::weak_ptr<HybridMpvVideoViewSpec>
+  using std__weak_ptr_HybridMpvVideoViewSpec_ = std::weak_ptr<HybridMpvVideoViewSpec>;
+  inline std__weak_ptr_HybridMpvVideoViewSpec_ weakify_std__shared_ptr_HybridMpvVideoViewSpec_(const std::shared_ptr<HybridMpvVideoViewSpec>& strong) noexcept { return strong; }
+  
+  // pragma MARK: Result<void>
+  using Result_void_ = Result<void>;
+  inline Result_void_ create_Result_void_() noexcept {
+    return Result<void>::withValue();
+  }
+  inline Result_void_ create_Result_void_(const std::exception_ptr& error) noexcept {
+    return Result<void>::withError(error);
+  }
+  
   // pragma MARK: std::optional<double>
   /**
    * Specialized version of `std::optional<double>`.
@@ -238,15 +264,6 @@ namespace margelo::nitro::nativempv::bridge::swift {
   // pragma MARK: std::weak_ptr<HybridNativeMpvSpec>
   using std__weak_ptr_HybridNativeMpvSpec_ = std::weak_ptr<HybridNativeMpvSpec>;
   inline std__weak_ptr_HybridNativeMpvSpec_ weakify_std__shared_ptr_HybridNativeMpvSpec_(const std::shared_ptr<HybridNativeMpvSpec>& strong) noexcept { return strong; }
-  
-  // pragma MARK: Result<void>
-  using Result_void_ = Result<void>;
-  inline Result_void_ create_Result_void_() noexcept {
-    return Result<void>::withValue();
-  }
-  inline Result_void_ create_Result_void_(const std::exception_ptr& error) noexcept {
-    return Result<void>::withError(error);
-  }
   
   // pragma MARK: Result<std::string>
   using Result_std__string_ = Result<std::string>;

@@ -23,4 +23,16 @@ public final class NativeMpvAutolinking {
   public static func isNativeMpvRecyclable() -> Bool {
     return HybridNativeMpv.self is any RecyclableView.Type
   }
+  
+  public static func createMpvVideoView() -> bridge.std__shared_ptr_HybridMpvVideoViewSpec_ {
+    let hybridObject = HybridMpvVideoView()
+    return { () -> bridge.std__shared_ptr_HybridMpvVideoViewSpec_ in
+      let __cxxWrapped = hybridObject.getCxxWrapper()
+      return __cxxWrapped.getCxxPart()
+    }()
+  }
+  
+  public static func isMpvVideoViewRecyclable() -> Bool {
+    return HybridMpvVideoView.self is any RecyclableView.Type
+  }
 }

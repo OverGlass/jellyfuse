@@ -8,12 +8,29 @@
 #include "NativeMpv-Swift-Cxx-Bridge.hpp"
 
 // Include C++ implementation defined types
+#include "HybridMpvVideoViewSpecSwift.hpp"
 #include "HybridNativeMpvSpecSwift.hpp"
 #include "NativeMpv-Swift-Cxx-Umbrella.hpp"
 #include <NitroModules/NitroDefines.hpp>
 
 namespace margelo::nitro::nativempv::bridge::swift {
 
+  // pragma MARK: std::shared_ptr<HybridMpvVideoViewSpec>
+  std::shared_ptr<HybridMpvVideoViewSpec> create_std__shared_ptr_HybridMpvVideoViewSpec_(void* NON_NULL swiftUnsafePointer) noexcept {
+    NativeMpv::HybridMpvVideoViewSpec_cxx swiftPart = NativeMpv::HybridMpvVideoViewSpec_cxx::fromUnsafe(swiftUnsafePointer);
+    return std::make_shared<margelo::nitro::nativempv::HybridMpvVideoViewSpecSwift>(swiftPart);
+  }
+  void* NON_NULL get_std__shared_ptr_HybridMpvVideoViewSpec_(std__shared_ptr_HybridMpvVideoViewSpec_ cppType) {
+    std::shared_ptr<margelo::nitro::nativempv::HybridMpvVideoViewSpecSwift> swiftWrapper = std::dynamic_pointer_cast<margelo::nitro::nativempv::HybridMpvVideoViewSpecSwift>(cppType);
+    #ifdef NITRO_DEBUG
+    if (swiftWrapper == nullptr) [[unlikely]] {
+      throw std::runtime_error("Class \"HybridMpvVideoViewSpec\" is not implemented in Swift!");
+    }
+    #endif
+    NativeMpv::HybridMpvVideoViewSpec_cxx& swiftPart = swiftWrapper->getSwiftPart();
+    return swiftPart.toUnsafe();
+  }
+  
   // pragma MARK: std::function<void()>
   Func_void create_Func_void(void* NON_NULL swiftClosureWrapper) noexcept {
     auto swiftClosure = NativeMpv::Func_void::fromUnsafe(swiftClosureWrapper);

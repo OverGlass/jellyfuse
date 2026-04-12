@@ -33,7 +33,32 @@ import NitroModules
 /// `SWIFT_INCLUDE_PATHS`. The headers live in the vendored
 /// `vendor/ios/mpvkit-{device,simulator}/include/mpv/`.
 public final class HybridNativeMpv: HybridNativeMpvSpec {
+    // MARK: Static instance registry
+
+    /// Registry used by `MpvVideoView` to look up a player by ID.
+    private static var instances: [String: HybridNativeMpv] = [:]
+
+    static func instance(for id: String) -> HybridNativeMpv? {
+        return instances[id]
+    }
+
     // MARK: Stored state
+
+    public var instanceId: String
+
+    /// Exposes the raw mpv handle for the render context (used by MpvVideoView).
+    var mpvHandle: OpaquePointer? { return mpv }
+
+    /// Registered render views — must detach before mpv handle is destroyed.
+    private var attachedViews: [MpvGLView] = []
+
+    func registerView(_ view: MpvGLView) {
+        attachedViews.append(view)
+    }
+
+    func unregisterView(_ view: MpvGLView) {
+        attachedViews.removeAll { $0 === view }
+    }
 
     private var mpv: OpaquePointer?
     private var eventThread: Thread?
@@ -59,12 +84,15 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
     // MARK: Initialization
 
     public required override init() {
+        self.instanceId = UUID().uuidString
         super.init()
         self.mpv = createMpvHandle()
+        HybridNativeMpv.instances[instanceId] = self
     }
 
     deinit {
         tearDownMpv()
+        HybridNativeMpv.instances.removeValue(forKey: instanceId)
     }
 
     // MARK: Lifecycle (protocol)
@@ -231,6 +259,9 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         // - vid=no until phase 3b plugs in a render context; otherwise
         //   libmpv will try to open a window on its own.
         _ = mpv_set_option_string(mpv, "hwdec", "videotoolbox-copy")
+        // vo=libmpv — required for mpv_render_context (Phase 3b).
+        // vid=no initially — MpvVideoView sets vid=auto on attach.
+        _ = mpv_set_option_string(mpv, "vo", "libmpv")
         _ = mpv_set_option_string(mpv, "vid", "no")
         _ = mpv_set_option_string(mpv, "audio-device", "auto")
         _ = mpv_set_option_string(mpv, "cache", "yes")
@@ -265,6 +296,13 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
     private func tearDownMpv() {
         if isShuttingDown { return }
         isShuttingDown = true
+        HybridNativeMpv.instances.removeValue(forKey: instanceId)
+        // Detach all render views BEFORE destroying the mpv handle.
+        // mpv docs: "mpv_render_context_free() should be called before
+        // the mpv core is destroyed."
+        let views = attachedViews
+        attachedViews.removeAll()
+        for view in views { view.detach() }
         progressSubs.removeAll()
         stateSubs.removeAll()
         endedSubs.removeAll()

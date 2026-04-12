@@ -10,24 +10,26 @@ export type {
   NativeMpv,
 } from "./NativeMpv.nitro";
 
+export { MpvVideoView } from "./MpvVideoView";
+
+// Re-export `callback` so consumers don't need a direct nitro import
+export { callback } from "react-native-nitro-modules";
+
 /**
  * Create a fresh `NativeMpv` hybrid object instance. One instance =
  * one player session. Always `release()` before unmount to tear
  * down the `mpv_handle` and detach observers.
  *
- * Usage (audio-only — phase 3a):
- *
- * ```ts
+ * Usage:
+ * ```tsx
  * const mpv = createNativeMpv();
- * const sub = mpv.addProgressListener((pos, dur) => console.log(pos, dur));
- * mpv.load("https://example.test/audio.m4a", {});
- * // ...
- * sub.remove();
- * mpv.release();
- * ```
+ * mpv.load("https://example.test/video.mp4", {});
  *
- * Phase 3b adds a Fabric `<MpvView>` that owns one of these
- * instances internally and exposes it via a ref for controls.
+ * <MpvVideoView
+ *   style={{ width: '100%', aspectRatio: 16/9 }}
+ *   hybridRef={callback((ref) => ref?.attachPlayer(mpv.instanceId))}
+ * />
+ * ```
  */
 export function createNativeMpv(): NativeMpvSpec {
   return NitroModules.createHybridObject<NativeMpvSpec>("NativeMpv");

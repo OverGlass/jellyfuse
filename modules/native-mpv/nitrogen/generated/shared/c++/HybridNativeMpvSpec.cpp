@@ -14,6 +14,7 @@ namespace margelo::nitro::nativempv {
     HybridObject::loadHybridMethods();
     // load custom methods/properties
     registerHybrids(this, [](Prototype& prototype) {
+      prototype.registerHybridGetter("instanceId", &HybridNativeMpvSpec::getInstanceId);
       prototype.registerHybridMethod("load", &HybridNativeMpvSpec::load);
       prototype.registerHybridMethod("release", &HybridNativeMpvSpec::release);
       prototype.registerHybridMethod("play", &HybridNativeMpvSpec::play);

@@ -75,14 +75,7 @@ Pod::Spec.new do |s|
     # s.xcconfig below (not pod_target_xcconfig) so they propagate
     # to the consuming app target where the actual linking happens.
     "GCC_PREPROCESSOR_DEFINITIONS" => "$(inherited) FOLLY_NO_CONFIG FOLLY_CFG_NO_COROUTINES",
-    # -fno-modules disables Clang's modular include system for the
-    # .cpp files in this pod. Xcode 26's objcxx interop compiles C++
-    # in a modular context where POSIX types (time_t, tm, nanosleep)
-    # aren't transitively exported from the C++ STL module — an
-    # Apple SDK bug. Disabling modules for C++ falls back to textual
-    # includes where the transitive chain works normally. Swift
-    # modules are unaffected (they use a separate import system).
-    "OTHER_CPLUSPLUSFLAGS"         => "$(inherited) -fno-modules -DFOLLY_NO_CONFIG -DFOLLY_MOBILE=1 -DFOLLY_USE_LIBCPP=1",
+    "OTHER_CPLUSPLUSFLAGS"         => "$(inherited) -DFOLLY_NO_CONFIG -DFOLLY_MOBILE=1 -DFOLLY_USE_LIBCPP=1",
   }
 
   # System frameworks libmpv + ffmpeg + deps pull in transitively.
@@ -132,20 +125,13 @@ Pod::Spec.new do |s|
 
   install_modules_dependencies(s)
 
-  # ── Xcode 26 workaround ─────────────────────────────────────────────
-  # Nitrogen's autolinking + install_modules_dependencies both merge
-  # into pod_target_xcconfig and may overwrite our earlier settings.
-  # Apply the Xcode 26 fix AFTER all merges so it sticks.
-  #
-  # The C++ STL module on iOS SDK 26.2 doesn't re-export POSIX types
-  # (time_t, tm, nanosleep) under the objcxx interop context.
-  # Disabling Clang modules for this pod's C++ files falls back to
-  # textual includes where the transitive chain works normally.
-  # Swift modules are a separate system and stay unaffected.
+  # ── Objective-C++ for view support ──────────────────────────────────
+  # The Nitro-generated NativeMpv-Swift-Cxx-Bridge.cpp includes the
+  # auto-generated NativeMpv-Swift.h which references UIView (from
+  # HybridMpvVideoView.view). UIView is an Objective-C type — pure
+  # C++ can't parse UIKit headers. Compiling all .cpp as ObjC++ lets
+  # the bridge resolve UIKit types correctly.
   xcconfig = s.attributes_hash["pod_target_xcconfig"] || {}
-  # Disable Clang modules entirely for this pod. All generated files
-  # use #include / #import (not @import), so modules aren't needed.
-  # Swift has its own module system that's unaffected.
-  xcconfig["CLANG_ENABLE_MODULES"] = "NO"
+  xcconfig["GCC_INPUT_FILETYPE"] = "sourcecode.cpp.objcpp"
   s.pod_target_xcconfig = xcconfig
 end
