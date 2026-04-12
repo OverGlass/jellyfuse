@@ -78,7 +78,7 @@ else
   for URL in "${XCFRAMEWORKS[@]}"; do
     NAME="$(basename "${URL}" .zip)"
     echo "  • ${NAME}"
-    curl -fsSL -o "${TMP}/${NAME}.zip" "${URL}"
+    curl -fsSL --retry 3 --retry-delay 2 -o "${TMP}/${NAME}.zip" "${URL}"
     unzip -qo "${TMP}/${NAME}.zip" -d "${TMP}"
     rm "${TMP}/${NAME}.zip"
     FW_NAME="${NAME%.xcframework}"

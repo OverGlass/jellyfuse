@@ -9,7 +9,10 @@
   },
   "autolinking": {
     "NativeMpv": {
-      "swift": "HybridNativeMpv"
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridNativeMpv"
+      }
     }
   },
   "ignorePaths": ["node_modules", "vendor"]

@@ -17,11 +17,6 @@
 import Foundation
 import NitroModules
 
-// MPVKit exports the libmpv C headers under the `Libmpv` umbrella.
-// The module map lives at vendor/ios/mpvkit-*/include — the
-// podspec's HEADER_SEARCH_PATHS wires it up.
-import Libmpv
-
 // MARK: - HybridNativeMpv
 
 /// `NativeMpv` hybrid object — one instance per player session.
@@ -31,6 +26,12 @@ import Libmpv
 /// `bun run nitrogen` in this package to regenerate it after spec
 /// edits; the regenerated files land under
 /// `modules/native-mpv/nitrogen/generated/ios`.
+///
+/// libmpv C functions (`mpv_create`, `mpv_command`, etc.) are
+/// imported as bare C symbols via the podspec's `HEADER_SEARCH_PATHS`
+/// pointing at the MPVKit include dir. A bridging header or
+/// modulemap will be wired by a follow-up commit once we confirm
+/// the pod links cleanly in an EAS build.
 public final class HybridNativeMpv: HybridNativeMpvSpec {
     // MARK: Stored state
 
