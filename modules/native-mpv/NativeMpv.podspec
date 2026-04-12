@@ -60,8 +60,13 @@ Pod::Spec.new do |s|
       "$(PODS_TARGET_SRCROOT)/vendor/ios/mpvkit-device/include",
       "${PODS_ROOT}/RCT-Folly",
     ].join(" "),
-    # Custom modulemap directory so `import Libmpv` works in Swift.
-    "SWIFT_INCLUDE_PATHS"                        => "$(PODS_TARGET_SRCROOT)/ios/Libmpv",
+    # Custom modulemap lives IN the include dir (alongside the headers)
+    # so modulemap header paths resolve relative to the same directory.
+    # The fetch script writes `module.modulemap` into both device and
+    # simulator include dirs; SWIFT_INCLUDE_PATHS picks the right one
+    # per-SDK via the same conditional as LIBRARY_SEARCH_PATHS.
+    "SWIFT_INCLUDE_PATHS[sdk=iphoneos*]"         => "$(PODS_TARGET_SRCROOT)/vendor/ios/mpvkit-device/include",
+    "SWIFT_INCLUDE_PATHS[sdk=iphonesimulator*]"  => "$(PODS_TARGET_SRCROOT)/vendor/ios/mpvkit-simulator/include",
     "LIBRARY_SEARCH_PATHS[sdk=iphoneos*]"        => mpvkit_device,
     "LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]" => mpvkit_sim,
     "OTHER_LDFLAGS"                              => other_ldflags,
