@@ -1,6 +1,7 @@
 import { DarkTheme, ThemeProvider } from "@react-navigation/native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { AuthProvider } from "@/services/auth/state";
 import { QueryProvider } from "@/services/query";
 
@@ -24,17 +25,19 @@ import { QueryProvider } from "@/services/query";
  */
 export default function RootLayout() {
   return (
-    <QueryProvider>
-      <AuthProvider>
-        <ThemeProvider value={DarkTheme}>
-          <StatusBar style="light" />
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="(app)" />
-            <Stack.Screen name="(auth)" />
-            <Stack.Screen name="profile-picker" options={{ presentation: "modal" }} />
-          </Stack>
-        </ThemeProvider>
-      </AuthProvider>
-    </QueryProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <QueryProvider>
+        <AuthProvider>
+          <ThemeProvider value={DarkTheme}>
+            <StatusBar style="light" />
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="(app)" />
+              <Stack.Screen name="(auth)" />
+              <Stack.Screen name="profile-picker" options={{ presentation: "modal" }} />
+            </Stack>
+          </ThemeProvider>
+        </AuthProvider>
+      </QueryProvider>
+    </GestureHandlerRootView>
   );
 }

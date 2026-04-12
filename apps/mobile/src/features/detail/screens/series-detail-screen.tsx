@@ -1,5 +1,6 @@
 import type { MediaItem } from "@jellyfuse/api";
 import { colors, fontSize, layout, spacing } from "@jellyfuse/theme";
+import { router } from "expo-router";
 import { useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
 import Animated, {
@@ -168,6 +169,8 @@ export function SeriesDetailScreen({ itemId }: Props) {
   const episodes = episodesQuery.data ?? [];
   const hasResume = (series.progress ?? 0) > 0.01;
   const resumeTarget = pickResumeTarget(episodes);
+  const playTarget = resumeTarget ?? episodes[0];
+  const playTargetHref = playTarget ? (`/player/${keyFor(playTarget)}` as const) : undefined;
 
   return (
     <SafeAreaView style={styles.safe} edges={[]}>
@@ -189,7 +192,7 @@ export function SeriesDetailScreen({ itemId }: Props) {
           <DetailActionRow
             hasResume={hasResume}
             onPlay={() => {
-              console.warn(`play series ${itemId}`);
+              if (playTargetHref) router.push(playTargetHref);
             }}
             onDownload={() => {
               console.warn(`download series ${itemId}`);
@@ -238,9 +241,7 @@ export function SeriesDetailScreen({ itemId }: Props) {
               <EpisodeRow
                 key={keyFor(episode)}
                 item={episode}
-                onPress={() => {
-                  console.warn(`play episode ${keyFor(episode)}`);
-                }}
+                onPress={() => router.push(`/player/${keyFor(episode)}`)}
               />
             ))}
           </View>

@@ -133,8 +133,11 @@ final class MpvGLView: UIView {
             return
         }
 
-        // 4. Enable video decoding (Phase 3a had vid=no for audio-only)
+        // 4. Enable video + unpause. mpv was initialized with pause=yes
+        // to prevent freezing while vo=libmpv had no render context.
+        // Now that the context exists, enable video and unpause.
         mpv_set_property_string(handle, "vid", "auto")
+        mpv_set_property_string(handle, "pause", "no")
 
         // 5. Start CADisplayLink
         startDisplayLink()
@@ -266,16 +269,14 @@ final class MpvGLView: UIView {
     }
 
     @objc private func renderFrame() {
-        guard let renderCtx = renderCtx else { return }
-
-        // Always call mpv_render_context_update — this is the
-        // authoritative check for whether mpv has a new frame.
-        // The needsRender flag is just a hint to avoid the overhead
-        // of this call on every display link tick when idle.
-        let flags = mpv_render_context_update(renderCtx)
-        let hasFrame = flags & UInt64(MPV_RENDER_UPDATE_FRAME.rawValue) != 0
-        guard hasFrame || needsRender else { return }
+        // Gate ALL work behind needsRender — set by mpv's update
+        // callback only when a new frame is ready. For 24fps video
+        // this skips ~96 of 120 display link ticks (nearly free).
+        guard needsRender, let renderCtx = renderCtx else { return }
         needsRender = false
+
+        let flags = mpv_render_context_update(renderCtx)
+        guard flags & UInt64(MPV_RENDER_UPDATE_FRAME.rawValue) != 0 else { return }
 
         guard let ctx = eaglContext else { return }
         EAGLContext.setCurrent(ctx)
@@ -316,38 +317,48 @@ final class MpvGLView: UIView {
     // MARK: - Private: Teardown
 
     private func tearDown() {
-        // Stop display link
-        displayLink?.invalidate()
-        displayLink = nil
+        // All GL + render context cleanup must happen on the main
+        // thread (same thread that created the EAGLContext). Nitro
+        // may call detach/deinit from the JS thread → dispatch.
+        let work = { [self] in
+            // Stop display link
+            displayLink?.invalidate()
+            displayLink = nil
 
-        // Free render context BEFORE destroying GL resources
-        if let ctx = renderCtx {
-            mpv_render_context_set_update_callback(ctx, nil, nil)
-            mpv_render_context_free(ctx)
-            renderCtx = nil
+            // Free render context BEFORE destroying GL resources
+            if let ctx = renderCtx {
+                mpv_render_context_set_update_callback(ctx, nil, nil)
+                mpv_render_context_free(ctx)
+                renderCtx = nil
+            }
+
+            // Unregister from the player
+            attachedPlayer?.unregisterView(self)
+            attachedPlayer = nil
+            mpvHandle = nil
+
+            // Clean up GL
+            if let ctx = eaglContext {
+                EAGLContext.setCurrent(ctx)
+                if colorRenderbuffer != 0 {
+                    glDeleteRenderbuffers(1, &colorRenderbuffer)
+                    colorRenderbuffer = 0
+                }
+                if framebuffer != 0 {
+                    glDeleteFramebuffers(1, &framebuffer)
+                    framebuffer = 0
+                }
+                EAGLContext.setCurrent(nil)
+            }
+            eaglContext = nil
+            needsRender = false
         }
 
-        // Unregister from the player (no-op if already unregistered
-        // or if the player triggered this detach).
-        attachedPlayer?.unregisterView(self)
-        attachedPlayer = nil
-        mpvHandle = nil
-
-        // Clean up GL
-        if let ctx = eaglContext {
-            EAGLContext.setCurrent(ctx)
-            if colorRenderbuffer != 0 {
-                glDeleteRenderbuffers(1, &colorRenderbuffer)
-                colorRenderbuffer = 0
-            }
-            if framebuffer != 0 {
-                glDeleteFramebuffers(1, &framebuffer)
-                framebuffer = 0
-            }
-            EAGLContext.setCurrent(nil)
+        if Thread.isMainThread {
+            work()
+        } else {
+            DispatchQueue.main.sync { work() }
         }
-        eaglContext = nil
-        needsRender = false
     }
 
     deinit {
@@ -372,20 +383,16 @@ public final class HybridMpvVideoView: HybridMpvVideoViewSpec {
 
     public func attachPlayer(instanceId: String) throws {
         guard let player = HybridNativeMpv.instance(for: instanceId) else {
-            throw NSError(
-                domain: "jellyfuse.native-mpv",
-                code: 2,
-                userInfo: [NSLocalizedDescriptionKey: "No player with instanceId \(instanceId)"]
-            )
+            throw RuntimeError("No player with instanceId \(instanceId)")
         }
         guard let handle = player.mpvHandle else {
-            throw NSError(
-                domain: "jellyfuse.native-mpv",
-                code: 3,
-                userInfo: [NSLocalizedDescriptionKey: "Player has been released"]
-            )
+            throw RuntimeError("Player has been released")
         }
-        glView.attach(player: player, mpvHandle: handle)
+        // Nitro calls hybridRef from the JS thread, but GL layer
+        // setup (renderbufferStorage:fromDrawable:) must run on main.
+        DispatchQueue.main.async { [weak self] in
+            self?.glView.attach(player: player, mpvHandle: handle)
+        }
     }
 
     public func detachPlayer() throws {

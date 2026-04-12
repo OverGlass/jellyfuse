@@ -20,7 +20,14 @@ export default function AppLayout() {
   if (status !== "authenticated") {
     return <Redirect href="/" />;
   }
-  return <Stack screenOptions={{ headerShown: false }} />;
+  return (
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen
+        name="player/[jellyfinId]"
+        options={{ presentation: "fullScreenModal", animation: "fade" }}
+      />
+    </Stack>
+  );
 }
 
 function SplashPlaceholder() {
