@@ -13,7 +13,8 @@
     "lint": "expo lint",
     "prebuild:ios:dry": "expo prebuild --platform ios --no-install --clean=false || true",
     "prebuild:android:dry": "expo prebuild --platform android --no-install --clean=false || true",
-    "prebuild:catalyst:dry": "echo '(catalyst prebuild wired in Phase 8)'"
+    "prebuild:catalyst:dry": "echo '(catalyst prebuild wired in Phase 8)'",
+    "eas-build-post-install": "./eas-build-post-install.sh"
   },
   "dependencies": {
     "@jellyfuse/api": "workspace:*",
