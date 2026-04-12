@@ -140,6 +140,22 @@ else
     fi
   done
 
+  # ── write a Swift-compatible modulemap for `import Libmpv` ────────────
+  # Placed in the include dir so header paths resolve relative to the
+  # modulemap file (Xcode's rule). SWIFT_INCLUDE_PATHS in the podspec
+  # points at this directory.
+  for DIR in "${CACHE_DEVICE}/include" "${CACHE_SIM}/include"; do
+    cat > "${DIR}/module.modulemap" <<'MODMAP'
+module Libmpv [system] {
+    header "mpv/client.h"
+    header "mpv/render.h"
+    header "mpv/render_gl.h"
+    header "mpv/stream_cb.h"
+    export *
+}
+MODMAP
+  done
+
   touch "${CACHE_DEVICE}/.complete" "${CACHE_SIM}/.complete"
   echo "Cached MPVKit ${MPVKIT_VERSION} at ${CACHE_ROOT}"
 fi
