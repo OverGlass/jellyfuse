@@ -1,26 +1,21 @@
-// Full-screen player controls overlay. Auto-hides after 3s of
-// inactivity while playing. Tap anywhere to toggle. Uses safe area
-// insets so controls avoid the notch / Dynamic Island / home indicator.
+// Full-screen player controls overlay. Auto-hides after 3s while
+// playing. Tap anywhere to toggle. Double-tap left/right to seek ±10s.
+// Uses safe area insets so controls avoid the notch / Dynamic Island.
 // Pure component — props in / callbacks out.
 //
-// Visibility is DERIVED, not synced:
-//   showControls = !userDismissed || !isPlaying
-// When paused → always visible. No useEffect for state derivation.
-//
-// Uses <Activity> to keep the overlay mounted when hidden (preserves
-// timer refs, gesture state, layout). Opacity animated manually via
-// useAnimatedStyle (Reanimated entering/exiting only fires on
-// mount/unmount which Activity intentionally avoids).
+// Tap detection uses plain Pressable (not RNGH) so it doesn't block
+// the overlay buttons. Double-tap is detected via timestamp tracking.
 
 import type { AudioStream, Chapter, SubtitleTrack } from "@jellyfuse/models";
 import { colors, fontSize, fontWeight, opacity, radius, spacing } from "@jellyfuse/theme";
 import { Activity, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { PlayerScrubber } from "./player-scrubber";
 
 const AUTO_HIDE_MS = 3_000;
+const DOUBLE_TAP_MS = 300;
 
 interface Props {
   title: string;
@@ -55,10 +50,11 @@ export function ControlsOverlay({
   onDismiss,
 }: Props) {
   const insets = useSafeAreaInsets();
+  const { width: screenWidth } = useWindowDimensions();
   const [userDismissed, setUserDismissed] = useState(false);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastTapRef = useRef<{ time: number; x: number }>({ time: 0, x: 0 });
 
-  // Derived — no useEffect needed. Paused = always show.
   const showControls = !userDismissed || !isPlaying;
 
   function scheduleHide() {
@@ -66,7 +62,7 @@ export function ControlsOverlay({
     hideTimerRef.current = setTimeout(() => setUserDismissed(true), AUTO_HIDE_MS);
   }
 
-  function handleTap() {
+  function handleToggle() {
     if (showControls) {
       setUserDismissed(true);
       if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
@@ -80,10 +76,46 @@ export function ControlsOverlay({
     if (isPlaying) scheduleHide();
   }
 
+  // Double-tap detection via timestamp. On the background Pressable,
+  // check if this tap is within DOUBLE_TAP_MS of the last one.
+  // If so, seek based on which half of the screen was tapped.
+  // If not, toggle controls after a short delay (to wait for
+  // a potential second tap).
+  const pendingToggleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function handleBackgroundPress(locationX: number) {
+    const now = Date.now();
+    const prev = lastTapRef.current;
+
+    if (now - prev.time < DOUBLE_TAP_MS) {
+      // Double tap — cancel pending toggle and seek
+      if (pendingToggleRef.current) {
+        clearTimeout(pendingToggleRef.current);
+        pendingToggleRef.current = null;
+      }
+      lastTapRef.current = { time: 0, x: 0 };
+      if (locationX < screenWidth / 2) {
+        onSkipBackward();
+      } else {
+        onSkipForward();
+      }
+      handleInteraction();
+    } else {
+      // First tap — wait for potential second tap before toggling
+      lastTapRef.current = { time: now, x: locationX };
+      pendingToggleRef.current = setTimeout(() => {
+        pendingToggleRef.current = null;
+        handleToggle();
+      }, DOUBLE_TAP_MS);
+    }
+  }
+
   return (
-    <Pressable style={StyleSheet.absoluteFill} onPress={handleTap}>
+    <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+      {/* ── Controls overlay ───────────────────────────────────────── */}
       <Activity mode={showControls ? "visible" : "hidden"}>
         <Animated.View
+          pointerEvents={showControls ? "box-none" : "none"}
           style={[
             styles.overlay,
             {
@@ -91,16 +123,20 @@ export function ControlsOverlay({
               paddingBottom: Math.max(insets.bottom, spacing.md),
               paddingLeft: Math.max(insets.left, spacing.lg),
               paddingRight: Math.max(insets.right, spacing.lg),
-              // Reanimated 4 CSS transitions — no shared values needed
               opacity: showControls ? 1 : 0,
-              pointerEvents: showControls ? "auto" : "none",
               transitionProperty: "opacity",
               transitionDuration: 200,
             },
           ]}
         >
+          {/* Background tap target — behind buttons */}
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={(e) => handleBackgroundPress(e.nativeEvent.locationX)}
+          />
+
           {/* ── Top row: back + title ──────────────────────────────── */}
-          <View style={styles.topRow}>
+          <View style={styles.topRow} pointerEvents="box-none">
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Close player"
@@ -110,7 +146,7 @@ export function ControlsOverlay({
             >
               <Text style={styles.iconText}>{"‹"}</Text>
             </Pressable>
-            <View style={styles.titleBlock}>
+            <View style={styles.titleBlock} pointerEvents="none">
               {subtitle ? (
                 <Text style={styles.subtitle} numberOfLines={1}>
                   {subtitle}
@@ -123,7 +159,7 @@ export function ControlsOverlay({
           </View>
 
           {/* ── Center: play/pause + skip ──────────────────────────── */}
-          <View style={styles.centerRow}>
+          <View style={styles.centerRow} pointerEvents="box-none">
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Skip back 10 seconds"
@@ -165,7 +201,7 @@ export function ControlsOverlay({
           </View>
 
           {/* ── Bottom: scrubber + times ───────────────────────────── */}
-          <View style={styles.bottomRow}>
+          <View style={styles.bottomRow} pointerEvents="box-none">
             <PlayerScrubber
               position={position}
               duration={duration}
@@ -178,7 +214,15 @@ export function ControlsOverlay({
           </View>
         </Animated.View>
       </Activity>
-    </Pressable>
+
+      {/* ── Tap target when controls hidden ────────────────────────── */}
+      {!showControls ? (
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={(e) => handleBackgroundPress(e.nativeEvent.locationX)}
+        />
+      ) : null}
+    </View>
   );
 }
 
