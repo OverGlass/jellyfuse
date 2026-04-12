@@ -71,9 +71,9 @@ Pod::Spec.new do |s|
     "OTHER_CFLAGS" => "$(inherited) -isystem $(PODS_TARGET_SRCROOT)/vendor/ios/mpvkit-device/include",
     "SWIFT_INCLUDE_PATHS[sdk=iphoneos*]"         => "$(inherited) $(PODS_TARGET_SRCROOT)/vendor/ios/mpvkit-device/include",
     "SWIFT_INCLUDE_PATHS[sdk=iphonesimulator*]"  => "$(inherited) $(PODS_TARGET_SRCROOT)/vendor/ios/mpvkit-simulator/include",
-    "LIBRARY_SEARCH_PATHS[sdk=iphoneos*]"        => "$(inherited) " + mpvkit_device,
-    "LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]" => "$(inherited) " + mpvkit_sim,
-    "OTHER_LDFLAGS"                              => "$(inherited) " + other_ldflags,
+    # LIBRARY_SEARCH_PATHS + OTHER_LDFLAGS for MPVKit are set via
+    # s.xcconfig below (not pod_target_xcconfig) so they propagate
+    # to the consuming app target where the actual linking happens.
     "GCC_PREPROCESSOR_DEFINITIONS" => "$(inherited) FOLLY_NO_CONFIG FOLLY_CFG_NO_COROUTINES",
     # -fno-modules disables Clang's modular include system for the
     # .cpp files in this pod. Xcode 26's objcxx interop compiles C++
@@ -104,6 +104,24 @@ Pod::Spec.new do |s|
     "UIKit",
   ]
   s.libraries = ["iconv", "c++", "z", "bz2", "xml2"]
+
+  # ── Propagate MPVKit linker flags to the consuming app ───────────────
+  # s.xcconfig (aka user_target_xcconfig) applies to targets that
+  # DEPEND on this pod — i.e. the main Jellyfuse app binary. Without
+  # this, the app's linker can't find -lmpv -lavcodec etc. because
+  # pod_target_xcconfig only affects OUR pod's intermediate .a build,
+  # not the final link step.
+  # s.xcconfig uses paths relative to PODS_ROOT (the Pods dir in the
+  # app's ios/ directory). PODS_TARGET_SRCROOT is only defined in
+  # pod_target_xcconfig and is blank in the consumer. We derive the
+  # path from PODS_ROOT instead.
+  mpvkit_device_consumer = "#{mpvkit_device.sub('$(PODS_TARGET_SRCROOT)', '$(PODS_ROOT)/../../../../modules/native-mpv')}"
+  mpvkit_sim_consumer    = "#{mpvkit_sim.sub('$(PODS_TARGET_SRCROOT)', '$(PODS_ROOT)/../../../../modules/native-mpv')}"
+  s.xcconfig = {
+    "LIBRARY_SEARCH_PATHS[sdk=iphoneos*]"        => "$(inherited) " + mpvkit_device_consumer,
+    "LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]" => "$(inherited) " + mpvkit_sim_consumer,
+    "OTHER_LDFLAGS"                              => "$(inherited) " + other_ldflags,
+  }
 
   # RN/Nitro plumbing.
   s.dependency "React-jsi"
