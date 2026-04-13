@@ -141,16 +141,39 @@ export const radius = {
 export type RadiusToken = keyof typeof radius;
 
 /**
- * Opacity values for interactive state. Use `pressed` in `Pressable`
- * style callbacks, `disabled` for the dimmed state of inactive
- * actions, `overlay` for dimming content behind modals.
+ * Opacity values for interactive state + alpha composition. Use
+ * `pressed` in `Pressable` style callbacks, `disabled` for inactive
+ * states, `overlay` / `scrim` for dimming content behind modals,
+ * and the `alphaN` scale for glass-morphism over video or images
+ * (compose with `withAlpha(colors.white, opacity.alpha15)`).
  */
 export const opacity = {
   pressed: 0.75,
   disabled: 0.5,
   overlay: 0.4,
+  // Alpha composition scale — for glass surfaces, scrims, translucent
+  // chrome over dynamic content (player controls over video).
+  alpha10: 0.1,
+  alpha15: 0.15,
+  alpha20: 0.2,
+  alpha45: 0.45,
+  alpha50: 0.5,
 } as const;
 export type OpacityToken = keyof typeof opacity;
+
+/**
+ * Compose a color with an alpha value. Works for any CSS-style
+ * hex color (`#rrggbb`) and produces an `rgba(…)` string React
+ * Native understands. Used to build glass-morphism backgrounds
+ * from theme neutrals + an opacity token.
+ */
+export function withAlpha(hex: string, alpha: number): string {
+  const h = hex.replace("#", "");
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
 
 /**
  * Animation durations in ms. Pair with easing where RN lets us; use
@@ -228,6 +251,12 @@ export const colors = {
   warning: "#d19a66",
   /** Destructive / error (OneDark red — keyword/tag color). */
   danger: "#e06c75",
+
+  // Neutrals — use with `withAlpha` for glass / scrim compositions.
+  // Reach for these when a translucent surface must read over
+  // dynamic content (video, images) regardless of the theme.
+  white: "#ffffff",
+  black: "#000000",
 } as const;
 export type ColorToken = keyof typeof colors;
 

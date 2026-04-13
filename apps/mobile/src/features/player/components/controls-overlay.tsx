@@ -7,16 +7,24 @@
 // the overlay buttons. Double-tap is detected via timestamp tracking.
 
 import type { TrickplayData } from "@jellyfuse/api";
-import type { AudioStream, Chapter, SubtitleTrack } from "@jellyfuse/models";
-import { colors, fontSize, fontWeight, opacity, radius, spacing } from "@jellyfuse/theme";
-import { Activity, useRef, useState } from "react";
+import type { Chapter } from "@jellyfuse/models";
+import {
+  colors,
+  fontSize,
+  fontWeight,
+  opacity,
+  radius,
+  spacing,
+  withAlpha,
+} from "@jellyfuse/theme";
+import { Activity, useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { PlayerScrubber } from "./player-scrubber";
 
 const AUTO_HIDE_MS = 3_000;
-const DOUBLE_TAP_MS = 300;
+const DOUBLE_TAP_MS = 250;
 
 interface Props {
   title: string;
@@ -52,10 +60,12 @@ export function ControlsOverlay({
   const insets = useSafeAreaInsets();
   const { width: screenWidth } = useWindowDimensions();
   const [userDismissed, setUserDismissed] = useState(false);
+  const [isScrubbing, setIsScrubbing] = useState(false);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTapRef = useRef<{ time: number; x: number }>({ time: 0, x: 0 });
 
-  const showControls = !userDismissed || !isPlaying;
+  // Derived — paused OR scrubbing = always show.
+  const showControls = !userDismissed || !isPlaying || isScrubbing;
 
   function scheduleHide() {
     if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
@@ -76,11 +86,19 @@ export function ControlsOverlay({
     if (isPlaying) scheduleHide();
   }
 
-  // Double-tap detection via timestamp. On the background Pressable,
-  // check if this tap is within DOUBLE_TAP_MS of the last one.
-  // If so, seek based on which half of the screen was tapped.
-  // If not, toggle controls after a short delay (to wait for
-  // a potential second tap).
+  // Auto-hide: schedule a hide when controls are visible + playing +
+  // NOT scrubbing. Syncing with an external timer system (setTimeout).
+  // Re-runs when isPlaying / isScrubbing change so pause/drag cancel
+  // the timer, play/release schedule a fresh one.
+  useEffect(() => {
+    if (userDismissed || !isPlaying || isScrubbing) return;
+    const id = setTimeout(() => setUserDismissed(true), AUTO_HIDE_MS);
+    return () => clearTimeout(id);
+  }, [isPlaying, userDismissed, isScrubbing]);
+
+  // Double-tap detection via timestamp. First tap waits DOUBLE_TAP_MS
+  // for a potential second tap before toggling controls. If a second
+  // tap arrives, treat as seek (±10s based on screen half).
   const pendingToggleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function handleBackgroundPress(locationX: number) {
@@ -222,6 +240,7 @@ export function ControlsOverlay({
                 onSeek(s);
                 handleInteraction();
               }}
+              onDragStateChange={setIsScrubbing}
             />
           </View>
         </Animated.View>
@@ -240,8 +259,8 @@ export function ControlsOverlay({
 
 const styles = StyleSheet.create({
   overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.45)",
+    ...StyleSheet.absoluteFill,
+    backgroundColor: withAlpha(colors.black, opacity.alpha45),
     justifyContent: "space-between",
   },
   topRow: {
@@ -291,7 +310,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: radius.full,
-    backgroundColor: "rgba(255,255,255,0.1)",
+    backgroundColor: withAlpha(colors.white, opacity.alpha10),
     alignItems: "center",
     justifyContent: "center",
   },
@@ -307,7 +326,7 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: radius.full,
-    backgroundColor: "rgba(255,255,255,0.15)",
+    backgroundColor: withAlpha(colors.white, opacity.alpha15),
     alignItems: "center",
     justifyContent: "center",
   },
