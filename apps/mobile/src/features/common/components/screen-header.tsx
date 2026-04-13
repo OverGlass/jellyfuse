@@ -1,10 +1,10 @@
+import { NerdIcon } from "@/features/common/components/nerd-icon";
+import { useScreenGutters } from "@/services/responsive";
 import { colors, fontSize, fontWeight, opacity, spacing } from "@jellyfuse/theme";
 import { router } from "expo-router";
 import type { ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View, type ViewStyle } from "react-native";
 import type { AnimatedStyle } from "react-native-reanimated";
-import { NerdIcon } from "@/features/common/components/nerd-icon";
-import { useScreenGutters } from "@/services/responsive";
 import { FloatingBlurHeader } from "./floating-blur-header";
 
 /**
@@ -22,9 +22,9 @@ import { FloatingBlurHeader } from "./floating-blur-header";
  *
  * Layout rules:
  * - Row height fixed at `ROW_HEIGHT` so the header is always small.
- * - Back button slot is a fixed-width column on the left so the
- *   title aligns at the same x across screens regardless of whether
- *   back is shown.
+ * - When `showBack` is false the back-button slot collapses entirely
+ *   and the title hugs the screen gutter — no phantom whitespace on
+ *   root screens like home.
  * - Title is bold but only `fontSize.bodyLarge` — not the screen
  *   display title. This is the small/compact header pattern; large
  *   page titles live in-flow inside the scroll content.
@@ -36,11 +36,9 @@ interface Props {
   /** Title rendered next to the (optional) back button. */
   title?: string;
   /**
-   * Whether to render the back button on the left. The button itself
-   * is opt-in so screens that don't have a back target (home, root
-   * tabs) can omit it without breaking the title alignment — the
-   * back-button slot still occupies its width so the title doesn't
-   * jump horizontally between screens.
+   * Whether to render the back button on the left. When `false` the
+   * slot collapses entirely — root screens like home don't carry a
+   * leading gap where the button would otherwise sit.
    */
   showBack?: boolean;
   /** Optional right-side action (avatar, icon button, etc.). */
@@ -82,25 +80,23 @@ export function ScreenHeader({
     <FloatingBlurHeader backdropStyle={backdropStyle} onTotalHeightChange={onTotalHeightChange}>
       <View style={[styles.body, { paddingLeft: gutters.left, paddingRight: gutters.right }]}>
         <View style={styles.row}>
-          <View style={styles.backSlot}>
-            {showBack ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Back"
-                hitSlop={12}
-                onPress={() => {
-                  if (router.canGoBack()) {
-                    router.back();
-                  } else {
-                    router.replace("/");
-                  }
-                }}
-                style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}
-              >
-                <NerdIcon name="chevronLeft" size={18} />
-              </Pressable>
-            ) : null}
-          </View>
+          {showBack ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Back"
+              hitSlop={12}
+              onPress={() => {
+                if (router.canGoBack()) {
+                  router.back();
+                } else {
+                  router.replace("/");
+                }
+              }}
+              style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}
+            >
+              <NerdIcon name="chevronLeft" size={18} />
+            </Pressable>
+          ) : null}
           {title ? (
             <Text style={styles.title} numberOfLines={1}>
               {title}
@@ -119,18 +115,16 @@ export function ScreenHeader({
 const styles = StyleSheet.create({
   body: {
     gap: spacing.sm,
+    // Clearance between the bottom slot (search input) and the
+    // FloatingBlurHeader's fade zone, so the blur stays solid
+    // underneath the input rather than fading out at its edge.
+    paddingBottom: spacing.sm,
   },
   row: {
     alignItems: "center",
     flexDirection: "row",
     gap: spacing.sm,
     height: ROW_HEIGHT,
-  },
-  backSlot: {
-    alignItems: "flex-start",
-    height: ROW_HEIGHT,
-    justifyContent: "center",
-    width: BACK_SLOT_WIDTH,
   },
   backButton: {
     alignItems: "center",
@@ -159,6 +153,6 @@ const styles = StyleSheet.create({
     minHeight: ROW_HEIGHT,
   },
   bottomRow: {
-    paddingBottom: spacing.xs,
+    // Empty wrapper kept for future bottom-slot styling tweaks.
   },
 });
