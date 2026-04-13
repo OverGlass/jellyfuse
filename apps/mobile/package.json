@@ -17,6 +17,7 @@
     "eas-build-post-install": "./eas-build-post-install.sh"
   },
   "dependencies": {
+    "@expo/ui": "~55.0.11",
     "@jellyfuse/api": "workspace:*",
     "@jellyfuse/models": "workspace:*",
     "@jellyfuse/native-mpv": "workspace:*",
