@@ -29,9 +29,9 @@ import { ConnectionBanner } from "@/features/common/components/connection-banner
 import { ScreenHeader } from "@/features/common/components/screen-header";
 import { StatusBarScrim } from "@/features/common/components/status-bar-scrim";
 import { useRestoredScroll } from "@/features/common/hooks/use-restored-scroll";
-import { MediaCard } from "@/features/home/components/media-card";
 import { MediaShelf, type MediaShelfVariant } from "@/features/home/components/media-shelf";
 import { SearchInput } from "@/features/search/components/search-input";
+import { SearchResultRow } from "@/features/search/components/search-result-row";
 import { useAuth } from "@/services/auth/state";
 import { useConnectionStatus } from "@/services/connection/monitor";
 import {
@@ -42,10 +42,10 @@ import {
   useRecentlyAdded,
 } from "@/services/query";
 import { useSearchBlended } from "@/services/query/hooks/use-search-blended";
-import { useBreakpoint, useScreenGutters } from "@/services/responsive";
+import { useScreenGutters } from "@/services/responsive";
 
 const AnimatedFlashList = Animated.createAnimatedComponent(FlashList<HomeShelf>);
-const AnimatedSearchList = Animated.createAnimatedComponent(FlashList<MediaItem>);
+const AnimatedSearchList = Animated.createAnimatedComponent(FlashList<SearchRow>);
 
 /**
  * Home screen. Real Jellyfin shelves wired through the
@@ -89,7 +89,6 @@ export function HomeScreen() {
   useKeepAwake();
 
   const { activeUser, signOutAll } = useAuth();
-  const { values } = useBreakpoint();
   const gutters = useScreenGutters();
   const connectionStatus = useConnectionStatus();
   const scrollRestore = useRestoredScroll("/home");
@@ -165,16 +164,13 @@ export function HomeScreen() {
     connectionStatus === "online" &&
     shelves.every((s) => (s.query.data?.length ?? 0) === 0);
 
-  // Combine library + requestable into one flat grid (matches Rust
-  // `home.rs:307-329` which renders search results as a flex-wrap
-  // grid of `render_card_sized` calls — no library/request section
-  // headers, just one combined list ordered library-first).
-  const searchItems: MediaItem[] =
-    isSearching && search.data
-      ? [...search.data.libraryItems, ...search.data.requestableItems]
-      : [];
-  const searchInitialLoading = isSearching && search.isLoading && searchItems.length === 0;
-  const searchNoResults = isSearching && !search.isLoading && searchItems.length === 0;
+  // Search results render as inline rows (poster + title + overview
+  // + Library/Request badge), grouped under section headers — same
+  // as the standalone search screen we briefly had. Library items
+  // come first, then requestables. Empty sections collapse.
+  const searchRows: SearchRow[] = isSearching ? buildSearchRows(search.data) : [];
+  const searchInitialLoading = isSearching && search.isLoading && searchRows.length === 0;
+  const searchNoResults = isSearching && !search.isLoading && searchRows.length === 0;
 
   const greeting = activeUser?.displayName
     ? `Welcome back, ${activeUser.displayName}`
@@ -204,13 +200,11 @@ export function HomeScreen() {
       {isSearching ? (
         <AnimatedSearchList
           key="search"
-          data={searchItems}
-          numColumns={values.shelfGridColumns}
-          keyExtractor={(item, index) => `${rowItemId(item)}-${index}`}
+          data={searchRows}
+          keyExtractor={(row) => row.id}
+          getItemType={(row) => row.kind}
           contentContainerStyle={{
             paddingTop: headerHeight + spacing.md,
-            paddingLeft: gutters.left,
-            paddingRight: gutters.right,
             paddingBottom: spacing.xxl,
           }}
           showsVerticalScrollIndicator={false}
@@ -232,7 +226,12 @@ export function HomeScreen() {
                 </View>
               ) : null}
               {search.jellyseerrError ? (
-                <View style={styles.errorBanner}>
+                <View
+                  style={[
+                    styles.errorBanner,
+                    { marginLeft: gutters.left, marginRight: gutters.right },
+                  ]}
+                >
                   <Text style={styles.errorBannerLabel} numberOfLines={2}>
                     Jellyseerr search failed — only library results are shown.
                   </Text>
@@ -240,17 +239,12 @@ export function HomeScreen() {
               ) : null}
             </View>
           }
-          renderItem={({ item }) => (
-            <View style={styles.cell}>
-              <MediaCard
-                item={item}
-                width={values.mediaCardWidth}
-                posterHeight={values.mediaCardPosterHeight}
-                gap={0}
-                onPress={() => handleItemPress(item)}
-              />
-            </View>
-          )}
+          renderItem={({ item }) => {
+            if (item.kind === "header") {
+              return <SectionHeader title={item.title} />;
+            }
+            return <SearchResultRow item={item.item} onPress={() => handleItemPress(item.item)} />;
+          }}
         />
       ) : (
         <AnimatedFlashList
@@ -347,6 +341,34 @@ interface HomeShelf {
   };
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// Search row flattening + section header
+// ──────────────────────────────────────────────────────────────────────
+
+type SearchRow =
+  | { kind: "header"; id: string; title: string }
+  | { kind: "item"; id: string; item: MediaItem };
+
+function buildSearchRows(
+  data: { libraryItems: MediaItem[]; requestableItems: MediaItem[] } | null,
+): SearchRow[] {
+  if (!data) return [];
+  const rows: SearchRow[] = [];
+  if (data.libraryItems.length > 0) {
+    rows.push({ kind: "header", id: "header:library", title: "In your library" });
+    for (const item of data.libraryItems) {
+      rows.push({ kind: "item", id: `lib:${rowItemId(item)}`, item });
+    }
+  }
+  if (data.requestableItems.length > 0) {
+    rows.push({ kind: "header", id: "header:request", title: "Request via Jellyseerr" });
+    for (const item of data.requestableItems) {
+      rows.push({ kind: "item", id: `req:${rowItemId(item)}`, item });
+    }
+  }
+  return rows;
+}
+
 function rowItemId(item: MediaItem): string {
   switch (item.id.kind) {
     case "jellyfin":
@@ -355,6 +377,18 @@ function rowItemId(item: MediaItem): string {
     case "tmdb":
       return `tmdb-${item.id.tmdbId}`;
   }
+}
+
+interface SectionHeaderProps {
+  title: string;
+}
+
+function SectionHeader({ title }: SectionHeaderProps) {
+  return (
+    <View style={styles.sectionHeader}>
+      <Text style={styles.sectionHeaderLabel}>{title}</Text>
+    </View>
+  );
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -435,9 +469,17 @@ const styles = StyleSheet.create({
     fontSize: fontSize.body,
     fontWeight: fontWeight.bold,
   },
-  cell: {
-    alignItems: "center",
-    paddingBottom: spacing.lg,
+  sectionHeader: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xs,
+  },
+  sectionHeaderLabel: {
+    color: colors.textSecondary,
+    fontSize: fontSize.caption,
+    fontWeight: fontWeight.semibold,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
   },
   centered: {
     alignItems: "center",

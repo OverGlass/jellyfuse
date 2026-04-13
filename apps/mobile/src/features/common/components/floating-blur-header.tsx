@@ -12,9 +12,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
  * native blur backdrop. Ports the Rust `JFSearchBridge.m` pattern
  * (UIVisualEffectView + CAGradientLayer mask) to React Native:
  *
- * - `MaskedView` + `LinearGradient` alpha mask, opaque through 70%
- *   of the container height and fading to transparent at the
- *   bottom, so the blur dissolves smoothly into the scrolling
+ * - `MaskedView` + `LinearGradient` alpha mask, opaque through 85%
+ *   of the container height and fading to transparent over the
+ *   bottom 15%, so the blur dissolves smoothly into the scrolling
  *   content below rather than cutting off hard.
  * - `BlurView tint="dark" intensity={80}` as the masked child.
  * - Safe-area top padding + a 24 dp fade zone padding at the bottom
@@ -79,7 +79,7 @@ export function FloatingBlurHeader({ style, backdropStyle, children, onTotalHeig
           maskElement={
             <LinearGradient
               colors={["black", "black", "transparent"]}
-              locations={[0, 0.7, 1]}
+              locations={[0, 0.85, 1]}
               style={StyleSheet.absoluteFill}
             />
           }
