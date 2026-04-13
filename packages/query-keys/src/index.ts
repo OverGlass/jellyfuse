@@ -39,6 +39,9 @@ export const STALE_TIMES = {
   /** Quality profiles — 30 min (Rust: 1800 s). */
   qualityProfiles: 30 * 60 * 1000,
 
+  /** TMDB TV seasons (incl. mediaInfo status) — 5 min. */
+  tmdbTvSeasons: 5 * 60 * 1000,
+
   /** Search — 30 s (Rust: 30 s). */
   search: 30 * 1000,
 } as const;
@@ -88,7 +91,8 @@ export const queryKeys = {
   trickplayInfo: (itemId: string) => ["playback", "trickplay", itemId] as const,
   downloadProgress: (tmdbId: number) => ["download-progress", tmdbId] as const,
   downloadProgressMap: () => ["download-progress-map"] as const,
-  qualityProfiles: () => ["quality-profiles"] as const,
+  qualityProfiles: (service: "radarr" | "sonarr") => ["quality-profiles", service] as const,
+  tmdbTvSeasons: (tmdbId: number) => ["tmdb-tv-seasons", tmdbId] as const,
   search: (userId: string, query: string) => ["search", userId, query] as const,
 
   // Local downloads (Phase 5) — sourced from the downloader Nitro

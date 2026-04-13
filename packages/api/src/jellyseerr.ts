@@ -1,3 +1,9 @@
+import type {
+  MediaServer,
+  QualityProfile,
+  SeasonAvailability,
+  SeasonInfo,
+} from "@jellyfuse/models";
 import type { FetchLike } from "./system-info";
 
 /**
@@ -112,6 +118,278 @@ function joinPath(baseUrl: string, path: string): string {
   const base = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
   const p = path.startsWith("/") ? path : `/${path}`;
   return `${base}${p}`;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Request flow — quality profiles, TV seasons, create request
+// ──────────────────────────────────────────────────────────────────────
+
+export class JellyseerrRequestError extends Error {
+  readonly status: number;
+  readonly endpoint: string;
+  constructor(endpoint: string, status: number) {
+    super(`Jellyseerr ${endpoint} returned HTTP ${status}`);
+    this.name = "JellyseerrRequestError";
+    this.endpoint = endpoint;
+    this.status = status;
+  }
+}
+
+export type JellyseerrServiceType = "radarr" | "sonarr";
+
+interface RawArrServerEntry {
+  id?: number;
+  name?: string;
+  activeProfileId?: number | null;
+  activeProfileName?: string | null;
+}
+
+interface RawServiceProfile {
+  id?: number;
+  name?: string;
+}
+
+interface RawServiceResponse {
+  server?: { activeProfileId?: number | null } | null;
+  profiles?: RawServiceProfile[];
+}
+
+/**
+ * Fetch the quality profiles available on every configured Radarr or
+ * Sonarr server in Jellyseerr. Mirrors `JellyseerrClient::get_arr_servers`
+ * in `crates/jf-api/src/jellyseerr.rs`:
+ *
+ * 1. Try `GET /api/v1/{type}` to list servers (admin-only). If that
+ *    fails the caller is non-admin — fall back to a single virtual
+ *    server with id `0` so the per-server `service` lookup still works.
+ * 2. For each server id, `GET /api/v1/service/{type}/{serverId}` to
+ *    pull the profiles + the active default profile.
+ * 3. Map the raw shape into our `MediaServer[]`.
+ *
+ * Returns an empty array when Jellyseerr has no servers configured at
+ * all — callers should treat that as "Jellyseerr can't fulfil
+ * requests for this media type" and surface a friendly error.
+ */
+export async function fetchQualityProfiles(
+  args: { baseUrl: string; service: JellyseerrServiceType },
+  fetcher: FetchLike,
+  signal?: AbortSignal,
+): Promise<MediaServer[]> {
+  const serversListUrl = joinPath(args.baseUrl, `/api/v1/${args.service}`);
+  let servers: RawArrServerEntry[] = [];
+  try {
+    const listResponse = await fetcher(serversListUrl, signal ? { signal } : undefined);
+    if (listResponse.ok) {
+      const listJson = await listResponse.json();
+      if (Array.isArray(listJson)) servers = listJson as RawArrServerEntry[];
+    }
+  } catch {
+    // Non-admin users get 403 here — fall through to the default
+    // server lookup below. We never throw on the list endpoint.
+  }
+
+  const serverIds: { id: number; name: string }[] =
+    servers.length > 0
+      ? servers
+          .filter((s): s is RawArrServerEntry & { id: number } => typeof s.id === "number")
+          .map((s) => ({ id: s.id, name: typeof s.name === "string" ? s.name : args.service }))
+      : [{ id: 0, name: args.service }];
+
+  const result: MediaServer[] = [];
+  for (const { id, name } of serverIds) {
+    const serviceUrl = joinPath(args.baseUrl, `/api/v1/service/${args.service}/${id}`);
+    let raw: RawServiceResponse | null = null;
+    try {
+      const response = await fetcher(serviceUrl, signal ? { signal } : undefined);
+      if (response.ok) {
+        const json = await response.json();
+        if (typeof json === "object" && json !== null) raw = json as RawServiceResponse;
+      }
+    } catch {
+      // ignore per-server errors — try the next id
+    }
+
+    const defaultProfileId = raw?.server?.activeProfileId ?? undefined;
+    const profiles: QualityProfile[] = (raw?.profiles ?? [])
+      .filter(
+        (p): p is RawServiceProfile & { id: number; name: string } =>
+          typeof p.id === "number" && typeof p.name === "string",
+      )
+      .map((p) => ({ id: p.id, name: p.name }));
+
+    // Fallback: if the per-server `service` call returned no profiles
+    // but the list call surfaced an active profile name, use that as
+    // a single-entry profile list. Mirrors the Rust fallback.
+    let finalProfiles: QualityProfile[] = profiles;
+    if (finalProfiles.length === 0 && servers.length > 0) {
+      const matching = servers.find((s) => s.id === id);
+      if (
+        matching?.activeProfileId !== undefined &&
+        matching.activeProfileId !== null &&
+        typeof matching.activeProfileName === "string"
+      ) {
+        finalProfiles = [{ id: matching.activeProfileId, name: matching.activeProfileName }];
+      }
+    }
+
+    result.push({
+      id,
+      name,
+      profiles: finalProfiles,
+      defaultProfileId: defaultProfileId === null ? undefined : defaultProfileId,
+    });
+  }
+
+  return result;
+}
+
+interface RawTmdbSeason {
+  seasonNumber?: number;
+  name?: string;
+}
+
+interface RawMediaInfoSeason {
+  seasonNumber?: number;
+  status?: number;
+}
+
+interface RawMediaInfoRequest {
+  status?: number;
+  seasons?: { seasonNumber?: number }[];
+}
+
+interface RawTmdbTvDetail {
+  seasons?: RawTmdbSeason[];
+  mediaInfo?: {
+    seasons?: RawMediaInfoSeason[];
+    requests?: RawMediaInfoRequest[];
+  };
+}
+
+/**
+ * `GET /api/v1/tv/{tmdbId}` — TMDB show detail with the Jellyseerr
+ * `mediaInfo` envelope merged in. Returns the per-season availability
+ * info needed by the request modal (mirrors Rust `get_tv_seasons`).
+ *
+ * Status priority for each season:
+ *   1. `mediaInfo.seasons[].status === 5` → `available`
+ *   2. `mediaInfo.seasons[].status` 2/3/4 OR `mediaInfo.requests[].seasons`
+ *      with status 1 (pending) or 2 (approved) → `requested`
+ *   3. otherwise → `missing`
+ *
+ * Specials (season 0) are dropped — Jellyseerr never lets them be
+ * requested via the standard flow.
+ */
+export async function fetchTmdbTvSeasons(
+  args: { baseUrl: string; tmdbId: number },
+  fetcher: FetchLike,
+  signal?: AbortSignal,
+): Promise<SeasonInfo[]> {
+  const url = joinPath(args.baseUrl, `/api/v1/tv/${args.tmdbId}`);
+  const response = await fetcher(url, signal ? { signal } : undefined);
+  if (!response.ok) {
+    throw new JellyseerrRequestError(`/api/v1/tv/${args.tmdbId}`, response.status);
+  }
+  const raw = (await response.json()) as RawTmdbTvDetail;
+
+  const tmdbSeasons = Array.isArray(raw.seasons) ? raw.seasons : [];
+  const mediaSeasons = Array.isArray(raw.mediaInfo?.seasons) ? (raw.mediaInfo?.seasons ?? []) : [];
+  const requests = Array.isArray(raw.mediaInfo?.requests) ? (raw.mediaInfo?.requests ?? []) : [];
+
+  const statusBySeason = new Map<number, number>();
+  for (const ms of mediaSeasons) {
+    if (typeof ms.seasonNumber === "number" && typeof ms.status === "number") {
+      statusBySeason.set(ms.seasonNumber, ms.status);
+    }
+  }
+
+  const requestedSeasons = new Set<number>();
+  for (const req of requests) {
+    const requestStatus = req.status ?? 0;
+    // 1 = pending, 2 = approved
+    if (requestStatus !== 1 && requestStatus !== 2) continue;
+    for (const s of req.seasons ?? []) {
+      if (typeof s.seasonNumber === "number" && s.seasonNumber > 0) {
+        requestedSeasons.add(s.seasonNumber);
+      }
+    }
+  }
+
+  const result: SeasonInfo[] = [];
+  for (const s of tmdbSeasons) {
+    const seasonNumber = s.seasonNumber ?? 0;
+    if (seasonNumber <= 0) continue; // skip specials
+    const name =
+      typeof s.name === "string" && s.name.length > 0 ? s.name : `Season ${seasonNumber}`;
+    const seasonStatus = statusBySeason.get(seasonNumber);
+    let availability: SeasonAvailability;
+    if (seasonStatus === 5) {
+      availability = "available";
+    } else if (seasonStatus === 2 || seasonStatus === 3 || seasonStatus === 4) {
+      availability = "requested";
+    } else if (requestedSeasons.has(seasonNumber)) {
+      availability = "requested";
+    } else {
+      availability = "missing";
+    }
+    result.push({ seasonNumber, name, availability });
+  }
+  return result;
+}
+
+export interface CreateRequestArgs {
+  baseUrl: string;
+  tmdbId: number;
+  mediaType: "movie" | "tv";
+  /** TV only — list of season numbers. Omit / `undefined` = all seasons. */
+  seasons?: number[];
+  /** Optional — Jellyseerr picks the default server when omitted. */
+  serverId?: number;
+  /** Optional — Jellyseerr picks the default profile when omitted. */
+  profileId?: number;
+}
+
+/**
+ * `POST /api/v1/request` — submit a new media request to Jellyseerr.
+ * Mirrors `JellyseerrClient::create_request` in the Rust client.
+ * Throws `JellyseerrRequestError` on any non-2xx; success returns
+ * void (we don't parse the response — the caller invalidates the
+ * requests list query and re-fetches if it needs the new entry).
+ */
+export async function createJellyseerrRequest(
+  args: CreateRequestArgs,
+  fetcher: FetchLike,
+  signal?: AbortSignal,
+): Promise<void> {
+  const url = joinPath(args.baseUrl, "/api/v1/request");
+  const body: Record<string, unknown> = {
+    mediaId: args.tmdbId,
+    mediaType: args.mediaType,
+  };
+  if (args.seasons !== undefined) body["seasons"] = args.seasons;
+  if (args.serverId !== undefined) body["serverId"] = args.serverId;
+  if (args.profileId !== undefined) body["profileId"] = args.profileId;
+
+  const wideFetcher = fetcher as unknown as (
+    input: string,
+    init: {
+      method: string;
+      headers: Record<string, string>;
+      body: string;
+      signal: AbortSignal | undefined;
+    },
+  ) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>;
+
+  const response = await wideFetcher(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new JellyseerrRequestError("/api/v1/request", response.status);
+  }
 }
 
 /**
