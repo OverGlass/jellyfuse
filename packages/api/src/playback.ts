@@ -94,18 +94,20 @@ export interface PlaybackInfoFetchArgs {
 }
 
 /**
- * `POST /Items/{id}/PlaybackInfo` — returns the server's decision on
- * how this item can be played (DirectPlay / DirectStream / Transcode)
- * along with all stream metadata.
+ * `POST /Items/{id}/PlaybackInfo` + `GET /Users/{uid}/Items/{id}` in
+ * parallel — Jellyfin's PlaybackInfo response doesn't include
+ * chapters, so we merge them in from the item details endpoint
+ * (matches Rust `get_playback_info`).
  */
 export async function fetchPlaybackInfo(
   args: PlaybackInfoFetchArgs,
   fetcher: FetchLike,
   signal?: AbortSignal,
 ): Promise<PlaybackInfo> {
-  const url = buildUrl(args.baseUrl, `/Items/${args.itemId}/PlaybackInfo`, {
+  const playbackInfoUrl = buildUrl(args.baseUrl, `/Items/${args.itemId}/PlaybackInfo`, {
     UserId: args.userId,
   });
+  const itemDetailUrl = `${trimSlash(args.baseUrl)}/Users/${args.userId}/Items/${args.itemId}`;
 
   const body = JSON.stringify({
     DeviceProfile: buildDeviceProfile(args.maxBitrate),
@@ -115,22 +117,44 @@ export async function fetchPlaybackInfo(
     AutoOpenLiveStream: true,
   });
 
-  const res = await fetcherWithInit(fetcher, url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Emby-Authorization": `MediaBrowser Token="${args.token}"`,
-    },
-    body,
-    signal,
-  });
+  // Fetch both in parallel — chapters live on the item detail response.
+  const [playbackRes, itemRes] = await Promise.all([
+    fetcherWithInit(fetcher, playbackInfoUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Emby-Authorization": `MediaBrowser Token="${args.token}"`,
+      },
+      body,
+      signal,
+    }),
+    fetcher(itemDetailUrl, { signal }).catch(() => null),
+  ]);
 
-  if (!res.ok) {
-    throw new PlaybackInfoHttpError(args.itemId, res.status);
+  if (!playbackRes.ok) {
+    throw new PlaybackInfoHttpError(args.itemId, playbackRes.status);
   }
 
-  const json = (await res.json()) as Record<string, unknown>;
-  return parsePlaybackInfo(args.itemId, args.baseUrl, json, args.token);
+  const playbackJson = (await playbackRes.json()) as Record<string, unknown>;
+  const info = parsePlaybackInfo(args.itemId, args.baseUrl, playbackJson, args.token);
+
+  // Merge chapters from item details if available
+  if (itemRes && itemRes.ok) {
+    try {
+      const itemJson = (await itemRes.json()) as Record<string, unknown>;
+      const rawChapters = Array.isArray(itemJson["Chapters"])
+        ? (itemJson["Chapters"] as Record<string, unknown>[])
+        : [];
+      info.chapters = rawChapters.map((c) => ({
+        startPositionTicks: Number(c["StartPositionTicks"] ?? 0),
+        name: String(c["Name"] ?? ""),
+      }));
+    } catch {
+      // ignore — chapters are non-critical
+    }
+  }
+
+  return info;
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

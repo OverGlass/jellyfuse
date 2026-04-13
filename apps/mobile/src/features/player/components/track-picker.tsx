@@ -10,7 +10,15 @@
 // landscape lock. Inline full-screen overlay instead.
 
 import type { AudioStream, SubtitleTrack } from "@jellyfuse/models";
-import { colors, fontSize, fontWeight, opacity, radius, spacing } from "@jellyfuse/theme";
+import {
+  colors,
+  fontSize,
+  fontWeight,
+  opacity,
+  radius,
+  spacing,
+  withAlpha,
+} from "@jellyfuse/theme";
 import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -145,7 +153,7 @@ export function TrackPicker({
 const styles = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: withAlpha(colors.black, opacity.alpha50),
   },
   sheet: {
     position: "absolute",

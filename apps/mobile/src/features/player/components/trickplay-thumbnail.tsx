@@ -3,37 +3,26 @@
 // tile math from `trickplayTileFor`.
 //
 // Shows a gray skeleton while the tile sheet loads so there's
-// never a blank flash during drag.
+// never a blank flash during drag. Positioning is done by the
+// parent (`previewAnchor` in PlayerScrubber) — this component
+// just renders the tile at `trickplay.width × trickplay.height`.
 
 import { trickplayTileFor, type TrickplayData } from "@jellyfuse/api";
-import { colors, radius, spacing } from "@jellyfuse/theme";
+import { colors, radius } from "@jellyfuse/theme";
 import { Image } from "expo-image";
 import { StyleSheet, View } from "react-native";
 
 interface Props {
   trickplay: TrickplayData;
   positionSeconds: number;
-  /** Horizontal offset to center the thumbnail on the scrub position. */
-  offsetX: number;
 }
 
-export function TrickplayThumbnail({ trickplay, positionSeconds, offsetX }: Props) {
+export function TrickplayThumbnail({ trickplay, positionSeconds }: Props) {
   const { sheetUrl, cropX, cropY } = trickplayTileFor(trickplay, positionSeconds);
   const { width, height } = trickplay;
 
-  const clampedLeft = Math.max(0, offsetX - width / 2);
-
   return (
-    <View
-      style={[
-        styles.container,
-        {
-          width,
-          height,
-          left: clampedLeft,
-        },
-      ]}
-    >
+    <View style={[styles.container, { width, height }]}>
       {/* Skeleton background — visible while image loads */}
       <View style={styles.skeleton} />
 
@@ -56,9 +45,6 @@ export function TrickplayThumbnail({ trickplay, positionSeconds, offsetX }: Prop
 
 const styles = StyleSheet.create({
   container: {
-    position: "absolute",
-    bottom: "100%",
-    marginBottom: spacing.sm,
     borderRadius: radius.sm,
     overflow: "hidden",
     borderWidth: 1,

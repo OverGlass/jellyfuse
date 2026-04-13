@@ -83,10 +83,7 @@ const directPlayResponse = {
           IsForced: true,
         },
       ],
-      Chapters: [
-        { StartPositionTicks: 0, Name: "Chapter 1" },
-        { StartPositionTicks: 30_000_000_000, Name: "Chapter 2" },
-      ],
+      // Chapters live on the item details endpoint, not PlaybackInfo
     },
   ],
 };
@@ -147,9 +144,27 @@ const transcodeResponse = {
 // Tests
 // ──────────────────────────────────────────────────────────────────────────────
 
+// Mock item details response with chapters (chapters live here, not in PlaybackInfo)
+const itemDetailWithChapters = {
+  Id: "item-abc",
+  Chapters: [
+    { StartPositionTicks: 0, Name: "Chapter 1" },
+    { StartPositionTicks: 30_000_000_000, Name: "Chapter 2" },
+  ],
+};
+
 describe("fetchPlaybackInfo", () => {
-  function fakeFetcher(body: unknown) {
-    return vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => body });
+  /**
+   * Fake fetcher that returns the playback response for POST /PlaybackInfo
+   * and the item detail (with chapters) for GET /Users/.../Items/.
+   */
+  function fakeFetcher(playbackBody: unknown, itemBody: unknown = itemDetailWithChapters) {
+    return vi.fn().mockImplementation((url: string) => {
+      if (url.includes("/PlaybackInfo")) {
+        return Promise.resolve({ ok: true, status: 200, json: async () => playbackBody });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: async () => itemBody });
+    });
   }
 
   it("parses DirectPlay response", async () => {
@@ -214,7 +229,12 @@ describe("fetchPlaybackInfo", () => {
   });
 
   it("throws PlaybackInfoHttpError on non-OK response", async () => {
-    const fetcher = vi.fn().mockResolvedValue({ ok: false, status: 404, json: async () => ({}) });
+    const fetcher = vi.fn().mockImplementation((url: string) => {
+      if (url.includes("/PlaybackInfo")) {
+        return Promise.resolve({ ok: false, status: 404, json: async () => ({}) });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({}) });
+    });
     await expect(fetchPlaybackInfo(baseArgs, fetcher)).rejects.toThrow(PlaybackInfoHttpError);
   });
 
@@ -227,8 +247,10 @@ describe("fetchPlaybackInfo", () => {
     const fetcher = fakeFetcher(directPlayResponse);
     await fetchPlaybackInfo(baseArgs, fetcher);
 
-    expect(fetcher).toHaveBeenCalledTimes(1);
-    const [url, init] = fetcher.mock.calls[0]!;
+    // 2 calls: POST /PlaybackInfo + GET /Users/.../Items/...
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    const playbackCall = fetcher.mock.calls.find((c) => String(c[0]).includes("/PlaybackInfo"))!;
+    const [url, init] = playbackCall;
     expect(url).toContain("/Items/item-abc/PlaybackInfo");
     expect(init.method).toBe("POST");
     const body = JSON.parse(init.body);
