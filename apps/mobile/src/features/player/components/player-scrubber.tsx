@@ -21,7 +21,8 @@ import MaskedView from "@react-native-masked-view/masked-view";
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated, { runOnJS, useAnimatedStyle, useSharedValue } from "react-native-reanimated";
+import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
+import { scheduleOnRN } from "react-native-worklets";
 import { TrickplayThumbnail } from "./trickplay-thumbnail";
 
 // Heights — the container is fixed; only the visual track grows.
@@ -110,20 +111,20 @@ export function PlayerScrubber({
       "worklet";
       const p = Math.max(0, Math.min(1, e.x / trackWidth));
       dragProgress.value = p;
-      runOnJS(setDraggingWithNotify)(true);
-      runOnJS(onDragUpdate)(p);
+      scheduleOnRN(setDraggingWithNotify, true);
+      scheduleOnRN(onDragUpdate, p);
     })
     .onUpdate((e) => {
       "worklet";
       const p = Math.max(0, Math.min(1, e.x / trackWidth));
       dragProgress.value = p;
-      runOnJS(onDragUpdate)(p);
+      scheduleOnRN(onDragUpdate, p);
     })
     .onEnd(() => {
       "worklet";
       const seekTo = dragProgress.value * duration;
-      runOnJS(onSeek)(seekTo);
-      runOnJS(setDraggingWithNotify)(false);
+      scheduleOnRN(onSeek, seekTo);
+      scheduleOnRN(setDraggingWithNotify, false);
     })
     .hitSlop({ top: 40, bottom: 40, left: 10, right: 10 });
 
@@ -132,7 +133,7 @@ export function PlayerScrubber({
     if (trackWidth <= 0 || duration <= 0) return;
     const p = Math.max(0, Math.min(1, e.x / trackWidth));
     const seekTo = p * duration;
-    runOnJS(onSeek)(seekTo);
+    scheduleOnRN(onSeek, seekTo);
   });
 
   const gesture = Gesture.Race(panGesture, tapGesture);

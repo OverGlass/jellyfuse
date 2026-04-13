@@ -3,11 +3,15 @@
 // Uses safe area insets so controls avoid the notch / Dynamic Island.
 // Pure component — props in / callbacks out.
 //
-// Tap detection uses plain Pressable (not RNGH) so it doesn't block
-// the overlay buttons. Double-tap is detected via timestamp tracking.
+// Gesture handling: RNGH all the way down. A GestureDetector on the
+// background handles single/double tap via Gesture.Exclusive, while
+// the overlay buttons use RNGH's Pressable (NOT react-native's). RNGH
+// arbitrates properly between the background gestures and the button
+// Pressables — the child Pressable wins when tapped directly, the
+// background wins when tapped in empty space.
 
 import type { TrickplayData } from "@jellyfuse/api";
-import type { Chapter } from "@jellyfuse/models";
+import type { AudioStream, Chapter, SubtitleTrack } from "@jellyfuse/models";
 import {
   colors,
   fontSize,
@@ -18,13 +22,14 @@ import {
   withAlpha,
 } from "@jellyfuse/theme";
 import { Activity, useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { Gesture, GestureDetector, Pressable } from "react-native-gesture-handler";
 import Animated from "react-native-reanimated";
+import { scheduleOnRN } from "react-native-worklets";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { PlayerScrubber } from "./player-scrubber";
 
 const AUTO_HIDE_MS = 3_000;
-const DOUBLE_TAP_MS = 250;
 
 interface Props {
   title: string;
@@ -34,6 +39,8 @@ interface Props {
   duration: number;
   chapters?: Chapter[];
   trickplay?: TrickplayData;
+  audioStreams?: AudioStream[];
+  subtitleTracks?: SubtitleTrack[];
   onPlayPause: () => void;
   onSeek: (seconds: number) => void;
   onSkipForward: () => void;
@@ -62,7 +69,6 @@ export function ControlsOverlay({
   const [userDismissed, setUserDismissed] = useState(false);
   const [isScrubbing, setIsScrubbing] = useState(false);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastTapRef = useRef<{ time: number; x: number }>({ time: 0, x: 0 });
 
   // Derived — paused OR scrubbing = always show.
   const showControls = !userDismissed || !isPlaying || isScrubbing;
@@ -86,50 +92,46 @@ export function ControlsOverlay({
     if (isPlaying) scheduleHide();
   }
 
-  // Auto-hide: schedule a hide when controls are visible + playing +
-  // NOT scrubbing. Syncing with an external timer system (setTimeout).
-  // Re-runs when isPlaying / isScrubbing change so pause/drag cancel
-  // the timer, play/release schedule a fresh one.
+  function handleDoubleTap(absX: number) {
+    if (absX < screenWidth / 2) {
+      onSkipBackward();
+    } else {
+      onSkipForward();
+    }
+    handleInteraction();
+  }
+
+  // RNGH gestures. Exclusive prevents the single tap from firing
+  // when a double tap is in progress — RNGH handles the timing.
+  const singleTap = Gesture.Tap().onEnd(() => {
+    "worklet";
+    scheduleOnRN(handleToggle);
+  });
+
+  const doubleTap = Gesture.Tap()
+    .numberOfTaps(2)
+    .onEnd((e) => {
+      "worklet";
+      scheduleOnRN(handleDoubleTap, e.absoluteX);
+    });
+
+  const backgroundGesture = Gesture.Exclusive(doubleTap, singleTap);
+
+  // Auto-hide while playing + not scrubbing.
   useEffect(() => {
     if (userDismissed || !isPlaying || isScrubbing) return;
     const id = setTimeout(() => setUserDismissed(true), AUTO_HIDE_MS);
     return () => clearTimeout(id);
   }, [isPlaying, userDismissed, isScrubbing]);
 
-  // Double-tap detection via timestamp. First tap waits DOUBLE_TAP_MS
-  // for a potential second tap before toggling controls. If a second
-  // tap arrives, treat as seek (±10s based on screen half).
-  const pendingToggleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  function handleBackgroundPress(locationX: number) {
-    const now = Date.now();
-    const prev = lastTapRef.current;
-
-    if (now - prev.time < DOUBLE_TAP_MS) {
-      // Double tap — cancel pending toggle and seek
-      if (pendingToggleRef.current) {
-        clearTimeout(pendingToggleRef.current);
-        pendingToggleRef.current = null;
-      }
-      lastTapRef.current = { time: 0, x: 0 };
-      if (locationX < screenWidth / 2) {
-        onSkipBackward();
-      } else {
-        onSkipForward();
-      }
-      handleInteraction();
-    } else {
-      // First tap — wait for potential second tap before toggling
-      lastTapRef.current = { time: now, x: locationX };
-      pendingToggleRef.current = setTimeout(() => {
-        pendingToggleRef.current = null;
-        handleToggle();
-      }, DOUBLE_TAP_MS);
-    }
-  }
-
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+      {/* Background gesture layer — full screen, always active.
+          RNGH arbitrates so taps on inner RNGH Pressables win. */}
+      <GestureDetector gesture={backgroundGesture}>
+        <View style={StyleSheet.absoluteFill} />
+      </GestureDetector>
+
       {/* ── Controls overlay ───────────────────────────────────────── */}
       <Activity mode={showControls ? "visible" : "hidden"}>
         <Animated.View
@@ -147,12 +149,6 @@ export function ControlsOverlay({
             },
           ]}
         >
-          {/* Background tap target — behind buttons */}
-          <Pressable
-            style={StyleSheet.absoluteFill}
-            onPress={(e) => handleBackgroundPress(e.nativeEvent.locationX)}
-          />
-
           {/* ── Top row: back + title ──────────────────────────────── */}
           <View style={styles.topRow} pointerEvents="box-none">
             <Pressable
@@ -245,14 +241,6 @@ export function ControlsOverlay({
           </View>
         </Animated.View>
       </Activity>
-
-      {/* ── Tap target when controls hidden ────────────────────────── */}
-      {!showControls ? (
-        <Pressable
-          style={StyleSheet.absoluteFill}
-          onPress={(e) => handleBackgroundPress(e.nativeEvent.locationX)}
-        />
-      ) : null}
     </View>
   );
 }
