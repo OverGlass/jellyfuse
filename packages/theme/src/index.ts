@@ -35,6 +35,55 @@ export const fontWeight = {
 export type FontWeight = keyof typeof fontWeight;
 
 /**
+ * Icon font. `JetBrainsMono Nerd Font Mono` — embedded via
+ * expo-font in app.config.ts. Apply as `fontFamily: fontFamily.icon`
+ * on a `<Text>` and render one of the `icons.xxx` codepoints.
+ *
+ * Ports `jf-ui-kit/src/theme.rs::NERD_FONT` + `ICON_*` consts.
+ * Codepoints are from the FontAwesome range (`nf-fa-*`).
+ */
+export const fontFamily = {
+  // iOS looks up fonts by their PostScript / family name — NOT the
+  // TTF filename. `fc-query` on the file reports "JetBrainsMono
+  // Nerd Font Mono" as the family. expo-font registers the font
+  // under this name at native-build time.
+  icon: "JetBrainsMono Nerd Font Mono",
+} as const;
+
+export const icons = {
+  home: "\u{F015}", // nf-fa-home
+  library: "\u{F03A}", // nf-fa-list_alt
+  search: "\u{F002}", // nf-fa-search
+  plus: "\u{F067}", // nf-fa-plus
+  settings: "\u{F013}", // nf-fa-cog
+  close: "\u{F00D}", // nf-fa-times
+  arrowLeft: "\u{F060}", // nf-fa-arrow_left
+  arrowRight: "\u{F061}", // nf-fa-arrow_right
+  chevronLeft: "\u{F053}", // nf-fa-chevron_left
+  chevronRight: "\u{F054}", // nf-fa-chevron_right
+  play: "\u{F04B}", // nf-fa-play
+  pause: "\u{F04C}", // nf-fa-pause
+  fastBackward: "\u{F04A}", // nf-fa-fast_backward
+  stepBackward: "\u{F048}", // nf-fa-step_backward
+  stepForward: "\u{F051}", // nf-fa-step_forward
+  fastForward: "\u{F050}", // nf-fa-fast_forward
+  volume: "\u{F028}", // nf-fa-volume_up
+  music: "\u{F001}", // nf-fa-music
+  closedCaptioning: "\u{F20A}", // nf-fa-closed_captioning — subtitle track picker
+  language: "\u{F1AB}", // nf-fa-language — audio / subtitle language
+  subtitles: "\u{F02D}", // nf-fa-book (kept for back-compat)
+  eye: "\u{F06E}", // nf-fa-eye
+  download: "\u{F019}", // nf-fa-download
+  check: "\u{F00C}", // nf-fa-check
+  warning: "\u{F071}", // nf-fa-warning
+  list: "\u{F0CB}", // nf-fa-list_ol
+  star: "\u{F005}", // nf-fa-star
+  heart: "\u{F004}", // nf-fa-heart
+  user: "\u{F007}", // nf-fa-user
+} as const;
+export type IconName = keyof typeof icons;
+
+/**
  * Screen-level layout tokens. These govern page rhythm (top padding under
  * the safe area, horizontal gutters, space between sections) so individual
  * screens never hard-code their own numbers. Any screen that wants to

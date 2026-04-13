@@ -1,40 +1,29 @@
 // Full-screen player controls overlay. Auto-hides after 3s while
-// playing. Tap anywhere to toggle. Double-tap left/right to seek ±10s.
-// Uses safe area insets so controls avoid the notch / Dynamic Island.
-// Pure component — props in / callbacks out.
-//
-// Gesture handling: RNGH all the way down. A GestureDetector on the
-// background handles single/double tap via Gesture.Exclusive, while
-// the overlay buttons use RNGH's Pressable (NOT react-native's). RNGH
-// arbitrates properly between the background gestures and the button
-// Pressables — the child Pressable wins when tapped directly, the
-// background wins when tapped in empty space.
+// playing. Single-tap toggles, double-tap left/right seeks ±10s
+// and flashes a SeekIndicator at the edge. Pure component —
+// props in / callbacks out. All gestures + Pressables are RNGH.
 
+import { NerdIcon } from "@/features/common/components/nerd-icon";
 import type { TrickplayData } from "@jellyfuse/api";
 import type { AudioStream, Chapter, SubtitleTrack } from "@jellyfuse/models";
-import {
-  colors,
-  fontSize,
-  fontWeight,
-  opacity,
-  radius,
-  spacing,
-  withAlpha,
-} from "@jellyfuse/theme";
+import { colors, fontSize, opacity, radius, spacing, withAlpha } from "@jellyfuse/theme";
 import { Activity, useEffect, useRef, useState } from "react";
-import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { Gesture, GestureDetector, Pressable } from "react-native-gesture-handler";
 import Animated from "react-native-reanimated";
-import { scheduleOnRN } from "react-native-worklets";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { scheduleOnRN } from "react-native-worklets";
 import { PlayerScrubber } from "./player-scrubber";
+import { SeekIndicator } from "./seek-indicator";
 
 const AUTO_HIDE_MS = 3_000;
+const SEEK_SECONDS = 10;
 
 interface Props {
   title: string;
   subtitle?: string;
   isPlaying: boolean;
+  isBuffering: boolean;
   position: number;
   duration: number;
   chapters?: Chapter[];
@@ -53,6 +42,7 @@ export function ControlsOverlay({
   title,
   subtitle,
   isPlaying,
+  isBuffering,
   position,
   duration,
   chapters,
@@ -68,10 +58,13 @@ export function ControlsOverlay({
   const { width: screenWidth } = useWindowDimensions();
   const [userDismissed, setUserDismissed] = useState(false);
   const [isScrubbing, setIsScrubbing] = useState(false);
+  // Monotonic counters — bump to replay the edge indicator animation.
+  const [leftSeekTrigger, setLeftSeekTrigger] = useState(0);
+  const [rightSeekTrigger, setRightSeekTrigger] = useState(0);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Derived — paused OR scrubbing = always show.
-  const showControls = !userDismissed || !isPlaying || isScrubbing;
+  // Always show while paused / scrubbing / buffering.
+  const showControls = !userDismissed || !isPlaying || isScrubbing || isBuffering;
 
   function scheduleHide() {
     if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
@@ -95,14 +88,14 @@ export function ControlsOverlay({
   function handleDoubleTap(absX: number) {
     if (absX < screenWidth / 2) {
       onSkipBackward();
+      setLeftSeekTrigger((t) => t + 1);
     } else {
       onSkipForward();
+      setRightSeekTrigger((t) => t + 1);
     }
     handleInteraction();
   }
 
-  // RNGH gestures. Exclusive prevents the single tap from firing
-  // when a double tap is in progress — RNGH handles the timing.
   const singleTap = Gesture.Tap().onEnd(() => {
     "worklet";
     scheduleOnRN(handleToggle);
@@ -117,20 +110,32 @@ export function ControlsOverlay({
 
   const backgroundGesture = Gesture.Exclusive(doubleTap, singleTap);
 
-  // Auto-hide while playing + not scrubbing.
   useEffect(() => {
-    if (userDismissed || !isPlaying || isScrubbing) return;
+    if (userDismissed || !isPlaying || isScrubbing || isBuffering) return;
     const id = setTimeout(() => setUserDismissed(true), AUTO_HIDE_MS);
     return () => clearTimeout(id);
-  }, [isPlaying, userDismissed, isScrubbing]);
+  }, [isPlaying, userDismissed, isScrubbing, isBuffering]);
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-      {/* Background gesture layer — full screen, always active.
-          RNGH arbitrates so taps on inner RNGH Pressables win. */}
+      {/* Background gesture layer — full screen, always active. */}
       <GestureDetector gesture={backgroundGesture}>
         <View style={StyleSheet.absoluteFill} />
       </GestureDetector>
+
+      {/* Edge seek indicators — animated, appear on double-tap */}
+      <SeekIndicator
+        side="left"
+        triggerId={leftSeekTrigger}
+        seconds={SEEK_SECONDS}
+        insetHorizontal={Math.max(insets.left, spacing.xxl)}
+      />
+      <SeekIndicator
+        side="right"
+        triggerId={rightSeekTrigger}
+        seconds={SEEK_SECONDS}
+        insetHorizontal={Math.max(insets.right, spacing.xxl)}
+      />
 
       {/* ── Controls overlay ───────────────────────────────────────── */}
       <Activity mode={showControls ? "visible" : "hidden"}>
@@ -149,7 +154,7 @@ export function ControlsOverlay({
             },
           ]}
         >
-          {/* ── Top row: back + title ──────────────────────────────── */}
+          {/* ── Top row: back + title + CC ─────────────────────────── */}
           <View style={styles.topRow} pointerEvents="box-none">
             <Pressable
               accessibilityRole="button"
@@ -158,7 +163,7 @@ export function ControlsOverlay({
               hitSlop={12}
               style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
             >
-              <Text style={styles.iconText}>{"‹"}</Text>
+              <NerdIcon name="chevronLeft" size={24} />
             </Pressable>
             <View style={styles.titleBlock} pointerEvents="none">
               {subtitle ? (
@@ -178,51 +183,35 @@ export function ControlsOverlay({
                 hitSlop={12}
                 style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
               >
-                <Text style={styles.trackBtnText}>CC</Text>
+                <NerdIcon name="closedCaptioning" size={22} />
               </Pressable>
             ) : null}
           </View>
 
-          {/* ── Center: play/pause + skip ──────────────────────────── */}
+          {/* ── Center: play/pause (or spinner while buffering) ────── */}
           <View style={styles.centerRow} pointerEvents="box-none">
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Skip back 10 seconds"
-              onPress={() => {
-                onSkipBackward();
-                handleInteraction();
-              }}
-              hitSlop={16}
-              style={({ pressed }) => [styles.centerBtn, pressed && styles.centerBtnPressed]}
-            >
-              <Text style={styles.skipText}>-10</Text>
-            </Pressable>
-
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={isPlaying ? "Pause" : "Play"}
-              onPress={() => {
-                onPlayPause();
-                handleInteraction();
-              }}
-              hitSlop={16}
-              style={({ pressed }) => [styles.playBtn, pressed && styles.playBtnPressed]}
-            >
-              <Text style={styles.playIcon}>{isPlaying ? "❚❚" : "▶"}</Text>
-            </Pressable>
-
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Skip forward 10 seconds"
-              onPress={() => {
-                onSkipForward();
-                handleInteraction();
-              }}
-              hitSlop={16}
-              style={({ pressed }) => [styles.centerBtn, pressed && styles.centerBtnPressed]}
-            >
-              <Text style={styles.skipText}>+10</Text>
-            </Pressable>
+            {isBuffering ? (
+              <View style={styles.playBtn}>
+                <ActivityIndicator size="large" color={colors.textPrimary} />
+              </View>
+            ) : (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={isPlaying ? "Pause" : "Play"}
+                onPress={() => {
+                  onPlayPause();
+                  handleInteraction();
+                }}
+                hitSlop={16}
+                style={({ pressed }) => [styles.playBtn, pressed && styles.playBtnPressed]}
+              >
+                <NerdIcon
+                  style={!isPlaying ? styles.playBtnIcon : undefined}
+                  name={isPlaying ? "pause" : "play"}
+                  size={44}
+                />
+              </Pressable>
+            )}
           </View>
 
           {/* ── Bottom: scrubber + times ───────────────────────────── */}
@@ -265,24 +254,13 @@ const styles = StyleSheet.create({
   iconBtnPressed: {
     opacity: opacity.pressed,
   },
-  iconText: {
-    color: colors.textPrimary,
-    fontSize: 32,
-    fontWeight: fontWeight.bold,
-    lineHeight: 36,
-  },
   titleBlock: {
     flex: 1,
-  },
-  trackBtnText: {
-    color: colors.textPrimary,
-    fontSize: fontSize.caption,
-    fontWeight: fontWeight.bold,
   },
   title: {
     color: colors.textPrimary,
     fontSize: fontSize.bodyLarge,
-    fontWeight: fontWeight.semibold,
+    fontWeight: "600",
   },
   subtitle: {
     color: colors.textSecondary,
@@ -292,38 +270,20 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: spacing.xxl,
-  },
-  centerBtn: {
-    width: 56,
-    height: 56,
-    borderRadius: radius.full,
-    backgroundColor: withAlpha(colors.white, opacity.alpha10),
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  centerBtnPressed: {
-    opacity: opacity.pressed,
-  },
-  skipText: {
-    color: colors.textPrimary,
-    fontSize: fontSize.body,
-    fontWeight: fontWeight.semibold,
   },
   playBtn: {
-    width: 72,
-    height: 72,
+    width: 80,
+    height: 80,
     borderRadius: radius.full,
     backgroundColor: withAlpha(colors.white, opacity.alpha15),
     alignItems: "center",
     justifyContent: "center",
   },
+  playBtnIcon: {
+    marginLeft: 4,
+  },
   playBtnPressed: {
     opacity: opacity.pressed,
-  },
-  playIcon: {
-    color: colors.textPrimary,
-    fontSize: 28,
   },
   bottomRow: {
     gap: spacing.sm,

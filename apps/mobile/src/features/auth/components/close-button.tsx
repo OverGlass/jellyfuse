@@ -1,5 +1,6 @@
-import { colors, fontSize, fontWeight, opacity, radius, spacing } from "@jellyfuse/theme";
-import { Pressable, StyleSheet, Text } from "react-native";
+import { colors, opacity, radius, spacing } from "@jellyfuse/theme";
+import { Pressable, StyleSheet } from "react-native";
+import { NerdIcon } from "@/features/common/components/nerd-icon";
 
 /**
  * Circular "×" dismiss button used in modal `AuthScreenHeader`
@@ -19,7 +20,7 @@ export function CloseButton({ onPress }: Props) {
       hitSlop={12}
       style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
     >
-      <Text style={styles.glyph}>×</Text>
+      <NerdIcon name="close" size={16} color={colors.textSecondary} />
     </Pressable>
   );
 }
@@ -38,11 +39,5 @@ const styles = StyleSheet.create({
   },
   buttonPressed: {
     opacity: opacity.pressed,
-  },
-  glyph: {
-    color: colors.textSecondary,
-    fontSize: fontSize.subtitle,
-    fontWeight: fontWeight.medium,
-    lineHeight: fontSize.subtitle,
   },
 });
