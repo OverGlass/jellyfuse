@@ -17,8 +17,16 @@ import { useKeepAwake } from "expo-keep-awake";
 import { router } from "expo-router";
 import { useDeferredValue, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import Animated, {
+  Extrapolation,
+  interpolate,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+} from "react-native-reanimated";
+import { scheduleOnRN } from "react-native-worklets";
 import { ConnectionBanner } from "@/features/common/components/connection-banner";
-import { FloatingBlurHeader } from "@/features/common/components/floating-blur-header";
+import { ScreenHeader } from "@/features/common/components/screen-header";
 import { StatusBarScrim } from "@/features/common/components/status-bar-scrim";
 import { useRestoredScroll } from "@/features/common/hooks/use-restored-scroll";
 import { MediaCard } from "@/features/home/components/media-card";
@@ -36,6 +44,9 @@ import {
 import { useSearchBlended } from "@/services/query/hooks/use-search-blended";
 import { useBreakpoint, useScreenGutters } from "@/services/responsive";
 
+const AnimatedFlashList = Animated.createAnimatedComponent(FlashList<HomeShelf>);
+const AnimatedSearchList = Animated.createAnimatedComponent(FlashList<MediaItem>);
+
 /**
  * Home screen. Real Jellyfin shelves wired through the
  * `@jellyfuse/api` fetchers + RQ hooks. Responsive from day 1:
@@ -44,18 +55,35 @@ import { useBreakpoint, useScreenGutters } from "@/services/responsive";
  * iPad / Mac Catalyst / Android TV without per-platform branches.
  *
  * **Search lives here**, not on a separate route. A pinned search
- * bar in the floating blur header drives `useSearchBlended`. Once
- * the user types two or more characters, the shelves are replaced
- * inline with a responsive grid of blended Jellyfin + Jellyseerr
- * results; clearing the input restores the shelves. Mirrors the
- * Rust `HomeView` in `crates/jf-ui-kit/src/views/home.rs` which
- * uses the same in-place swap and a flex-wrap grid of cards.
+ * bar in the `ScreenHeader` drives `useSearchBlended`. Once the
+ * user types two or more characters, the shelves are replaced
+ * inline with a responsive grid of MediaCards built from the
+ * blended Jellyfin + Jellyseerr results; clearing the input
+ * restores the shelves. Mirrors the Rust `HomeView` in
+ * `crates/jf-ui-kit/src/views/home.rs` which uses the same
+ * in-place swap and a flex-wrap grid of cards.
+ *
+ * **Scroll choreography**, native-driven via Reanimated:
+ * - The blur backdrop on the floating header fades from 0 → 1 as
+ *   the user scrolls 0 → 60 dp, so the header reads as transparent
+ *   at the top of the page and as a frosted bar once content
+ *   begins to slide under it.
+ * - The in-flow "welcome back" hero block dissolves and slides
+ *   slightly upward as it scrolls past, so the transition into
+ *   "small header pinned + content" feels like a natural shrink
+ *   rather than a hard swap.
+ * - Both come from a single `useAnimatedScrollHandler` worklet
+ *   that mirrors the scrolled offset into a `SharedValue`, then
+ *   into two `useAnimatedStyle` hooks. No `setState` in the scroll
+ *   path, no `useEffect`.
  *
  * Shelf order (from the plan): Continue Watching → Next Up →
  * Recently Added → Latest Movies → Latest TV. Suggestions stays
  * deferred to a later phase (Jellyseerr-backed).
  */
 const MIN_SEARCH_LENGTH = 2;
+const HERO_FADE_END = 60;
+const BLUR_FADE_END = 60;
 
 export function HomeScreen() {
   useKeepAwake();
@@ -77,6 +105,36 @@ export function HomeScreen() {
   const trimmedQuery = deferredQuery.trim();
   const isSearching = trimmedQuery.length >= MIN_SEARCH_LENGTH;
   const search = useSearchBlended(deferredQuery);
+
+  // Native-driven scroll position. Single shared value feeds both
+  // the blur backdrop fade and the in-flow hero scroll-fade.
+  const scrollY = useSharedValue(0);
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      "worklet";
+      scrollY.value = event.contentOffset.y;
+      scheduleOnRN(scrollRestore.setOffset, event.contentOffset.y);
+    },
+  });
+
+  const blurBackdropStyle = useAnimatedStyle(() => {
+    "worklet";
+    return {
+      opacity: interpolate(scrollY.value, [0, BLUR_FADE_END], [0, 1], Extrapolation.CLAMP),
+    };
+  });
+
+  const heroStyle = useAnimatedStyle(() => {
+    "worklet";
+    const opacity = interpolate(scrollY.value, [0, HERO_FADE_END], [1, 0], Extrapolation.CLAMP);
+    const translateY = interpolate(
+      scrollY.value,
+      [0, HERO_FADE_END],
+      [0, -16],
+      Extrapolation.CLAMP,
+    );
+    return { opacity, transform: [{ translateY }] };
+  });
 
   const continueWatching = useContinueWatching();
   const nextUp = useNextUp();
@@ -118,10 +176,33 @@ export function HomeScreen() {
   const searchInitialLoading = isSearching && search.isLoading && searchItems.length === 0;
   const searchNoResults = isSearching && !search.isLoading && searchItems.length === 0;
 
+  const greeting = activeUser?.displayName
+    ? `Welcome back, ${activeUser.displayName}`
+    : "Welcome back";
+
+  const heroBlock = (
+    <Animated.View style={heroStyle}>
+      <View style={[styles.hero, { paddingLeft: gutters.left, paddingRight: gutters.right }]}>
+        <Text style={styles.greeting} numberOfLines={1}>
+          {greeting}
+        </Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Sign out"
+          onPress={signOutAll}
+          style={({ pressed }) => [styles.signOut, pressed && styles.pressed]}
+        >
+          <Text style={styles.signOutLabel}>Sign out</Text>
+        </Pressable>
+      </View>
+      <ConnectionBanner status={connectionStatus} />
+    </Animated.View>
+  );
+
   return (
     <View style={styles.root}>
       {isSearching ? (
-        <FlashList
+        <AnimatedSearchList
           key="search"
           data={searchItems}
           numColumns={values.shelfGridColumns}
@@ -132,8 +213,11 @@ export function HomeScreen() {
             paddingRight: gutters.right,
             paddingBottom: spacing.xxl,
           }}
+          showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
+          onScroll={scrollHandler}
+          scrollEventThrottle={16}
           ListHeaderComponent={
             <View>
               {searchInitialLoading ? (
@@ -169,19 +253,21 @@ export function HomeScreen() {
           )}
         />
       ) : (
-        <FlashList
+        <AnimatedFlashList
           key="shelves"
           ref={scrollRestore.ref}
-          onScroll={scrollRestore.onScroll}
           onContentSizeChange={scrollRestore.onContentSizeChange}
           data={visibleShelves}
           keyExtractor={(shelf) => shelf.key}
           contentContainerStyle={{ paddingTop: headerHeight, paddingBottom: spacing.xxl }}
+          showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
+          onScroll={scrollHandler}
+          scrollEventThrottle={16}
           ListHeaderComponent={
             <View>
-              <ConnectionBanner status={connectionStatus} />
+              {heroBlock}
               {anyShelfLoading && visibleShelves.length === 0 ? (
                 <View style={styles.centered}>
                   <ActivityIndicator color={colors.textSecondary} />
@@ -209,54 +295,43 @@ export function HomeScreen() {
           ItemSeparatorComponent={null}
         />
       )}
-      <FloatingBlurHeader onTotalHeightChange={handleHeaderHeightChange}>
-        <View style={[styles.header, { paddingLeft: gutters.left, paddingRight: gutters.right }]}>
-          <View style={styles.topRow}>
-            <View style={styles.topTitleBlock}>
-              <Text style={styles.title}>Jellyfuse</Text>
-              <Text style={styles.subtitle} numberOfLines={1}>
-                Signed in as {activeUser?.displayName ?? "Signed in"}
+      <ScreenHeader
+        title="Jellyfuse"
+        rightSlot={
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Switch profile (currently ${activeUser?.displayName ?? "user"})`}
+            onPress={handleOpenProfiles}
+            style={({ pressed }) => [
+              styles.avatarButton,
+              !activeUser?.avatarUrl && {
+                backgroundColor: profileColorFor(activeUser?.userId ?? "anonymous"),
+              },
+              pressed && styles.pressed,
+            ]}
+          >
+            {activeUser?.avatarUrl ? (
+              <Image
+                source={activeUser.avatarUrl}
+                style={styles.avatarImage}
+                contentFit="cover"
+                transition={duration.normal}
+                recyclingKey={activeUser.avatarUrl}
+                cachePolicy="memory-disk"
+              />
+            ) : (
+              <Text style={styles.avatarLetter}>
+                {(activeUser?.displayName ?? "?").slice(0, 1).toUpperCase()}
               </Text>
-            </View>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Switch profile (currently ${activeUser?.displayName ?? "user"})`}
-              onPress={handleOpenProfiles}
-              style={({ pressed }) => [
-                styles.avatarButton,
-                !activeUser?.avatarUrl && {
-                  backgroundColor: profileColorFor(activeUser?.userId ?? "anonymous"),
-                },
-                pressed && styles.avatarButtonPressed,
-              ]}
-            >
-              {activeUser?.avatarUrl ? (
-                <Image
-                  source={activeUser.avatarUrl}
-                  style={styles.avatarImage}
-                  contentFit="cover"
-                  transition={duration.normal}
-                  recyclingKey={activeUser.avatarUrl}
-                  cachePolicy="memory-disk"
-                />
-              ) : (
-                <Text style={styles.avatarLetter}>
-                  {(activeUser?.displayName ?? "?").slice(0, 1).toUpperCase()}
-                </Text>
-              )}
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Sign out"
-              onPress={signOutAll}
-              style={({ pressed }) => [styles.signOut, pressed && styles.signOutPressed]}
-            >
-              <Text style={styles.signOutLabel}>Sign out</Text>
-            </Pressable>
-          </View>
+            )}
+          </Pressable>
+        }
+        bottomSlot={
           <SearchInput value={query} onChangeText={setQuery} onClear={() => setQuery("")} />
-        </View>
-      </FloatingBlurHeader>
+        }
+        backdropStyle={blurBackdropStyle}
+        onTotalHeightChange={handleHeaderHeightChange}
+      />
       <StatusBarScrim />
     </View>
   );
@@ -316,26 +391,31 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     flex: 1,
   },
-  header: {
-    gap: spacing.sm,
-    paddingBottom: spacing.sm,
-  },
-  topRow: {
+  hero: {
     alignItems: "center",
     flexDirection: "row",
-    gap: spacing.sm,
+    gap: spacing.md,
+    paddingBottom: spacing.lg,
+    paddingTop: spacing.md,
   },
-  topTitleBlock: {
-    flex: 1,
-  },
-  title: {
+  greeting: {
     color: colors.textPrimary,
+    flex: 1,
     fontSize: fontSize.title,
     fontWeight: fontWeight.bold,
   },
-  subtitle: {
+  signOut: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  signOutLabel: {
     color: colors.textSecondary,
     fontSize: fontSize.caption,
+  },
+  pressed: {
+    opacity: opacity.pressed,
   },
   avatarButton: {
     alignItems: "center",
@@ -346,9 +426,6 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     width: 36,
   },
-  avatarButtonPressed: {
-    opacity: opacity.pressed,
-  },
   avatarImage: {
     height: 36,
     width: 36,
@@ -357,19 +434,6 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontSize: fontSize.body,
     fontWeight: fontWeight.bold,
-  },
-  signOut: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-  },
-  signOutPressed: {
-    opacity: opacity.pressed,
-  },
-  signOutLabel: {
-    color: colors.textSecondary,
-    fontSize: fontSize.caption,
   },
   cell: {
     alignItems: "center",
