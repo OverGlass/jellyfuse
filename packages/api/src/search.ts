@@ -44,12 +44,17 @@ export class SearchParseError extends Error {
 const JELLYFIN_SEARCH_FIELDS =
   "Overview,Genres,RunTimeTicks,UserData,ImageTags,BackdropImageTags,ProviderIds";
 
+/** Item types the Jellyfin search can be restricted to. */
+export type JellyfinSearchItemType = "Movie" | "Series" | "Movie,Series";
+
 export interface JellyfinSearchArgs {
   baseUrl: string;
   userId: string;
   query: string;
   /** Max number of items to return. Defaults to 25. */
   limit?: number;
+  /** Item types to include — defaults to `"Movie,Series"`. */
+  includeTypes?: JellyfinSearchItemType;
 }
 
 /**
@@ -66,7 +71,7 @@ export async function fetchJellyfinSearch(
   if (!query) return [];
   const url = buildUrl(args.baseUrl, `/Users/${args.userId}/Items`, {
     SearchTerm: query,
-    IncludeItemTypes: "Movie,Series",
+    IncludeItemTypes: args.includeTypes ?? "Movie,Series",
     Recursive: "true",
     Limit: String(args.limit ?? 25),
     Fields: JELLYFIN_SEARCH_FIELDS,
@@ -120,6 +125,9 @@ export async function fetchJellyseerrSearch(
 
 // ── Blend / dedupe ──────────────────────────────────────────────────
 
+/** Optional media-type filter used when blending shelf-grid searches. */
+export type BlendedSearchTypeFilter = "movie" | "series";
+
 /**
  * Port of `SearchEngine::search` from `crates/jf-search/src/lib.rs`.
  * Given the two raw result arrays, returns the split into library vs
@@ -131,12 +139,20 @@ export async function fetchJellyseerrSearch(
  *    on either side.
  *
  * The library array is passed through unchanged (already deduped by
- * Jellyfin). Ordering inside each output array is preserved.
+ * Jellyfin). Ordering inside each output array is preserved. Pass an
+ * optional `typeFilter` to constrain both sides to one media type
+ * (used by the typed shelf-grid search variants — Latest Movies and
+ * Latest TV in Rust).
  */
 export function blendSearchResults(
   libraryItems: MediaItem[],
   jellyseerrItems: MediaItem[],
+  typeFilter?: BlendedSearchTypeFilter,
 ): BlendedSearchResults {
+  if (typeFilter !== undefined) {
+    libraryItems = libraryItems.filter((item) => item.mediaType === typeFilter);
+    jellyseerrItems = jellyseerrItems.filter((item) => item.mediaType === typeFilter);
+  }
   const libraryTmdbIds = new Set<number>();
   const libraryTitles = new Set<string>();
   for (const item of libraryItems) {
