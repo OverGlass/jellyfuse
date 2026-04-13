@@ -26,6 +26,19 @@ export default function AppLayout() {
         name="player/[jellyfinId]"
         options={{ presentation: "fullScreenModal", animation: "fade" }}
       />
+      <Stack.Screen
+        name="request/[tmdbId]"
+        options={{
+          // `formSheet` resolves natively per platform: bottom sheet
+          // with detents on iPhone, centered floating card on iPad,
+          // modal window on Mac Catalyst, standard modal on Android.
+          // No platform branches needed in the screen itself.
+          presentation: "formSheet",
+          sheetGrabberVisible: true,
+          sheetAllowedDetents: [0.6, 1.0],
+          sheetCornerRadius: 24,
+        }}
+      />
     </Stack>
   );
 }

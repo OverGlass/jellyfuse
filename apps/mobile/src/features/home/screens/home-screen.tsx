@@ -16,7 +16,7 @@ import { Image } from "expo-image";
 import { useKeepAwake } from "expo-keep-awake";
 import { router } from "expo-router";
 import { useDeferredValue, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, {
   Extrapolation,
   interpolate,
@@ -415,9 +415,19 @@ function handleItemPress(item: MediaItem) {
     }
     return;
   }
-  Alert.alert(item.title, "Requesting Jellyseerr items is coming in the next update.", [
-    { text: "OK" },
-  ]);
+  // TMDB-only result — open the Jellyseerr request flow modal.
+  // Movies use Radarr profiles, series use Sonarr.
+  if (item.id.kind === "tmdb") {
+    const mediaType = item.mediaType === "series" ? "tv" : "movie";
+    router.push({
+      pathname: "/request/[tmdbId]",
+      params: {
+        tmdbId: String(item.id.tmdbId),
+        mediaType,
+        title: item.title,
+      },
+    });
+  }
 }
 
 const styles = StyleSheet.create({

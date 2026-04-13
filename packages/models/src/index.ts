@@ -120,6 +120,48 @@ export interface BlendedSearchResults {
   requestableItems: MediaItem[];
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// Jellyseerr request flow — quality profiles, seasons, request payload
+// ──────────────────────────────────────────────────────────────────────
+
+/**
+ * One quality profile slot on a Radarr or Sonarr server, returned by
+ * Jellyseerr's `/api/v1/service/{type}/{serverId}` endpoint.
+ */
+export interface QualityProfile {
+  id: number;
+  name: string;
+}
+
+/**
+ * One Radarr / Sonarr server registered in Jellyseerr, with its
+ * available quality profiles + the server-default profile id (used
+ * to pre-select an option in the request modal).
+ */
+export interface MediaServer {
+  id: number;
+  name: string;
+  profiles: QualityProfile[];
+  /** `id` of the profile Jellyseerr considers the active default. */
+  defaultProfileId: number | undefined;
+}
+
+/** Per-season status returned by `GET /api/v1/tv/{tmdbId}`. */
+export type SeasonAvailability = "available" | "requested" | "missing";
+
+/**
+ * One season of a TV show as the request modal sees it. Mirrors the
+ * Rust `SeasonInfo` in `crates/jf-core/src/models.rs`. Built by
+ * combining the TMDB `seasons[]` array with the Jellyseerr
+ * `mediaInfo.seasons[].status` and `mediaInfo.requests[].seasons`
+ * lists.
+ */
+export interface SeasonInfo {
+  seasonNumber: number;
+  name: string;
+  availability: SeasonAvailability;
+}
+
 /** `"S2 · E4"` for episodes, `undefined` otherwise. */
 export function episodeLabel(item: MediaItem): string | undefined {
   if (item.seasonNumber !== undefined && item.episodeNumber !== undefined) {
