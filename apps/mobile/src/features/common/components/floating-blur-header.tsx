@@ -36,6 +36,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
  */
 interface Props {
   style?: AnimatedStyle<ViewStyle>;
+  /**
+   * Animated style applied to the masked blur backdrop layer
+   * specifically (not the content). Use this to fade the blur
+   * in/out based on a scroll position while keeping the children
+   * (search bar, title, etc.) at full opacity. When omitted the
+   * blur is fully visible at all times.
+   */
+  backdropStyle?: AnimatedStyle<ViewStyle>;
   children: ReactNode;
   /**
    * Fires whenever the header's total rendered height changes —
@@ -47,7 +55,7 @@ interface Props {
   onTotalHeightChange?: (height: number) => void;
 }
 
-export function FloatingBlurHeader({ style, children, onTotalHeightChange }: Props) {
+export function FloatingBlurHeader({ style, backdropStyle, children, onTotalHeightChange }: Props) {
   const insets = useSafeAreaInsets();
 
   function handleLayout(event: LayoutChangeEvent) {
@@ -61,20 +69,24 @@ export function FloatingBlurHeader({ style, children, onTotalHeightChange }: Pro
       {/* Layer 1 — masked native blur. The linear-gradient alpha
           mask is `["black", "black", "transparent"]` at locations
           `[0, 0.7, 1]`, identical to the `CAGradientLayer` mask on
-          the `UIVisualEffectView` in `JFSearchBridge.m::createBlurContainer`. */}
-      <MaskedView
-        pointerEvents="none"
-        style={StyleSheet.absoluteFill}
-        maskElement={
-          <LinearGradient
-            colors={["black", "black", "transparent"]}
-            locations={[0, 0.7, 1]}
-            style={StyleSheet.absoluteFill}
-          />
-        }
-      >
-        <BlurView tint="dark" intensity={80} style={StyleSheet.absoluteFill} />
-      </MaskedView>
+          the `UIVisualEffectView` in `JFSearchBridge.m::createBlurContainer`.
+          Wrapped in an Animated.View so consumers can fade the
+          blur in/out independently of the content via `backdropStyle`. */}
+      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, backdropStyle]}>
+        <MaskedView
+          pointerEvents="none"
+          style={StyleSheet.absoluteFill}
+          maskElement={
+            <LinearGradient
+              colors={["black", "black", "transparent"]}
+              locations={[0, 0.7, 1]}
+              style={StyleSheet.absoluteFill}
+            />
+          }
+        >
+          <BlurView tint="dark" intensity={80} style={StyleSheet.absoluteFill} />
+        </MaskedView>
+      </Animated.View>
 
       {/* Layer 2 — content in natural flow above the masked blur.
           Safe-area top + 24 dp bottom fade zone. Horizontal padding

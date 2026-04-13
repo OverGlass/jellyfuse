@@ -45,6 +45,14 @@ interface Scrollable {
 export interface RestoredScroll {
   ref: (instance: Scrollable | null) => void;
   onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  /**
+   * Worklet-friendly setter — call this from a Reanimated scroll
+   * handler via `scheduleOnRN(scrollRestore.setOffset, y)` when you
+   * need to drive both an animated scroll handler AND scroll-state
+   * persistence from the same scroller (FlashList only exposes one
+   * `onScroll` prop).
+   */
+  setOffset: (offset: number) => void;
   onContentSizeChange: (w: number, h: number) => void;
 }
 
@@ -78,6 +86,10 @@ export function useRestoredScroll(routeKey: string): RestoredScroll {
     offsetRef.current = event.nativeEvent.contentOffset.y;
   }, []);
 
+  const setOffset = useCallback((offset: number) => {
+    offsetRef.current = offset;
+  }, []);
+
   const onContentSizeChange = useCallback(() => {
     if (restoredRef.current) return;
     const saved = readScrollState(routeKey);
@@ -93,5 +105,5 @@ export function useRestoredScroll(routeKey: string): RestoredScroll {
     restoredRef.current = true;
   }, [routeKey]);
 
-  return { ref, onScroll, onContentSizeChange };
+  return { ref, onScroll, setOffset, onContentSizeChange };
 }
