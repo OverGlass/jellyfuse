@@ -18,6 +18,7 @@ import { router } from "expo-router";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ConnectionBanner } from "@/features/common/components/connection-banner";
+import { NerdIcon } from "@/features/common/components/nerd-icon";
 import { useRestoredScroll } from "@/features/common/hooks/use-restored-scroll";
 import { MediaShelf, type MediaShelfVariant } from "@/features/home/components/media-shelf";
 import { useAuth } from "@/services/auth/state";
@@ -98,6 +99,7 @@ export function HomeScreen() {
               paddingLeft={gutters.left}
               paddingRight={gutters.right}
               onOpenProfiles={handleOpenProfiles}
+              onOpenSearch={handleOpenSearch}
               onSignOut={signOutAll}
             />
             <ConnectionBanner status={connectionStatus} />
@@ -145,6 +147,10 @@ function handleOpenProfiles() {
   router.push("/profile-picker");
 }
 
+function handleOpenSearch() {
+  router.push("/search");
+}
+
 function handleSeeAll(shelfKey: ShelfKey) {
   router.push(`/shelf/${shelfKey}`);
 }
@@ -175,6 +181,7 @@ interface HeaderProps {
   paddingLeft: number;
   paddingRight: number;
   onOpenProfiles: () => void;
+  onOpenSearch: () => void;
   onSignOut: () => void;
 }
 
@@ -185,6 +192,7 @@ function HomeHeader({
   paddingLeft,
   paddingRight,
   onOpenProfiles,
+  onOpenSearch,
   onSignOut,
 }: HeaderProps) {
   const fallbackColor = profileColorFor(userColorSeed);
@@ -195,6 +203,14 @@ function HomeHeader({
           <Text style={styles.title}>Jellyfuse</Text>
           <Text style={styles.subtitle}>Signed in as {userLabel}</Text>
         </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Search"
+          onPress={onOpenSearch}
+          style={({ pressed }) => [styles.searchButton, pressed && styles.avatarButtonPressed]}
+        >
+          <NerdIcon name="search" size={18} color={colors.textSecondary} />
+        </Pressable>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`Switch profile (currently ${userLabel})`}
@@ -265,9 +281,19 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     height: 40,
     justifyContent: "center",
-    marginLeft: spacing.md,
+    marginLeft: spacing.sm,
     marginTop: spacing.xs,
     overflow: "hidden",
+    width: 40,
+  },
+  searchButton: {
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderRadius: radius.full,
+    height: 40,
+    justifyContent: "center",
+    marginLeft: spacing.md,
+    marginTop: spacing.xs,
     width: 40,
   },
   avatarButtonPressed: {
