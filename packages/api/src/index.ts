@@ -10,3 +10,4 @@ export * from "./jellyseerr";
 export * from "./shelves";
 export * from "./detail";
 export * from "./playback";
+export * from "./search";

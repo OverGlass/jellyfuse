@@ -107,6 +107,19 @@ export interface MediaItem {
   seriesId: string | undefined;
 }
 
+/**
+ * Output of the blended Jellyfin + Jellyseerr search. Mirrors the Rust
+ * `BlendedSearchResults` in `crates/jf-core/src/state.rs`: two flat
+ * arrays so the UI can present library and requestable items as
+ * separate sections without re-computing the split.
+ */
+export interface BlendedSearchResults {
+  /** Items already in the Jellyfin library — immediately playable. */
+  libraryItems: MediaItem[];
+  /** Jellyseerr-only items that can be requested. */
+  requestableItems: MediaItem[];
+}
+
 /** `"S2 · E4"` for episodes, `undefined` otherwise. */
 export function episodeLabel(item: MediaItem): string | undefined {
   if (item.seasonNumber !== undefined && item.episodeNumber !== undefined) {
