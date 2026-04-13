@@ -1,5 +1,5 @@
 import { Host, TextField, type TextFieldRef } from "@expo/ui/swift-ui";
-import { glassEffect } from "@expo/ui/swift-ui/modifiers";
+import { frame, glassEffect, padding } from "@expo/ui/swift-ui/modifiers";
 import { colors, fontSize, opacity, radius, spacing } from "@jellyfuse/theme";
 import { useRef } from "react";
 import {
@@ -65,7 +65,7 @@ export function SearchInput({
     <View style={styles.row}>
       <View style={styles.inputArea}>
         {Platform.OS === "ios" ? (
-          <Host matchContents style={styles.host}>
+          <Host style={styles.host}>
             <TextField
               ref={swiftRef}
               defaultValue={value}
@@ -73,6 +73,15 @@ export function SearchInput({
               onValueChange={onChangeText}
               autoFocus={autoFocus}
               modifiers={[
+                // Pad the text inside the glass pill so the caret
+                // doesn't sit flush against the rounded edge.
+                padding({ horizontal: 16, vertical: 10 }),
+                // Force the SwiftUI TextField to fill the host's
+                // bounds horizontally — the host is sized by RN via
+                // `styles.host` (flex 1 + fixed height), so a wide
+                // `maxWidth` on the SwiftUI side asks the layout
+                // engine to expand.
+                frame({ maxWidth: 9999, height: HEIGHT, alignment: "leading" }),
                 // Liquid Glass on iOS 26+, no-op on older iOS — the
                 // SwiftUI `TextField` falls back to its default style
                 // automatically. Capsule shape matches the rounded
@@ -135,6 +144,7 @@ const styles = StyleSheet.create({
   },
   host: {
     flex: 1,
+    height: HEIGHT,
   },
   fallback: {
     alignItems: "center",
