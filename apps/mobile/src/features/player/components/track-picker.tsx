@@ -1,10 +1,18 @@
 // Bottom-sheet track picker for audio + subtitle selection.
 // Pure component — tracks come from props, selection fires callbacks.
+//
+// Index mapping: mpv's `aid`/`sid` are 1-based per-type indices,
+// NOT Jellyfin's stream indices (which count all stream types).
+// We pass `position + 1` for each track — matches Rust fallback
+// when mpv's track-list isn't yet populated.
+//
+// Not a Modal — React Native Modal has orientation quirks under
+// landscape lock. Inline full-screen overlay instead.
 
 import type { AudioStream, SubtitleTrack } from "@jellyfuse/models";
 import { colors, fontSize, fontWeight, opacity, radius, spacing } from "@jellyfuse/theme";
 import { useState } from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type Tab = "audio" | "subtitles";
@@ -13,8 +21,10 @@ interface Props {
   visible: boolean;
   audioStreams: AudioStream[];
   subtitleTracks: SubtitleTrack[];
-  onSelectAudio: (trackId: number) => void;
-  onSelectSubtitle: (trackId: number) => void;
+  /** Called with mpv track ID (1-based position in the audio list). */
+  onSelectAudio: (mpvTrackId: number) => void;
+  /** Called with mpv track ID (1-based position in the subtitle list). */
+  onSelectSubtitle: (mpvTrackId: number) => void;
   onDisableSubtitles: () => void;
   onClose: () => void;
 }
@@ -31,12 +41,24 @@ export function TrackPicker({
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<Tab>("audio");
 
+  if (!visible) return null;
+
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
-        <View />
-      </Pressable>
-      <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
+    <View style={StyleSheet.absoluteFill}>
+      {/* Backdrop — tap to dismiss */}
+      <Pressable style={styles.backdrop} onPress={onClose} />
+
+      {/* Bottom sheet — inset horizontally to clear notch / Dynamic Island */}
+      <View
+        style={[
+          styles.sheet,
+          {
+            paddingBottom: Math.max(insets.bottom, spacing.lg),
+            paddingLeft: Math.max(insets.left, 0),
+            paddingRight: Math.max(insets.right, 0),
+          },
+        ]}
+      >
         {/* Tab bar */}
         <View style={styles.tabBar}>
           <Pressable
@@ -58,21 +80,25 @@ export function TrackPicker({
         {/* Track list */}
         <ScrollView style={styles.list} bounces={false}>
           {tab === "audio"
-            ? audioStreams.map((stream) => (
-                <Pressable
-                  key={stream.index}
-                  onPress={() => {
-                    onSelectAudio(stream.index);
-                    onClose();
-                  }}
-                  style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-                >
-                  <Text style={styles.rowTitle}>{stream.displayTitle}</Text>
-                  {stream.codec ? (
-                    <Text style={styles.rowMeta}>{stream.codec.toUpperCase()}</Text>
-                  ) : null}
-                </Pressable>
-              ))
+            ? audioStreams.map((stream, position) => {
+                // mpv aid is 1-based position in the audio list
+                const mpvTrackId = position + 1;
+                return (
+                  <Pressable
+                    key={stream.index}
+                    onPress={() => {
+                      onSelectAudio(mpvTrackId);
+                      onClose();
+                    }}
+                    style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+                  >
+                    <Text style={styles.rowTitle}>{stream.displayTitle}</Text>
+                    {stream.codec ? (
+                      <Text style={styles.rowMeta}>{stream.codec.toUpperCase()}</Text>
+                    ) : null}
+                  </Pressable>
+                );
+              })
             : null}
 
           {tab === "subtitles" ? (
@@ -86,38 +112,46 @@ export function TrackPicker({
               >
                 <Text style={styles.rowTitle}>Off</Text>
               </Pressable>
-              {subtitleTracks.map((track) => (
-                <Pressable
-                  key={track.index}
-                  onPress={() => {
-                    onSelectSubtitle(track.index);
-                    onClose();
-                  }}
-                  style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-                >
-                  <Text style={styles.rowTitle}>
-                    {track.displayTitle}
-                    {track.isForced ? " (Forced)" : ""}
-                  </Text>
-                  {track.codec ? (
-                    <Text style={styles.rowMeta}>{track.codec.toUpperCase()}</Text>
-                  ) : null}
-                </Pressable>
-              ))}
+              {subtitleTracks.map((track, position) => {
+                // mpv sid is 1-based position in the subtitle list
+                const mpvTrackId = position + 1;
+                return (
+                  <Pressable
+                    key={track.index}
+                    onPress={() => {
+                      onSelectSubtitle(mpvTrackId);
+                      onClose();
+                    }}
+                    style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+                  >
+                    <Text style={styles.rowTitle}>
+                      {track.displayTitle}
+                      {track.isForced ? " (Forced)" : ""}
+                    </Text>
+                    {track.codec ? (
+                      <Text style={styles.rowMeta}>{track.codec.toUpperCase()}</Text>
+                    ) : null}
+                  </Pressable>
+                );
+              })}
             </>
           ) : null}
         </ScrollView>
       </View>
-    </Modal>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   backdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.5)",
   },
   sheet: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
     backgroundColor: colors.surface,
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,
