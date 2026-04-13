@@ -58,7 +58,9 @@ export function PlayerScreen({ jellyfinId }: Props) {
 
   const [trackPickerOpen, setTrackPickerOpen] = useState(false);
 
-  const isLoading = playbackInfoQuery.isPending || (player.isBuffering && !player.isPlaying);
+  // Buffering during initial load OR mid-playback — the overlay
+  // shows the spinner in place of the play button while this is true.
+  const isBuffering = playbackInfoQuery.isPending || player.isBuffering;
 
   if (playbackInfoQuery.isError) {
     return (
@@ -93,13 +95,6 @@ export function PlayerScreen({ jellyfinId }: Props) {
         />
       ) : null}
 
-      {/* Loading spinner */}
-      {isLoading ? (
-        <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color={colors.textPrimary} />
-        </View>
-      ) : null}
-
       {/* Intro/recap/credits skip pill */}
       <SkipSegmentPill
         position={player.position}
@@ -112,6 +107,7 @@ export function PlayerScreen({ jellyfinId }: Props) {
         title={detail.data?.title ?? ""}
         subtitle={detail.data?.seriesName}
         isPlaying={player.isPlaying}
+        isBuffering={isBuffering}
         position={player.position}
         duration={player.duration}
         chapters={resolved?.chapters}

@@ -53,6 +53,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         imageWidth: 200,
       },
     ],
+    [
+      "expo-font",
+      {
+        fonts: ["./assets/fonts/JetBrainsMonoNerdFontMono-Regular.ttf"],
+      },
+    ],
   ],
   experiments: {
     typedRoutes: true,

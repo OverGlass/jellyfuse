@@ -2,6 +2,7 @@ import type { MediaItem } from "@jellyfuse/api";
 import { colors, fontSize, fontWeight, opacity, spacing } from "@jellyfuse/theme";
 import { FlashList } from "@shopify/flash-list";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { NerdIcon } from "@/features/common/components/nerd-icon";
 import { MediaCard } from "@/features/home/components/media-card";
 import { WideMediaCard } from "@/features/home/components/wide-media-card";
 import { useBreakpoint, useScreenGutters } from "@/services/responsive";
@@ -49,7 +50,8 @@ export function MediaShelf({ title, items, variant = "poster", onItemPress, onSe
             onPress={onSeeAll}
             style={({ pressed }) => [styles.seeAll, pressed && styles.seeAllPressed]}
           >
-            <Text style={styles.seeAllLabel}>See all →</Text>
+            <Text style={styles.seeAllLabel}>See all</Text>
+            <NerdIcon name="chevronRight" size={10} color={colors.accent} />
           </Pressable>
         ) : null}
       </View>
@@ -109,6 +111,9 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.semibold,
   },
   seeAll: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.xs,
     paddingHorizontal: spacing.xs,
     paddingVertical: spacing.xs,
   },

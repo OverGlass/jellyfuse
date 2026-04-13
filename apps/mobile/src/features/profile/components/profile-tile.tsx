@@ -10,6 +10,7 @@ import {
 } from "@jellyfuse/theme";
 import { Image } from "expo-image";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { NerdIcon } from "@/features/common/components/nerd-icon";
 
 /**
  * One user tile in the profile picker. Pure component — props in,
@@ -91,7 +92,7 @@ export function AddUserTile({ onPress }: AddTileProps) {
       style={({ pressed }) => [styles.root, pressed && styles.rootPressed]}
     >
       <View style={[styles.avatarFallback, styles.addAvatar]}>
-        <Text style={styles.addGlyph}>+</Text>
+        <NerdIcon name="plus" size={40} color={colors.textSecondary} />
       </View>
       <Text style={styles.name}>Add user</Text>
     </Pressable>
@@ -146,11 +147,6 @@ const styles = StyleSheet.create({
     borderColor: colors.textMuted,
     borderStyle: "dashed",
     borderWidth: 2,
-  },
-  addGlyph: {
-    color: colors.textMuted,
-    fontSize: 40,
-    fontWeight: fontWeight.medium,
   },
   name: {
     color: colors.textPrimary,

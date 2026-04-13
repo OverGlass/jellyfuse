@@ -1,8 +1,9 @@
-import { colors, fontSize, fontWeight, opacity, radius } from "@jellyfuse/theme";
+import { colors, opacity, radius, withAlpha } from "@jellyfuse/theme";
 import { router } from "expo-router";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useScreenGutters } from "@/services/responsive";
+import { NerdIcon } from "./nerd-icon";
 
 /**
  * Floating circular back button overlaid on the top-left of a screen.
@@ -34,7 +35,7 @@ export function BackButton() {
         }}
         style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
       >
-        <Text style={styles.glyph}>‹</Text>
+        <NerdIcon name="chevronLeft" size={18} />
       </Pressable>
     </View>
   );
@@ -49,7 +50,7 @@ const styles = StyleSheet.create({
   },
   button: {
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: withAlpha(colors.black, opacity.alpha50),
     borderRadius: radius.full,
     height: BUTTON_SIZE,
     justifyContent: "center",
@@ -57,12 +58,5 @@ const styles = StyleSheet.create({
   },
   buttonPressed: {
     opacity: opacity.pressed,
-  },
-  glyph: {
-    color: colors.textPrimary,
-    fontSize: fontSize.title,
-    fontWeight: fontWeight.semibold,
-    lineHeight: fontSize.title + 2,
-    marginTop: -2,
   },
 });
