@@ -1,4 +1,10 @@
-import { blendSearchResults, fetchJellyfinSearch, fetchJellyseerrSearch } from "@jellyfuse/api";
+import {
+  blendSearchResults,
+  type BlendedSearchTypeFilter,
+  fetchJellyfinSearch,
+  fetchJellyseerrSearch,
+  type JellyfinSearchItemType,
+} from "@jellyfuse/api";
 import type { BlendedSearchResults } from "@jellyfuse/models";
 import { queryKeys, STALE_TIMES } from "@jellyfuse/query-keys";
 import { useQueries } from "@tanstack/react-query";
@@ -39,7 +45,22 @@ export interface UseSearchBlendedResult {
   jellyseerrError: unknown;
 }
 
-export function useSearchBlended(query: string): UseSearchBlendedResult {
+/**
+ * Optional shape for type-filtered shelf-grid search variants.
+ * - `includeTypes` constrains the Jellyfin server-side search.
+ * - `typeFilter` is applied to the blend on both sides post-fetch.
+ *   The two are kept separate because Jellyseerr's server response
+ *   doesn't accept a type param, so we filter its results in JS.
+ */
+export interface UseSearchBlendedOptions {
+  includeTypes?: JellyfinSearchItemType;
+  typeFilter?: BlendedSearchTypeFilter;
+}
+
+export function useSearchBlended(
+  query: string,
+  options: UseSearchBlendedOptions = {},
+): UseSearchBlendedResult {
   const { serverUrl, activeUser, jellyseerrUrl, jellyseerrStatus } = useAuth();
   const userId = activeUser?.userId;
   const trimmedQuery = query.trim();
@@ -50,17 +71,28 @@ export function useSearchBlended(query: string): UseSearchBlendedResult {
     jellyseerrStatus === "connected" &&
     jellyseerrUrl !== undefined &&
     Boolean(activeUser?.jellyseerrCookie);
+  const includeTypes = options.includeTypes;
+  const typeFilter = options.typeFilter;
 
   return useQueries({
     queries: [
       {
-        queryKey: [...queryKeys.search(userId ?? "", trimmedQuery), "jellyfin"] as const,
+        queryKey: [
+          ...queryKeys.search(userId ?? "", trimmedQuery),
+          "jellyfin",
+          includeTypes ?? "all",
+        ] as const,
         queryFn: ({ signal }: { signal?: AbortSignal }) => {
           if (!serverUrl || !userId) {
             throw new Error("useSearchBlended jellyfin side called without auth context");
           }
           return fetchJellyfinSearch(
-            { baseUrl: serverUrl, userId, query: trimmedQuery },
+            {
+              baseUrl: serverUrl,
+              userId,
+              query: trimmedQuery,
+              ...(includeTypes !== undefined ? { includeTypes } : {}),
+            },
             apiFetchAuthenticated,
             signal,
           );
@@ -93,7 +125,7 @@ export function useSearchBlended(query: string): UseSearchBlendedResult {
       const hasJellyseerr = jellyseerrEnabled ? jellyseerrData !== undefined : true;
       const data: BlendedSearchResults | null =
         hasJellyfin && hasJellyseerr
-          ? blendSearchResults(jellyfinData ?? [], jellyseerrData ?? [])
+          ? blendSearchResults(jellyfinData ?? [], jellyseerrData ?? [], typeFilter)
           : null;
       return {
         data,

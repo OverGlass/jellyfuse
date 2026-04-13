@@ -3,7 +3,7 @@ import { colors, spacing } from "@jellyfuse/theme";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import type { ReactNode } from "react";
-import { StyleSheet, View, type ViewStyle } from "react-native";
+import { type LayoutChangeEvent, StyleSheet, View, type ViewStyle } from "react-native";
 import Animated, { type AnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -37,12 +37,27 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 interface Props {
   style?: AnimatedStyle<ViewStyle>;
   children: ReactNode;
+  /**
+   * Fires whenever the header's total rendered height changes —
+   * including the safe-area top inset and the internal fade-zone
+   * padding. Consumers use this to push their scroll content's
+   * `paddingTop` so nothing renders behind the blur. The value is
+   * the `Animated.View`'s own height in dp.
+   */
+  onTotalHeightChange?: (height: number) => void;
 }
 
-export function FloatingBlurHeader({ style, children }: Props) {
+export function FloatingBlurHeader({ style, children, onTotalHeightChange }: Props) {
   const insets = useSafeAreaInsets();
+
+  function handleLayout(event: LayoutChangeEvent) {
+    if (onTotalHeightChange) {
+      onTotalHeightChange(event.nativeEvent.layout.height);
+    }
+  }
+
   return (
-    <Animated.View style={[styles.root, style]}>
+    <Animated.View style={[styles.root, style]} onLayout={handleLayout}>
       {/* Layer 1 — masked native blur. The linear-gradient alpha
           mask is `["black", "black", "transparent"]` at locations
           `[0, 0.7, 1]`, identical to the `CAGradientLayer` mask on

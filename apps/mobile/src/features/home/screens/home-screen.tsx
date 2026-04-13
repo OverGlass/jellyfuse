@@ -15,12 +15,15 @@ import { FlashList } from "@shopify/flash-list";
 import { Image } from "expo-image";
 import { useKeepAwake } from "expo-keep-awake";
 import { router } from "expo-router";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useDeferredValue, useState } from "react";
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { ConnectionBanner } from "@/features/common/components/connection-banner";
-import { NerdIcon } from "@/features/common/components/nerd-icon";
+import { FloatingBlurHeader } from "@/features/common/components/floating-blur-header";
+import { StatusBarScrim } from "@/features/common/components/status-bar-scrim";
 import { useRestoredScroll } from "@/features/common/hooks/use-restored-scroll";
+import { MediaCard } from "@/features/home/components/media-card";
 import { MediaShelf, type MediaShelfVariant } from "@/features/home/components/media-shelf";
+import { SearchInput } from "@/features/search/components/search-input";
 import { useAuth } from "@/services/auth/state";
 import { useConnectionStatus } from "@/services/connection/monitor";
 import {
@@ -30,28 +33,50 @@ import {
   useNextUp,
   useRecentlyAdded,
 } from "@/services/query";
-import { useScreenGutters } from "@/services/responsive";
+import { useSearchBlended } from "@/services/query/hooks/use-search-blended";
+import { useBreakpoint, useScreenGutters } from "@/services/responsive";
 
 /**
- * Phase 2c home screen. Real Jellyfin shelves wired through the
+ * Home screen. Real Jellyfin shelves wired through the
  * `@jellyfuse/api` fetchers + RQ hooks. Responsive from day 1:
- * `useBreakpoint()` drives the screen padding + card sizing so the
- * same layout works on phone / tablet / desktop (Catalyst, iPad,
- * Android TV). Top `ConnectionBanner` covers offline / reconnecting
- * state — when the server is reachable, hooks render cached shelves
- * instantly and revalidate silently (per Phase 2b hydrate-as-stale).
+ * `useBreakpoint()` drives the screen padding, card sizing, and
+ * search-results column count, so the same layout works on phone /
+ * iPad / Mac Catalyst / Android TV without per-platform branches.
+ *
+ * **Search lives here**, not on a separate route. A pinned search
+ * bar in the floating blur header drives `useSearchBlended`. Once
+ * the user types two or more characters, the shelves are replaced
+ * inline with a responsive grid of blended Jellyfin + Jellyseerr
+ * results; clearing the input restores the shelves. Mirrors the
+ * Rust `HomeView` in `crates/jf-ui-kit/src/views/home.rs` which
+ * uses the same in-place swap and a flex-wrap grid of cards.
  *
  * Shelf order (from the plan): Continue Watching → Next Up →
  * Recently Added → Latest Movies → Latest TV. Suggestions stays
- * deferred to Phase 4 (Jellyseerr-backed).
+ * deferred to a later phase (Jellyseerr-backed).
  */
+const MIN_SEARCH_LENGTH = 2;
+
 export function HomeScreen() {
   useKeepAwake();
 
   const { activeUser, signOutAll } = useAuth();
+  const { values } = useBreakpoint();
   const gutters = useScreenGutters();
   const connectionStatus = useConnectionStatus();
   const scrollRestore = useRestoredScroll("/home");
+
+  const [query, setQuery] = useState("");
+  const [headerHeight, setHeaderHeight] = useState(0);
+  function handleHeaderHeightChange(next: number) {
+    if (Math.abs(next - headerHeight) > 0.5) {
+      setHeaderHeight(next);
+    }
+  }
+  const deferredQuery = useDeferredValue(query);
+  const trimmedQuery = deferredQuery.trim();
+  const isSearching = trimmedQuery.length >= MIN_SEARCH_LENGTH;
+  const search = useSearchBlended(deferredQuery);
 
   const continueWatching = useContinueWatching();
   const nextUp = useNextUp();
@@ -76,60 +101,164 @@ export function HomeScreen() {
     (shelf) => shelf.query.isPending || (shelf.query.data?.length ?? 0) > 0,
   );
 
-  const anyLoading = shelves.some((s) => s.query.isPending);
-  const allEmptyOnline =
-    !anyLoading &&
+  const anyShelfLoading = shelves.some((s) => s.query.isPending);
+  const allShelvesEmptyOnline =
+    !anyShelfLoading &&
     connectionStatus === "online" &&
     shelves.every((s) => (s.query.data?.length ?? 0) === 0);
 
+  // Combine library + requestable into one flat grid (matches Rust
+  // `home.rs:307-329` which renders search results as a flex-wrap
+  // grid of `render_card_sized` calls — no library/request section
+  // headers, just one combined list ordered library-first).
+  const searchItems: MediaItem[] =
+    isSearching && search.data
+      ? [...search.data.libraryItems, ...search.data.requestableItems]
+      : [];
+  const searchInitialLoading = isSearching && search.isLoading && searchItems.length === 0;
+  const searchNoResults = isSearching && !search.isLoading && searchItems.length === 0;
+
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
-      <FlashList
-        ref={scrollRestore.ref}
-        onScroll={scrollRestore.onScroll}
-        onContentSizeChange={scrollRestore.onContentSizeChange}
-        data={visibleShelves}
-        keyExtractor={(shelf) => shelf.key}
-        ListHeaderComponent={
-          <View>
-            <HomeHeader
-              userLabel={activeUser?.displayName ?? "Signed in"}
-              userAvatarUrl={activeUser?.avatarUrl}
-              userColorSeed={activeUser?.userId ?? "anonymous"}
-              paddingLeft={gutters.left}
-              paddingRight={gutters.right}
-              onOpenProfiles={handleOpenProfiles}
-              onOpenSearch={handleOpenSearch}
-              onSignOut={signOutAll}
+    <View style={styles.root}>
+      {isSearching ? (
+        <FlashList
+          key="search"
+          data={searchItems}
+          numColumns={values.shelfGridColumns}
+          keyExtractor={(item, index) => `${rowItemId(item)}-${index}`}
+          contentContainerStyle={{
+            paddingTop: headerHeight + spacing.md,
+            paddingLeft: gutters.left,
+            paddingRight: gutters.right,
+            paddingBottom: spacing.xxl,
+          }}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          ListHeaderComponent={
+            <View>
+              {searchInitialLoading ? (
+                <View style={styles.centered}>
+                  <ActivityIndicator color={colors.textSecondary} />
+                </View>
+              ) : null}
+              {searchNoResults ? (
+                <View style={styles.centered}>
+                  <Text style={styles.emptyTitle}>No results</Text>
+                  <Text style={styles.emptyBody}>Try a different spelling or fewer words.</Text>
+                </View>
+              ) : null}
+              {search.jellyseerrError ? (
+                <View style={styles.errorBanner}>
+                  <Text style={styles.errorBannerLabel} numberOfLines={2}>
+                    Jellyseerr search failed — only library results are shown.
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          }
+          renderItem={({ item }) => (
+            <View style={styles.cell}>
+              <MediaCard
+                item={item}
+                width={values.mediaCardWidth}
+                posterHeight={values.mediaCardPosterHeight}
+                gap={0}
+                onPress={() => handleItemPress(item)}
+              />
+            </View>
+          )}
+        />
+      ) : (
+        <FlashList
+          key="shelves"
+          ref={scrollRestore.ref}
+          onScroll={scrollRestore.onScroll}
+          onContentSizeChange={scrollRestore.onContentSizeChange}
+          data={visibleShelves}
+          keyExtractor={(shelf) => shelf.key}
+          contentContainerStyle={{ paddingTop: headerHeight, paddingBottom: spacing.xxl }}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          ListHeaderComponent={
+            <View>
+              <ConnectionBanner status={connectionStatus} />
+              {anyShelfLoading && visibleShelves.length === 0 ? (
+                <View style={styles.centered}>
+                  <ActivityIndicator color={colors.textSecondary} />
+                </View>
+              ) : null}
+              {allShelvesEmptyOnline ? (
+                <View style={styles.centered}>
+                  <Text style={styles.emptyTitle}>No items yet</Text>
+                  <Text style={styles.emptyBody}>
+                    Your library is empty or Jellyfin is still scanning.
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          }
+          renderItem={({ item }) => (
+            <MediaShelf
+              title={item.title}
+              items={item.query.data ?? []}
+              variant={item.variant}
+              onItemPress={handleItemPress}
+              onSeeAll={() => handleSeeAll(item.key)}
             />
-            <ConnectionBanner status={connectionStatus} />
-            {anyLoading && visibleShelves.length === 0 ? (
-              <View style={styles.centered}>
-                <ActivityIndicator color={colors.textSecondary} />
-              </View>
-            ) : null}
-            {allEmptyOnline ? (
-              <View style={styles.centered}>
-                <Text style={styles.emptyTitle}>No items yet</Text>
-                <Text style={styles.emptyBody}>
-                  Your library is empty or Jellyfin is still scanning.
+          )}
+          ItemSeparatorComponent={null}
+        />
+      )}
+      <FloatingBlurHeader onTotalHeightChange={handleHeaderHeightChange}>
+        <View style={[styles.header, { paddingLeft: gutters.left, paddingRight: gutters.right }]}>
+          <View style={styles.topRow}>
+            <View style={styles.topTitleBlock}>
+              <Text style={styles.title}>Jellyfuse</Text>
+              <Text style={styles.subtitle} numberOfLines={1}>
+                Signed in as {activeUser?.displayName ?? "Signed in"}
+              </Text>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Switch profile (currently ${activeUser?.displayName ?? "user"})`}
+              onPress={handleOpenProfiles}
+              style={({ pressed }) => [
+                styles.avatarButton,
+                !activeUser?.avatarUrl && {
+                  backgroundColor: profileColorFor(activeUser?.userId ?? "anonymous"),
+                },
+                pressed && styles.avatarButtonPressed,
+              ]}
+            >
+              {activeUser?.avatarUrl ? (
+                <Image
+                  source={activeUser.avatarUrl}
+                  style={styles.avatarImage}
+                  contentFit="cover"
+                  transition={duration.normal}
+                  recyclingKey={activeUser.avatarUrl}
+                  cachePolicy="memory-disk"
+                />
+              ) : (
+                <Text style={styles.avatarLetter}>
+                  {(activeUser?.displayName ?? "?").slice(0, 1).toUpperCase()}
                 </Text>
-              </View>
-            ) : null}
+              )}
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Sign out"
+              onPress={signOutAll}
+              style={({ pressed }) => [styles.signOut, pressed && styles.signOutPressed]}
+            >
+              <Text style={styles.signOutLabel}>Sign out</Text>
+            </Pressable>
           </View>
-        }
-        renderItem={({ item }) => (
-          <MediaShelf
-            title={item.title}
-            items={item.query.data ?? []}
-            variant={item.variant}
-            onItemPress={handleItemPress}
-            onSeeAll={() => handleSeeAll(item.key)}
-          />
-        )}
-        ItemSeparatorComponent={null}
-      />
-    </SafeAreaView>
+          <SearchInput value={query} onChangeText={setQuery} onClear={() => setQuery("")} />
+        </View>
+      </FloatingBlurHeader>
+      <StatusBarScrim />
+    </View>
   );
 }
 
@@ -143,12 +272,22 @@ interface HomeShelf {
   };
 }
 
-function handleOpenProfiles() {
-  router.push("/profile-picker");
+function rowItemId(item: MediaItem): string {
+  switch (item.id.kind) {
+    case "jellyfin":
+    case "both":
+      return item.id.jellyfinId;
+    case "tmdb":
+      return `tmdb-${item.id.tmdbId}`;
+  }
 }
 
-function handleOpenSearch() {
-  router.push("/search");
+// ──────────────────────────────────────────────────────────────────────
+// Navigation helpers
+// ──────────────────────────────────────────────────────────────────────
+
+function handleOpenProfiles() {
+  router.push("/profile-picker");
 }
 
 function handleSeeAll(shelfKey: ShelfKey) {
@@ -157,164 +296,73 @@ function handleSeeAll(shelfKey: ShelfKey) {
 
 function handleItemPress(item: MediaItem) {
   const jellyfinId = mediaIdJellyfin(item.id);
-  if (!jellyfinId) return;
-  // Episodes route to their parent series detail; everything else to
-  // the corresponding movie / series page. The TMDB-only detail lands
-  // in Phase 4.
-  if (item.mediaType === "series") {
-    router.push(`/detail/series/${jellyfinId}`);
-  } else if (item.mediaType === "episode" && item.seriesId) {
-    router.push(`/detail/series/${item.seriesId}`);
-  } else {
-    router.push(`/detail/movie/${jellyfinId}`);
+  if (jellyfinId) {
+    if (item.mediaType === "series") {
+      router.push(`/detail/series/${jellyfinId}`);
+    } else if (item.mediaType === "episode" && item.seriesId) {
+      router.push(`/detail/series/${item.seriesId}`);
+    } else {
+      router.push(`/detail/movie/${jellyfinId}`);
+    }
+    return;
   }
-}
-
-// ──────────────────────────────────────────────────────────────────────
-// Header
-// ──────────────────────────────────────────────────────────────────────
-
-interface HeaderProps {
-  userLabel: string;
-  userAvatarUrl: string | undefined;
-  userColorSeed: string;
-  paddingLeft: number;
-  paddingRight: number;
-  onOpenProfiles: () => void;
-  onOpenSearch: () => void;
-  onSignOut: () => void;
-}
-
-function HomeHeader({
-  userLabel,
-  userAvatarUrl,
-  userColorSeed,
-  paddingLeft,
-  paddingRight,
-  onOpenProfiles,
-  onOpenSearch,
-  onSignOut,
-}: HeaderProps) {
-  const fallbackColor = profileColorFor(userColorSeed);
-  return (
-    <View style={[styles.header, { paddingLeft, paddingRight }]}>
-      <View style={styles.topRow}>
-        <View style={styles.topTitleBlock}>
-          <Text style={styles.title}>Jellyfuse</Text>
-          <Text style={styles.subtitle}>Signed in as {userLabel}</Text>
-        </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Search"
-          onPress={onOpenSearch}
-          style={({ pressed }) => [styles.searchButton, pressed && styles.avatarButtonPressed]}
-        >
-          <NerdIcon name="search" size={18} color={colors.textSecondary} />
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Switch profile (currently ${userLabel})`}
-          onPress={onOpenProfiles}
-          style={({ pressed }) => [
-            styles.avatarButton,
-            !userAvatarUrl && { backgroundColor: fallbackColor },
-            pressed && styles.avatarButtonPressed,
-          ]}
-        >
-          {userAvatarUrl ? (
-            <Image
-              source={userAvatarUrl}
-              style={styles.avatarImage}
-              contentFit="cover"
-              transition={duration.normal}
-              recyclingKey={userAvatarUrl}
-              cachePolicy="memory-disk"
-            />
-          ) : (
-            <Text style={styles.avatarLetter}>{userLabel.slice(0, 1).toUpperCase()}</Text>
-          )}
-        </Pressable>
-      </View>
-      <View style={{ flexDirection: "row", gap: spacing.sm }}>
-        <Pressable
-          accessibilityRole="button"
-          onPress={onSignOut}
-          style={({ pressed }) => [styles.signOut, pressed && styles.signOutPressed]}
-        >
-          <Text style={styles.signOutLabel}>Sign out</Text>
-        </Pressable>
-      </View>
-    </View>
-  );
+  Alert.alert(item.title, "Requesting Jellyseerr items is coming in the next update.", [
+    { text: "OK" },
+  ]);
 }
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
+  root: {
     backgroundColor: colors.background,
+    flex: 1,
   },
   header: {
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.md,
     gap: spacing.sm,
+    paddingBottom: spacing.sm,
   },
   topRow: {
-    alignItems: "flex-start",
+    alignItems: "center",
     flexDirection: "row",
-    justifyContent: "space-between",
+    gap: spacing.sm,
   },
   topTitleBlock: {
     flex: 1,
   },
   title: {
     color: colors.textPrimary,
-    fontSize: fontSize.display,
+    fontSize: fontSize.title,
     fontWeight: fontWeight.bold,
   },
   subtitle: {
     color: colors.textSecondary,
-    fontSize: fontSize.body,
+    fontSize: fontSize.caption,
   },
   avatarButton: {
     alignItems: "center",
     backgroundColor: colors.surface,
     borderRadius: radius.full,
-    height: 40,
+    height: 36,
     justifyContent: "center",
-    marginLeft: spacing.sm,
-    marginTop: spacing.xs,
     overflow: "hidden",
-    width: 40,
-  },
-  searchButton: {
-    alignItems: "center",
-    backgroundColor: colors.surface,
-    borderRadius: radius.full,
-    height: 40,
-    justifyContent: "center",
-    marginLeft: spacing.md,
-    marginTop: spacing.xs,
-    width: 40,
+    width: 36,
   },
   avatarButtonPressed: {
     opacity: opacity.pressed,
   },
   avatarImage: {
-    height: 40,
-    width: 40,
+    height: 36,
+    width: 36,
   },
   avatarLetter: {
     color: colors.textPrimary,
-    fontSize: fontSize.bodyLarge,
+    fontSize: fontSize.body,
     fontWeight: fontWeight.bold,
   },
   signOut: {
-    alignSelf: "flex-start",
     backgroundColor: colors.surface,
     borderRadius: radius.md,
-    marginTop: spacing.sm,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.xs,
   },
   signOutPressed: {
     opacity: opacity.pressed,
@@ -322,6 +370,10 @@ const styles = StyleSheet.create({
   signOutLabel: {
     color: colors.textSecondary,
     fontSize: fontSize.caption,
+  },
+  cell: {
+    alignItems: "center",
+    paddingBottom: spacing.lg,
   },
   centered: {
     alignItems: "center",
@@ -336,5 +388,17 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: fontSize.body,
     marginTop: spacing.xs,
+    textAlign: "center",
+  },
+  errorBanner: {
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: 8,
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  errorBannerLabel: {
+    color: colors.warning,
+    fontSize: fontSize.caption,
   },
 });
