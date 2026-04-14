@@ -1,8 +1,7 @@
 import { colors, fontSize, fontWeight, opacity, radius, spacing } from "@jellyfuse/theme";
 import { router } from "expo-router";
-import { useReducer, useState } from "react";
+import { type ReactNode, useReducer, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { NerdIcon } from "@/features/common/components/nerd-icon";
 import { QualitySelectionStep } from "@/features/requests/components/quality-selection-step";
 import { SeasonSelectionStep } from "@/features/requests/components/season-selection-step";
@@ -29,15 +28,29 @@ import {
  * 100% pure and unit-tested; this screen owns the React Query side
  * (quality profiles + TV season detail) and dispatches user intents.
  *
+ * **RNScreens FormSheet layout rule**: the Screen's root may contain
+ * at most two direct subviews — an optional header + one ScrollView.
+ * To satisfy that we return a React **Fragment** with exactly
+ * `[headerView (collapsable={false}), ScrollView (flex: 1)]`. Any
+ * wrapping `<View>` at the root collapses both subviews into one
+ * container which (a) re-triggers the RNScreens warning and (b)
+ * breaks the sheet's internal height bounding, causing the
+ * ScrollView to grow past the sheet's visible area and push the
+ * header off-screen.
+ *
+ * Safe-area: we deliberately do NOT apply `useSafeAreaInsets().top`
+ * inside the form sheet. On iOS that value reports the phone's
+ * notch inset, but the sheet already renders below the notch, so
+ * adding it as padding shoves the header off the sheet's top edge.
+ * Bottom padding for the scroll content uses a fixed value for the
+ * same reason — the sheet renders above the home indicator.
+ *
  * Steps wire up by `state.step`:
  * - `seasons`     → `<SeasonSelectionStep>`  (TV with seasons only)
  * - `quality`     → `<QualitySelectionStep>`
- * - `submitting`  → spinner overlay
+ * - `submitting`  → spinner in the footer
  * - `done`        → success toast + auto-dismiss after 1.5 s
  * - `error`       → inline error + Retry
- *
- * Footer buttons render from `state.step` so each step gets the
- * right primary action (Next / Request) and back-button behaviour.
  */
 interface Props {
   tmdbId: number;
@@ -48,7 +61,6 @@ interface Props {
 const SUCCESS_DISMISS_MS = 1500;
 
 export function RequestFlowScreen({ tmdbId, mediaType, title }: Props) {
-  const insets = useSafeAreaInsets();
   const { jellyseerrStatus } = useAuth();
 
   const isTv = mediaType === "tv";
@@ -135,7 +147,7 @@ export function RequestFlowScreen({ tmdbId, mediaType, title }: Props) {
   // ── Render ────────────────────────────────────────────────────────
   if (jellyseerrStatus !== "connected") {
     return (
-      <SheetShell title={title} subtitle="Request media" insets={insets}>
+      <SheetShell title={title} subtitle="Request media">
         <View style={styles.centered}>
           <Text style={styles.emptyTitle}>Jellyseerr not connected</Text>
           <Text style={styles.emptyBody}>
@@ -150,77 +162,95 @@ export function RequestFlowScreen({ tmdbId, mediaType, title }: Props) {
     (isTv && seasonsQuery.isPending) ||
     (state.step === "quality" && qualityQuery.isPending && !qualityQuery.data);
 
-  return (
-    <SheetShell title={title} subtitle="Request media" insets={insets}>
-      <ScrollView
-        contentContainerStyle={styles.scrollBody}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
-        {state.step === "done" ? (
-          <View style={styles.centered}>
-            <NerdIcon name="check" size={32} color={colors.success} />
-            <Text style={styles.successTitle}>Request submitted</Text>
-            <Text style={styles.emptyBody}>Jellyseerr will start downloading shortly.</Text>
-          </View>
-        ) : state.step === "error" ? (
-          <View style={styles.centered}>
-            <NerdIcon name="warning" size={28} color={colors.danger} />
-            <Text style={styles.errorTitle}>Couldn't submit request</Text>
-            <Text style={styles.emptyBody}>{state.errorMessage ?? "Unknown error"}</Text>
-          </View>
-        ) : isLoadingFirstFetch ? (
-          <View style={styles.centered}>
-            <ActivityIndicator color={colors.textSecondary} />
-          </View>
-        ) : state.step === "seasons" ? (
-          <SeasonSelectionStep
-            seasons={seasons}
-            selected={state.selectedSeasons}
-            onToggle={(seasonNumber) => dispatch({ type: "TOGGLE_SEASON", seasonNumber })}
-            onSelectAll={() => dispatch({ type: "SELECT_ALL_SEASONS", seasons })}
-            onClear={() => dispatch({ type: "CLEAR_SEASONS" })}
-          />
-        ) : (
-          <QualitySelectionStep
-            servers={qualityQuery.data ?? []}
-            selected={state.selectedProfile}
-            onSelect={(serverId, profileId) =>
-              dispatch({ type: "SELECT_PROFILE", serverId, profileId })
-            }
-          />
-        )}
-      </ScrollView>
-      <Footer
-        state={state}
-        hasSeasonStep={hasSeasonStep}
-        canSubmit={state.selectedProfile !== undefined}
-        onCancel={() => router.back()}
-        onBack={() => dispatch({ type: "GO_BACK_TO_SEASONS" })}
-        onNext={() => dispatch({ type: "GO_TO_QUALITY" })}
-        onSubmit={handleSubmit}
-        onRetry={() => dispatch({ type: "RETRY" })}
-        insets={insets}
+  const stepContent =
+    state.step === "done" ? (
+      <View style={styles.centered}>
+        <NerdIcon name="check" size={32} color={colors.success} />
+        <Text style={styles.successTitle}>Request submitted</Text>
+        <Text style={styles.emptyBody}>Jellyseerr will start downloading shortly.</Text>
+      </View>
+    ) : state.step === "error" ? (
+      <View style={styles.centered}>
+        <NerdIcon name="warning" size={28} color={colors.danger} />
+        <Text style={styles.errorTitle}>Couldn't submit request</Text>
+        <Text style={styles.emptyBody}>{state.errorMessage ?? "Unknown error"}</Text>
+      </View>
+    ) : isLoadingFirstFetch ? (
+      <View style={styles.centered}>
+        <ActivityIndicator color={colors.textSecondary} />
+      </View>
+    ) : state.step === "seasons" ? (
+      <SeasonSelectionStep
+        seasons={seasons}
+        selected={state.selectedSeasons}
+        onToggle={(seasonNumber) => dispatch({ type: "TOGGLE_SEASON", seasonNumber })}
+        onSelectAll={() => dispatch({ type: "SELECT_ALL_SEASONS", seasons })}
+        onClear={() => dispatch({ type: "CLEAR_SEASONS" })}
       />
+    ) : (
+      <QualitySelectionStep
+        servers={qualityQuery.data ?? []}
+        selected={state.selectedProfile}
+        onSelect={(serverId, profileId) =>
+          dispatch({ type: "SELECT_PROFILE", serverId, profileId })
+        }
+      />
+    );
+
+  return (
+    <SheetShell
+      title={title}
+      subtitle="Request media"
+      footer={
+        <Footer
+          state={state}
+          hasSeasonStep={hasSeasonStep}
+          canSubmit={state.selectedProfile !== undefined}
+          onCancel={() => router.back()}
+          onBack={() => dispatch({ type: "GO_BACK_TO_SEASONS" })}
+          onNext={() => dispatch({ type: "GO_TO_QUALITY" })}
+          onSubmit={handleSubmit}
+          onRetry={() => dispatch({ type: "RETRY" })}
+        />
+      }
+    >
+      {stepContent}
     </SheetShell>
   );
 }
 
 // ──────────────────────────────────────────────────────────────────────
-// Sheet shell — header row + content + safe-area
+// Sheet shell
+//
+// A single root `<View collapsable={false}>` with `flex: 1` so it
+// fills the Screen's native size, stacked column:
+// ```
+// root (flex: 1, collapsable: false)
+//   ├─ header     (natural height, collapsable: false)
+//   ├─ ScrollView (flex: 1, scrolls step content)
+//   └─ footerSlot (natural height, always visible at bottom)
+// ```
+// `collapsable={false}` on the root is what keeps the RNScreens
+// FormSheet warning silent: without it, React Native flattens the
+// root out of the native hierarchy and its children become direct
+// subviews of `RNSSafeAreaViewComponentView`, which trips the
+// `FormSheet with ScrollView expects at most 2 subviews (got 8)`
+// warning. With it, the Screen sees exactly 1 direct subview (the
+// root View) and defers layout to its internal flexbox.
 // ──────────────────────────────────────────────────────────────────────
 
 interface ShellProps {
   title: string;
   subtitle: string;
-  insets: ReturnType<typeof useSafeAreaInsets>;
-  children: React.ReactNode;
+  /** Pinned at the bottom of the body. Omit for info-only states. */
+  footer?: ReactNode;
+  children: ReactNode;
 }
 
-function SheetShell({ title, subtitle, insets, children }: ShellProps) {
+function SheetShell({ title, subtitle, footer, children }: ShellProps) {
   return (
-    <View style={[styles.shell, { paddingTop: Math.max(insets.top, spacing.lg) }]}>
-      <View style={styles.headerRow}>
+    <View collapsable={false} style={styles.root}>
+      <View collapsable={false} style={styles.headerRow}>
         <View style={styles.headerText}>
           <Text style={styles.headerSubtitle}>{subtitle}</Text>
           <Text style={styles.headerTitle} numberOfLines={2}>
@@ -237,13 +267,21 @@ function SheetShell({ title, subtitle, insets, children }: ShellProps) {
           <NerdIcon name="close" size={14} color={colors.textSecondary} />
         </Pressable>
       </View>
-      {children}
+      <ScrollView
+        style={styles.scrollRoot}
+        contentContainerStyle={styles.scrollBody}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {children}
+      </ScrollView>
+      {footer ? <View style={styles.footerSlot}>{footer}</View> : null}
     </View>
   );
 }
 
 // ──────────────────────────────────────────────────────────────────────
-// Footer — step-aware action buttons
+// Footer — step-aware action buttons, pinned at the bottom of the body
 // ──────────────────────────────────────────────────────────────────────
 
 interface FooterProps {
@@ -255,7 +293,6 @@ interface FooterProps {
   onNext: () => void;
   onSubmit: () => void;
   onRetry: () => void;
-  insets: ReturnType<typeof useSafeAreaInsets>;
 }
 
 function Footer({
@@ -267,15 +304,12 @@ function Footer({
   onNext,
   onSubmit,
   onRetry,
-  insets,
 }: FooterProps) {
   if (state.step === "done") return null;
 
-  const paddingBottom = Math.max(insets.bottom, spacing.lg);
-
   if (state.step === "submitting") {
     return (
-      <View style={[styles.footer, { paddingBottom }]}>
+      <View style={styles.footer}>
         <View style={[styles.primaryButton, styles.primaryButtonDisabled]}>
           <ActivityIndicator color={colors.accentContrast} />
         </View>
@@ -285,7 +319,7 @@ function Footer({
 
   if (state.step === "error") {
     return (
-      <View style={[styles.footer, { paddingBottom }]}>
+      <View style={styles.footer}>
         <Pressable
           accessibilityRole="button"
           onPress={onCancel}
@@ -307,7 +341,7 @@ function Footer({
   if (state.step === "seasons") {
     const hasSelection = state.selectedSeasons.length > 0;
     return (
-      <View style={[styles.footer, { paddingBottom }]}>
+      <View style={styles.footer}>
         <Pressable
           accessibilityRole="button"
           onPress={onCancel}
@@ -334,7 +368,7 @@ function Footer({
 
   // step === "quality"
   return (
-    <View style={[styles.footer, { paddingBottom }]}>
+    <View style={styles.footer}>
       <Pressable
         accessibilityRole="button"
         onPress={hasSeasonStep ? onBack : onCancel}
@@ -360,16 +394,14 @@ function Footer({
 }
 
 const styles = StyleSheet.create({
-  shell: {
-    backgroundColor: colors.background,
-    flex: 1,
-  },
   headerRow: {
     alignItems: "center",
+    backgroundColor: colors.background,
     flexDirection: "row",
     gap: spacing.md,
     paddingBottom: spacing.md,
     paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
   },
   headerText: {
     flex: 1,
@@ -398,9 +430,26 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: opacity.pressed,
   },
+  root: {
+    backgroundColor: colors.background,
+    flex: 1,
+  },
+  scrollRoot: {
+    flex: 1,
+  },
+  footerSlot: {
+    // Pinned at the bottom of the body. Horizontal + bottom padding
+    // live on the slot itself so it matches the ScrollView's gutter
+    // and sits above the home indicator without re-measuring.
+    backgroundColor: colors.background,
+    paddingBottom: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+  },
   scrollBody: {
     paddingBottom: spacing.xl,
     paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
   },
   centered: {
     alignItems: "center",
@@ -428,13 +477,10 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   footer: {
-    backgroundColor: colors.background,
-    borderTopColor: colors.border,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    // Row of action buttons. Pinned inside the parent's `footerSlot`
+    // which handles horizontal / bottom padding.
     flexDirection: "row",
     gap: spacing.md,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
   },
   secondaryButton: {
     alignItems: "center",
