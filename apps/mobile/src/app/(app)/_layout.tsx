@@ -30,12 +30,22 @@ export default function AppLayout() {
         name="request/[tmdbId]"
         options={{
           // `formSheet` resolves natively per platform: bottom sheet
-          // with detents on iPhone, centered floating card on iPad,
-          // modal window on Mac Catalyst, standard modal on Android.
-          // No platform branches needed in the screen itself.
+          // on iPhone, centered floating card on iPad, modal window
+          // on Mac Catalyst, standard modal on Android. No platform
+          // branches needed in the screen itself.
+          //
+          // Two detents (medium 50% → large 95%) so the sheet has a
+          // predictable bounded height. The step content's ScrollView
+          // can then claim `flex: 1` and the footer CTAs stay
+          // visible at any detent regardless of how many seasons or
+          // profiles the list contains. `fitToContents` would grow
+          // and shrink the sheet around the content height but loses
+          // the pinned-footer invariant once the content gets tall
+          // enough to exceed the system cap.
           presentation: "formSheet",
           sheetGrabberVisible: true,
-          sheetAllowedDetents: [0.6, 1.0],
+          sheetAllowedDetents: [0.5, 0.95],
+          sheetInitialDetentIndex: 1,
           sheetCornerRadius: 24,
         }}
       />
