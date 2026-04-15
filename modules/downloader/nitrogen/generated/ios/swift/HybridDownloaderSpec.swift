@@ -17,7 +17,7 @@ public protocol HybridDownloaderSpec_protocol: HybridObject {
   func pause(id: String) throws -> Void
   func resume(id: String) throws -> Void
   func cancel(id: String) throws -> Void
-  func delete(id: String) throws -> Void
+  func remove(id: String) throws -> Void
   func rebaseAllPaths(newDocumentDirectory: String) throws -> Void
   func clearAll() throws -> Void
   func list() throws -> [NativeDownloadRecord]

@@ -65,7 +65,7 @@ namespace margelo::nitro::downloader {
       virtual void pause(const std::string& id) = 0;
       virtual void resume(const std::string& id) = 0;
       virtual void cancel(const std::string& id) = 0;
-      virtual void delete(const std::string& id) = 0;
+      virtual void remove(const std::string& id) = 0;
       virtual void rebaseAllPaths(const std::string& newDocumentDirectory) = 0;
       virtual void clearAll() = 0;
       virtual std::vector<NativeDownloadRecord> list() = 0;

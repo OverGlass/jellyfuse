@@ -122,8 +122,8 @@ namespace margelo::nitro::downloader {
         std::rethrow_exception(__result.error());
       }
     }
-    inline void delete(const std::string& id) override {
-      auto __result = _swiftPart.delete(id);
+    inline void remove(const std::string& id) override {
+      auto __result = _swiftPart.remove(id);
       if (__result.hasError()) [[unlikely]] {
         std::rethrow_exception(__result.error());
       }
