@@ -2,25 +2,17 @@ import type { MediaRequest } from "@jellyfuse/models";
 import { colors, fontSize, fontWeight, spacing } from "@jellyfuse/theme";
 import { FlashList } from "@shopify/flash-list";
 import { router } from "expo-router";
-import { useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
-import Animated, {
-  Extrapolation,
-  interpolate,
-  useAnimatedScrollHandler,
-  useAnimatedStyle,
-  useSharedValue,
-} from "react-native-reanimated";
+import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ScreenHeader } from "@/features/common/components/screen-header";
 import { StatusBarScrim } from "@/features/common/components/status-bar-scrim";
+import { useFloatingHeaderScroll } from "@/features/common/hooks/use-floating-header-scroll";
 import { RequestRow } from "@/features/requests/components/request-row";
 import { useAuth } from "@/services/auth/state";
 import { useDownloadProgressMap, useJellyseerrRequests } from "@/services/query/hooks/use-requests";
 
 const AnimatedFlashList = Animated.createAnimatedComponent(FlashList<MediaRequest>);
-
-const BLUR_FADE_END = 60;
 
 /**
  * Screen listing the active Jellyseerr requests for the signed-in
@@ -52,27 +44,8 @@ export function RequestsScreen() {
   const requestsQuery = useJellyseerrRequests();
   const requests = requestsQuery.data ?? [];
   const { map: progressMap } = useDownloadProgressMap(requests);
-
-  const scrollY = useSharedValue(0);
-  const scrollHandler = useAnimatedScrollHandler({
-    onScroll: (event) => {
-      "worklet";
-      scrollY.value = event.contentOffset.y;
-    },
-  });
-  const blurBackdropStyle = useAnimatedStyle(() => {
-    "worklet";
-    return {
-      opacity: interpolate(scrollY.value, [0, BLUR_FADE_END], [0, 1], Extrapolation.CLAMP),
-    };
-  });
-
-  const [headerHeight, setHeaderHeight] = useState(0);
-  function handleHeaderHeightChange(next: number) {
-    if (Math.abs(next - headerHeight) > 0.5) {
-      setHeaderHeight(next);
-    }
-  }
+  const { headerHeight, onHeaderHeightChange, scrollHandler, backdropStyle } =
+    useFloatingHeaderScroll();
 
   if (jellyseerrStatus !== "connected") {
     return (
@@ -86,8 +59,8 @@ export function RequestsScreen() {
         <ScreenHeader
           showBack
           title="Requests"
-          backdropStyle={blurBackdropStyle}
-          onTotalHeightChange={handleHeaderHeightChange}
+          backdropStyle={backdropStyle}
+          onTotalHeightChange={onHeaderHeightChange}
         />
         <StatusBarScrim />
       </View>
@@ -149,8 +122,8 @@ export function RequestsScreen() {
       <ScreenHeader
         showBack
         title="Requests"
-        backdropStyle={blurBackdropStyle}
-        onTotalHeightChange={handleHeaderHeightChange}
+        backdropStyle={backdropStyle}
+        onTotalHeightChange={onHeaderHeightChange}
       />
       <StatusBarScrim />
     </View>

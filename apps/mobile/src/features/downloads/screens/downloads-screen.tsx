@@ -7,20 +7,30 @@
  * which wraps the raw Nitro methods with optimistic RQ-cache updates —
  * necessary because `cancel`/`remove`/`clearAll` don't emit a native
  * state-change event.
+ *
+ * Layout mirrors the requests / shelf screens: the `ScreenHeader` floats
+ * over the list via `FloatingBlurHeader`, and the list's `paddingTop` is
+ * tied to the measured header height so the first row doesn't start
+ * hidden behind the blur backdrop.
  */
 import { colors, fontSize, fontWeight, spacing } from "@jellyfuse/theme";
 import type { DownloadRecord } from "@jellyfuse/models";
 import { FlashList } from "@shopify/flash-list";
 import { router } from "expo-router";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { NerdIcon } from "@/features/common/components/nerd-icon";
 import { ScreenHeader } from "@/features/common/components/screen-header";
+import { StatusBarScrim } from "@/features/common/components/status-bar-scrim";
+import { useFloatingHeaderScroll } from "@/features/common/hooks/use-floating-header-scroll";
 import { DownloadRow, type DownloadRowCallbacks } from "../components/download-row";
 import { useDownloaderActions, useLocalDownloads } from "@/services/downloads/use-local-downloads";
 import { PILL_TAB_CLEARANCE } from "@/features/common/components/pill-tab-bar";
 
 type Section = { type: "header"; label: string } | { type: "row"; record: DownloadRecord };
+
+const AnimatedFlashList = Animated.createAnimatedComponent(FlashList<Section>);
 
 function buildSections(records: DownloadRecord[]): Section[] {
   const groups: { label: string; states: DownloadRecord["state"][] }[] = [
@@ -50,6 +60,8 @@ export function DownloadsScreen() {
   const insets = useSafeAreaInsets();
 
   const sections = buildSections(records);
+  const { headerHeight, onHeaderHeightChange, scrollHandler, backdropStyle } =
+    useFloatingHeaderScroll();
 
   const callbacks: DownloadRowCallbacks = {
     onPause: (id) => actions.pause(id),
@@ -92,10 +104,44 @@ export function DownloadsScreen() {
   const pillBottom = insets.bottom > 0 ? insets.bottom - 8 : 8;
   const listPaddingBottom = pillBottom + PILL_TAB_CLEARANCE + spacing.lg;
 
+  const isEmpty = sections.length === 0;
+
   return (
     <View style={styles.container}>
+      {isEmpty ? (
+        <View style={[styles.empty, { paddingTop: headerHeight + spacing.xxl }]}>
+          <NerdIcon name="download" size={48} color={colors.textMuted} />
+          <Text style={styles.emptyTitle}>No downloads yet</Text>
+          <Text style={styles.emptyBody}>
+            Tap the download button on any movie or episode to save it for offline viewing.
+          </Text>
+        </View>
+      ) : (
+        <AnimatedFlashList
+          data={sections}
+          keyExtractor={(item) =>
+            item.type === "header" ? `header-${item.label}` : `row-${item.record.id}`
+          }
+          renderItem={({ item }) => {
+            if (item.type === "header") {
+              return <Text style={styles.sectionHeader}>{item.label}</Text>;
+            }
+            return <DownloadRow record={item.record} {...callbacks} />;
+          }}
+          contentContainerStyle={{
+            paddingTop: headerHeight + spacing.sm,
+            paddingBottom: listPaddingBottom,
+          }}
+          showsVerticalScrollIndicator={false}
+          onScroll={scrollHandler}
+          scrollEventThrottle={16}
+        />
+      )}
+
       <ScreenHeader
         title="Downloads"
+        backdropStyle={backdropStyle}
+        onTotalHeightChange={onHeaderHeightChange}
         rightSlot={
           records.length > 0 ? (
             <Pressable
@@ -109,31 +155,7 @@ export function DownloadsScreen() {
           ) : undefined
         }
       />
-
-      {sections.length === 0 ? (
-        <View style={styles.empty}>
-          <NerdIcon name="download" size={48} color={colors.textMuted} />
-          <Text style={styles.emptyTitle}>No downloads yet</Text>
-          <Text style={styles.emptyBody}>
-            Tap the download button on any movie or episode to save it for offline viewing.
-          </Text>
-        </View>
-      ) : (
-        <FlashList
-          data={sections}
-          keyExtractor={(item) =>
-            item.type === "header" ? `header-${item.label}` : `row-${item.record.id}`
-          }
-          renderItem={({ item }) => {
-            if (item.type === "header") {
-              return <Text style={styles.sectionHeader}>{item.label}</Text>;
-            }
-            return <DownloadRow record={item.record} {...callbacks} />;
-          }}
-          contentContainerStyle={{ paddingBottom: listPaddingBottom }}
-          showsVerticalScrollIndicator={false}
-        />
-      )}
+      <StatusBarScrim />
     </View>
   );
 }
