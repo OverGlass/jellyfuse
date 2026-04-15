@@ -31,8 +31,10 @@ const REQUESTS_REFETCH_MS = 15_000;
 
 export function useJellyseerrRequests(): UseQueryResult<MediaRequest[]> {
   const { jellyseerrUrl, jellyseerrStatus, activeUser } = useAuth();
+  // userId is used only to scope the cache key per user (invalidated on switch),
+  // not passed to the endpoint — Jellyseerr scopes via the session cookie.
   const userId = activeUser?.userId ?? "";
-  const enabled = jellyseerrStatus === "connected" && jellyseerrUrl !== undefined && userId !== "";
+  const enabled = jellyseerrStatus === "connected" && jellyseerrUrl !== undefined;
   return useQuery({
     queryKey: queryKeys.jellyseerrRequests(userId),
     queryFn: ({ signal }) => {

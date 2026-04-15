@@ -198,6 +198,67 @@ export interface DownloadProgress {
 }
 
 /**
+ * Convert a `MediaRequest` to a `MediaItem` so it can be rendered by
+ * `MediaShelf` / `MediaCard` on the home screen. Mirrors the Rust
+ * `MediaRequest::to_media_item()` in `crates/jf-core/src/state.rs`.
+ *
+ * The item gets a `{ kind: "tmdb" }` id (no Jellyfin id yet — the
+ * content may not be in the library), `source: "jellyseerr"`, and
+ * `availability` derived from the request status.
+ */
+export function mediaRequestToMediaItem(request: MediaRequest): MediaItem {
+  const availability: Availability =
+    request.status === "available"
+      ? { kind: "available" }
+      : { kind: "requested", status: request.status };
+  return {
+    id: { kind: "tmdb", tmdbId: request.tmdbId },
+    source: "jellyseerr",
+    availability,
+    mediaType: request.mediaType === "tv" ? "series" : "movie",
+    title: request.title,
+    sortTitle: request.title,
+    year: undefined,
+    overview: undefined,
+    posterUrl: request.posterUrl,
+    backdropUrl: undefined,
+    logoUrl: undefined,
+    genres: [],
+    rating: undefined,
+    progress:
+      request.downloadProgress && request.downloadProgress.fraction >= 0
+        ? request.downloadProgress.fraction
+        : undefined,
+    runtimeMinutes: undefined,
+    userData: undefined,
+    seasonCount: undefined,
+    episodeCount: undefined,
+    seriesName: undefined,
+    seasonNumber: undefined,
+    episodeNumber: undefined,
+    seriesId: undefined,
+  };
+}
+
+/**
+ * Derive the active (non-available) requests sorted for the home shelf:
+ * downloading items first, then by insertion order (newest first from API).
+ * Mirrors `HomeState::active_request_items()` in `crates/jf-core/src/state.rs`.
+ */
+export function activeRequestItems(requests: MediaRequest[]): MediaRequest[] {
+  const seen = new Set<number>();
+  const active = requests.filter((r) => {
+    if (r.status === "available") return false;
+    if (seen.has(r.tmdbId)) return false;
+    seen.add(r.tmdbId);
+    return true;
+  });
+  const downloading = active.filter((r) => r.downloadProgress !== undefined);
+  const rest = active.filter((r) => r.downloadProgress === undefined);
+  return [...downloading, ...rest];
+}
+
+/**
  * One season of a TV show as the request modal sees it. Mirrors the
  * Rust `SeasonInfo` in `crates/jf-core/src/models.rs`. Built by
  * combining the TMDB `seasons[]` array with the Jellyseerr

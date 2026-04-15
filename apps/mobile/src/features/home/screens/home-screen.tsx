@@ -1,5 +1,25 @@
+import { ConnectionBanner } from "@/features/common/components/connection-banner";
+import { NerdIcon } from "@/features/common/components/nerd-icon";
+import { ScreenHeader } from "@/features/common/components/screen-header";
+import { StatusBarScrim } from "@/features/common/components/status-bar-scrim";
+import { useRestoredScroll } from "@/features/common/hooks/use-restored-scroll";
+import { MediaShelf, type MediaShelfVariant } from "@/features/home/components/media-shelf";
+import { SearchInput } from "@/features/search/components/search-input";
+import { SearchResultRow } from "@/features/search/components/search-result-row";
+import { useAuth } from "@/services/auth/state";
+import { useConnectionStatus } from "@/services/connection/monitor";
+import {
+  useContinueWatching,
+  useLatestMovies,
+  useLatestTv,
+  useNextUp,
+  useRecentlyAdded,
+} from "@/services/query";
+import { useJellyseerrRequests } from "@/services/query/hooks/use-requests";
+import { useSearchBlended } from "@/services/query/hooks/use-search-blended";
+import { useScreenGutters } from "@/services/responsive";
 import type { MediaItem } from "@jellyfuse/api";
-import { mediaIdJellyfin } from "@jellyfuse/models";
+import { activeRequestItems, mediaIdJellyfin, mediaRequestToMediaItem } from "@jellyfuse/models";
 import type { ShelfKey } from "@jellyfuse/query-keys";
 import {
   colors,
@@ -25,25 +45,6 @@ import Animated, {
   useSharedValue,
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
-import { ConnectionBanner } from "@/features/common/components/connection-banner";
-import { NerdIcon } from "@/features/common/components/nerd-icon";
-import { ScreenHeader } from "@/features/common/components/screen-header";
-import { StatusBarScrim } from "@/features/common/components/status-bar-scrim";
-import { useRestoredScroll } from "@/features/common/hooks/use-restored-scroll";
-import { MediaShelf, type MediaShelfVariant } from "@/features/home/components/media-shelf";
-import { SearchInput } from "@/features/search/components/search-input";
-import { SearchResultRow } from "@/features/search/components/search-result-row";
-import { useAuth } from "@/services/auth/state";
-import { useConnectionStatus } from "@/services/connection/monitor";
-import {
-  useContinueWatching,
-  useLatestMovies,
-  useLatestTv,
-  useNextUp,
-  useRecentlyAdded,
-} from "@/services/query";
-import { useSearchBlended } from "@/services/query/hooks/use-search-blended";
-import { useScreenGutters } from "@/services/responsive";
 
 const AnimatedFlashList = Animated.createAnimatedComponent(FlashList<HomeShelf>);
 const AnimatedSearchList = Animated.createAnimatedComponent(FlashList<SearchRow>);
@@ -142,28 +143,39 @@ export function HomeScreen() {
   const latestMovies = useLatestMovies();
   const latestTv = useLatestTv();
 
+  // Requests shelf — only when Jellyseerr is connected. Active (non-available)
+  // requests, downloading first, converted to MediaItems for MediaShelf.
+  const requestsQuery = useJellyseerrRequests();
+  const requestItems =
+    jellyseerrStatus === "connected"
+      ? activeRequestItems(requestsQuery.data ?? []).map(mediaRequestToMediaItem)
+      : [];
+
   const shelves: HomeShelf[] = [
     {
       key: "continue-watching",
       title: "Continue Watching",
       variant: "wide",
       query: continueWatching,
+      onItemPress: handleContinueWatchingPress,
     },
     { key: "next-up", title: "Next Up", variant: "poster", query: nextUp },
     { key: "recently-added", title: "Recently Added", variant: "poster", query: recentlyAdded },
     { key: "latest-movies", title: "Latest Movies", variant: "poster", query: latestMovies },
     { key: "latest-tv", title: "Latest TV", variant: "poster", query: latestTv },
+    { key: "requests", title: "My Requests", variant: "poster", items: requestItems },
   ];
 
-  const visibleShelves = shelves.filter(
-    (shelf) => shelf.query.isPending || (shelf.query.data?.length ?? 0) > 0,
-  );
+  const visibleShelves = shelves.filter((shelf) => {
+    if (shelf.items !== undefined) return shelf.items.length > 0;
+    return shelf.query?.isPending || (shelf.query?.data?.length ?? 0) > 0;
+  });
 
-  const anyShelfLoading = shelves.some((s) => s.query.isPending);
+  const anyShelfLoading = shelves.some((s) => s.query?.isPending);
   const allShelvesEmptyOnline =
     !anyShelfLoading &&
     connectionStatus === "online" &&
-    shelves.every((s) => (s.query.data?.length ?? 0) === 0);
+    shelves.every((s) => (s.items?.length ?? s.query?.data?.length ?? 0) === 0);
 
   // Search results render as inline rows (poster + title + overview
   // + Library/Request badge), grouped under section headers — same
@@ -281,9 +293,9 @@ export function HomeScreen() {
           renderItem={({ item }) => (
             <MediaShelf
               title={item.title}
-              items={item.query.data ?? []}
+              items={item.items ?? item.query?.data ?? []}
               variant={item.variant}
-              onItemPress={handleItemPress}
+              onItemPress={item.onItemPress ?? handleItemPress}
               onSeeAll={() => handleSeeAll(item.key)}
             />
           )}
@@ -348,10 +360,15 @@ interface HomeShelf {
   key: ShelfKey;
   title: string;
   variant: MediaShelfVariant;
-  query: {
+  /** Jellyfin-backed shelves supply a RQ result. */
+  query?: {
     data: MediaItem[] | undefined;
     isPending: boolean;
   };
+  /** Pre-computed items (e.g. Requests shelf derived from MediaRequest[]). */
+  items?: MediaItem[];
+  /** Override item tap behaviour for this shelf (e.g. Continue Watching → player). */
+  onItemPress?: (item: MediaItem) => void;
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -417,7 +434,18 @@ function handleOpenRequests() {
 }
 
 function handleSeeAll(shelfKey: ShelfKey) {
-  router.push(`/shelf/${shelfKey}`);
+  if (shelfKey === "requests") {
+    router.push("/requests");
+  } else {
+    router.push(`/shelf/${shelfKey}`);
+  }
+}
+
+function handleContinueWatchingPress(item: MediaItem) {
+  const jellyfinId = mediaIdJellyfin(item.id);
+  if (jellyfinId) {
+    router.push(`/player/${jellyfinId}`);
+  }
 }
 
 function handleItemPress(item: MediaItem) {
