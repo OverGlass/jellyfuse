@@ -12,8 +12,7 @@ import { DetailHero } from "@/features/detail/components/detail-hero";
 import { DetailMetaRow } from "@/features/detail/components/detail-meta-row";
 import { DownloadButton } from "@/features/downloads/components/download-button";
 import { buildDownloadOptions } from "@/services/downloads/enqueue";
-import { useDownloader } from "@/services/downloads/context";
-import { useDownloadRecord } from "@/services/downloads/use-local-downloads";
+import { useDownloaderActions, useDownloadForItem } from "@/services/downloads/use-local-downloads";
 import { resolvePlayback } from "@/services/playback/resolver";
 import { apiFetchAuthenticated } from "@/services/api/client";
 import { useMovieDetail } from "@/services/query";
@@ -31,10 +30,10 @@ interface Props {
 
 export function MovieDetailScreen({ itemId }: Props) {
   const query = useMovieDetail(itemId);
-  const downloader = useDownloader();
+  const actions = useDownloaderActions();
   const queryClient = useQueryClient();
   const { serverUrl, activeUser } = useAuth();
-  const downloadRecord = useDownloadRecord(itemId, "");
+  const downloadRecord = useDownloadForItem(itemId);
 
   const gutters = useScreenGutters();
   const insets = useSafeAreaInsets();
@@ -45,17 +44,32 @@ export function MovieDetailScreen({ itemId }: Props) {
 
   async function handleDownloadPress() {
     const record = downloadRecord;
+    // Button dispatch table, exhaustive over `DownloadRecord["state"]`:
+    //   done        → play locally
+    //   downloading → pause
+    //   paused      → resume
+    //   queued      → no-op (already queued, will start on its own)
+    //   failed      → delete and fall through to enqueue a fresh one
+    //   undefined   → enqueue
+    // This fixes the dedup bug where stale records caused multiple
+    // parallel downloads of the same item.
     if (record?.state === "done") {
       router.push(`/player/${itemId}`);
       return;
     }
     if (record?.state === "downloading") {
-      downloader.pause(record.id);
+      actions.pause(record.id);
       return;
     }
     if (record?.state === "paused") {
-      downloader.resume(record.id);
+      actions.resume(record.id);
       return;
+    }
+    if (record?.state === "queued") {
+      return;
+    }
+    if (record?.state === "failed") {
+      actions.remove(record.id);
     }
     if (!serverUrl || !activeUser) return;
 
@@ -77,7 +91,7 @@ export function MovieDetailScreen({ itemId }: Props) {
       });
       const item = query.data!;
       const options = buildDownloadOptions(item, resolved, buildAuthHeader(authCtx), queryClient);
-      downloader.enqueue(options);
+      actions.enqueue(options);
     } catch (e) {
       Alert.alert("Download failed", e instanceof Error ? e.message : "Unknown error");
     }

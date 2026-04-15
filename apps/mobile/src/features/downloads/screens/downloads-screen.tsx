@@ -2,9 +2,11 @@
  * Downloads management screen. Shows all local downloads grouped
  * by state: In Progress → Paused → Done → Failed / Queued.
  *
- * Reads `useLocalDownloads()` (RQ cache maintained by the Nitro
- * events bridge in `useLocalDownloadsSync`). Actions dispatch to
- * `useDownloader()` which calls the Nitro module methods.
+ * Reads `useLocalDownloads()` (RQ cache fed by the Nitro events bridge
+ * in `useLocalDownloadsSync`). Actions go through `useDownloaderActions()`
+ * which wraps the raw Nitro methods with optimistic RQ-cache updates —
+ * necessary because `cancel`/`remove`/`clearAll` don't emit a native
+ * state-change event.
  */
 import { colors, fontSize, fontWeight, spacing } from "@jellyfuse/theme";
 import type { DownloadRecord } from "@jellyfuse/models";
@@ -15,8 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { NerdIcon } from "@/features/common/components/nerd-icon";
 import { ScreenHeader } from "@/features/common/components/screen-header";
 import { DownloadRow, type DownloadRowCallbacks } from "../components/download-row";
-import { useDownloader } from "@/services/downloads/context";
-import { useLocalDownloads } from "@/services/downloads/use-local-downloads";
+import { useDownloaderActions, useLocalDownloads } from "@/services/downloads/use-local-downloads";
 import { PILL_TAB_CLEARANCE } from "@/features/common/components/pill-tab-bar";
 
 type Section = { type: "header"; label: string } | { type: "row"; record: DownloadRecord };
@@ -44,31 +45,33 @@ function buildSections(records: DownloadRecord[]): Section[] {
 }
 
 export function DownloadsScreen() {
-  const downloader = useDownloader();
+  const actions = useDownloaderActions();
   const records = useLocalDownloads();
   const insets = useSafeAreaInsets();
 
   const sections = buildSections(records);
 
   const callbacks: DownloadRowCallbacks = {
-    onPause: (id) => downloader.pause(id),
-    onResume: (id) => downloader.resume(id),
+    onPause: (id) => actions.pause(id),
+    onResume: (id) => actions.resume(id),
     onCancel: (id) => {
       Alert.alert("Cancel Download", "Cancel and discard this download?", [
         { text: "Keep", style: "cancel" },
-        { text: "Cancel Download", style: "destructive", onPress: () => downloader.cancel(id) },
+        { text: "Cancel Download", style: "destructive", onPress: () => actions.cancel(id) },
       ]);
     },
     onDelete: (id) => {
       Alert.alert("Delete Download", "Remove this downloaded file?", [
         { text: "Keep", style: "cancel" },
-        { text: "Delete", style: "destructive", onPress: () => downloader.remove(id) },
+        { text: "Delete", style: "destructive", onPress: () => actions.remove(id) },
       ]);
     },
     onRetry: (id) => {
-      // Re-enqueue: find record, resume will handle it if paused; otherwise
-      // the user should tap download again from the detail screen.
-      downloader.resume(id);
+      // Retry currently means "clear the failed record so the user can
+      // re-download from the detail screen". A true in-place retry needs
+      // the download URL + headers, which aren't exposed through the
+      // Nitro spec yet — tracked for a future iteration.
+      actions.remove(id);
     },
     onPlay: (record) => {
       router.push(`/player/${record.itemId}`);
@@ -81,7 +84,7 @@ export function DownloadsScreen() {
       {
         text: "Delete All",
         style: "destructive",
-        onPress: () => downloader.clearAll(),
+        onPress: () => actions.clearAll(),
       },
     ]);
   }
