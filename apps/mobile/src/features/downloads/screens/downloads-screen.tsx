@@ -62,7 +62,7 @@ export function DownloadsScreen() {
     onDelete: (id) => {
       Alert.alert("Delete Download", "Remove this downloaded file?", [
         { text: "Keep", style: "cancel" },
-        { text: "Delete", style: "destructive", onPress: () => downloader.delete(id) },
+        { text: "Delete", style: "destructive", onPress: () => downloader.remove(id) },
       ]);
     },
     onRetry: (id) => {

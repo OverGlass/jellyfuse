@@ -168,8 +168,12 @@ export interface Downloader extends HybridObject<{ ios: "swift" }> {
   /**
    * Delete a completed (or failed) download: removes the manifest and
    * the media file from disk.
+   *
+   * Named `remove` (not `delete`) because `delete` is a reserved keyword
+   * in C++/Objective-C++ and the nitrogen-generated header can't declare
+   * a virtual method with that name.
    */
-  delete(id: string): void;
+  remove(id: string): void;
 
   /**
    * Atomically rebase all stored `destRelativePath` values onto

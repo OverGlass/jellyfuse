@@ -18,7 +18,7 @@ namespace margelo::nitro::downloader {
       prototype.registerHybridMethod("pause", &HybridDownloaderSpec::pause);
       prototype.registerHybridMethod("resume", &HybridDownloaderSpec::resume);
       prototype.registerHybridMethod("cancel", &HybridDownloaderSpec::cancel);
-      prototype.registerHybridMethod("delete", &HybridDownloaderSpec::delete);
+      prototype.registerHybridMethod("remove", &HybridDownloaderSpec::remove);
       prototype.registerHybridMethod("rebaseAllPaths", &HybridDownloaderSpec::rebaseAllPaths);
       prototype.registerHybridMethod("clearAll", &HybridDownloaderSpec::clearAll);
       prototype.registerHybridMethod("list", &HybridDownloaderSpec::list);

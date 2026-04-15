@@ -483,7 +483,7 @@ public final class HybridDownloader: HybridDownloaderSpec {
     try? FileManager.default.removeItem(atPath: dir)
   }
 
-  public func delete(id: String) throws {
+  public func remove(id: String) throws {
     // Cancel any in-progress task
     let task = queue.sync { activeTasks.removeValue(forKey: id) }
     task?.cancel()

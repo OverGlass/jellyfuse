@@ -170,9 +170,9 @@ open class HybridDownloaderSpec_cxx {
   }
   
   @inline(__always)
-  public final func delete(id: std.string) -> bridge.Result_void_ {
+  public final func remove(id: std.string) -> bridge.Result_void_ {
     do {
-      try self.__implementation.delete(id: String(id))
+      try self.__implementation.remove(id: String(id))
       return bridge.create_Result_void_()
     } catch (let __error) {
       let __exceptionPtr = __error.toCpp()
