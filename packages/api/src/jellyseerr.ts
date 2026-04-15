@@ -466,12 +466,44 @@ export async function fetchJellyseerrRequests(
   }
   const raw = (await response.json()) as RawRequestsResponse;
   const results = Array.isArray(raw.results) ? raw.results : [];
-  const out: MediaRequest[] = [];
+
+  // Map the basic list — title and poster may be absent from the request's
+  // inline media object (Jellyseerr stores media without denormalized title).
+  const mapped: MediaRequest[] = [];
   for (const r of results) {
-    const mapped = mapRequestRecord(r);
-    if (mapped) out.push(mapped);
+    const req = mapRequestRecord(r);
+    if (req) mapped.push(req);
   }
-  return out;
+
+  // Enrich with real title + poster from the media detail endpoint — mirrors
+  // Rust's `get_item_by_tmdb` fan-out in `jellyseerr.rs::get_requests()`.
+  // Fire all enrichment calls in parallel; fall back to whatever the basic
+  // record had if the call fails.
+  const enriched = await Promise.all(
+    mapped.map(async (req) => {
+      if (req.title && req.posterUrl) return req; // already complete, skip round-trip
+      try {
+        const path = req.mediaType === "tv" ? "tv" : "movie";
+        const detailUrl = joinPath(args.baseUrl, `/api/v1/${path}/${req.tmdbId}`);
+        const detailResp = await fetcher(detailUrl, signal ? { signal } : undefined);
+        if (!detailResp.ok) return req;
+        const detail = (await detailResp.json()) as {
+          title?: string;
+          name?: string;
+          posterPath?: string | null;
+        };
+        const enrichedTitle = detail.title ?? detail.name ?? req.title;
+        const enrichedPoster = detail.posterPath
+          ? `https://image.tmdb.org/t/p/w342${detail.posterPath}`
+          : req.posterUrl;
+        return { ...req, title: enrichedTitle, posterUrl: enrichedPoster };
+      } catch {
+        return req;
+      }
+    }),
+  );
+
+  return enriched.filter((r) => r.title !== "");
 }
 
 function mapRequestRecord(raw: RawRequest): MediaRequest | undefined {
@@ -480,8 +512,8 @@ function mapRequestRecord(raw: RawRequest): MediaRequest | undefined {
   if (!type) return undefined;
   const media = raw.media ?? {};
   if (typeof media.tmdbId !== "number") return undefined;
+  // Title may be absent on the inline media object — enrichment fills it in.
   const title = media.title ?? media.name ?? "";
-  if (!title) return undefined;
   const posterUrl = media.posterPath
     ? `https://image.tmdb.org/t/p/w342${media.posterPath}`
     : undefined;

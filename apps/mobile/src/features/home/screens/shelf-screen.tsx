@@ -62,6 +62,8 @@ const PAGEABLE_SHELVES: Record<ShelfKey, boolean> = {
   "latest-movies": true,
   "latest-tv": true,
   suggestions: false,
+  // "requests" redirects to /requests before reaching this screen
+  requests: false,
 };
 
 const SHELF_TITLE: Record<ShelfKey, string> = {
@@ -71,6 +73,7 @@ const SHELF_TITLE: Record<ShelfKey, string> = {
   "latest-movies": "Latest Movies",
   "latest-tv": "Latest TV",
   suggestions: "Suggestions",
+  requests: "My Requests",
 };
 
 type ShelfSearchMode =
@@ -84,6 +87,7 @@ const SHELF_SEARCH_MODE: Record<ShelfKey, ShelfSearchMode> = {
   "latest-movies": { kind: "library", includeTypes: "Movie", typeFilter: "movie" },
   "latest-tv": { kind: "library", includeTypes: "Series", typeFilter: "series" },
   suggestions: { kind: "static" },
+  requests: { kind: "static" },
 };
 
 const MIN_SEARCH_LENGTH = 2;

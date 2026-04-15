@@ -114,4 +114,5 @@ export type ShelfKey =
   | "recently-added"
   | "latest-movies"
   | "latest-tv"
-  | "suggestions";
+  | "suggestions"
+  | "requests";
