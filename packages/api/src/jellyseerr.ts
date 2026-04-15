@@ -1,5 +1,6 @@
 import type {
   DownloadProgress,
+  MediaItem,
   MediaRequest,
   MediaRequestStatus,
   MediaServer,
@@ -396,6 +397,140 @@ export async function createJellyseerrRequest(
 }
 
 // ──────────────────────────────────────────────────────────────────────
+// TMDB media detail (Jellyseerr-only items not yet in Jellyfin library)
+// ──────────────────────────────────────────────────────────────────────
+
+interface RawTmdbGenre {
+  id?: number;
+  name?: string;
+}
+
+interface RawJellyseerrMediaDetail {
+  // Movie fields
+  title?: string;
+  releaseDate?: string | null;
+  runtime?: number | null;
+  // TV fields
+  name?: string;
+  firstAirDate?: string | null;
+  episodeRunTime?: number[];
+  numberOfSeasons?: number | null;
+  // Shared
+  overview?: string | null;
+  posterPath?: string | null;
+  backdropPath?: string | null;
+  genres?: RawTmdbGenre[];
+  voteAverage?: number | null;
+  mediaInfo?: {
+    status?: number;
+    /**
+     * Jellyfin item ID stored by Jellyseerr after syncing the media into
+     * the library. Present when `status === 5` (Available). Mirrors the
+     * `jellyfinMediaId` field in Jellyseerr's `MediaInfo` model.
+     */
+    jellyfinMediaId?: string | null;
+    jellyfinMediaId4k?: string | null;
+  };
+}
+
+/**
+ * `GET /api/v1/{movie|tv}/{tmdbId}` — Jellyseerr TMDB media detail.
+ * Returns a `MediaItem` so the TMDB detail screen can reuse the same
+ * `<DetailHero>`, `<DetailMetaRow>`, and friends as the Jellyfin
+ * detail screens without a second set of components.
+ *
+ * The `availability` field is derived from `mediaInfo.status`:
+ *   5 → `{ kind: "available" }`, any other value with mediaInfo → `{ kind: "requested", status: ... }`
+ *   no mediaInfo → `{ kind: "missing" }`
+ *
+ * Backdrop / poster URLs use TMDB's CDN directly (`/original` for backdrop,
+ * `w342` for poster) — same pattern as the enrichment step in
+ * `fetchJellyseerrRequests`.
+ */
+export async function fetchJellyseerrMediaDetail(
+  args: { baseUrl: string; tmdbId: number; mediaType: "movie" | "tv" },
+  fetcher: FetchLike,
+  signal?: AbortSignal,
+): Promise<MediaItem> {
+  const path = args.mediaType === "tv" ? "tv" : "movie";
+  const url = joinPath(args.baseUrl, `/api/v1/${path}/${args.tmdbId}`);
+  const response = await fetcher(url, signal ? { signal } : undefined);
+  if (!response.ok) {
+    throw new JellyseerrRequestError(`/api/v1/${path}/${args.tmdbId}`, response.status);
+  }
+  const raw = (await response.json()) as RawJellyseerrMediaDetail;
+
+  const isMovie = args.mediaType === "movie";
+  const title = isMovie ? (raw.title ?? "") : (raw.name ?? "");
+  const dateStr = isMovie ? raw.releaseDate : raw.firstAirDate;
+  const year = dateStr ? Number.parseInt(dateStr.slice(0, 4), 10) : undefined;
+  const runtimeMinutes = isMovie
+    ? typeof raw.runtime === "number"
+      ? raw.runtime
+      : undefined
+    : Array.isArray(raw.episodeRunTime) && raw.episodeRunTime.length > 0
+      ? raw.episodeRunTime[0]
+      : undefined;
+  const genres = Array.isArray(raw.genres)
+    ? raw.genres.map((g) => g.name ?? "").filter(Boolean)
+    : [];
+  const rating =
+    typeof raw.voteAverage === "number" && raw.voteAverage > 0 ? raw.voteAverage : undefined;
+  const posterUrl = raw.posterPath ? `https://image.tmdb.org/t/p/w342${raw.posterPath}` : undefined;
+  const backdropUrl = raw.backdropPath
+    ? `https://image.tmdb.org/t/p/original${raw.backdropPath}`
+    : undefined;
+  const seasonCount =
+    !isMovie && typeof raw.numberOfSeasons === "number" ? raw.numberOfSeasons : undefined;
+
+  const mediaStatus = raw.mediaInfo?.status;
+  const availability =
+    mediaStatus === 5
+      ? ({ kind: "available" } as const)
+      : mediaStatus !== undefined
+        ? ({ kind: "requested", status: mapRequestStatusCode(mediaStatus) } as const)
+        : ({ kind: "missing" } as const);
+
+  // When the item is available, Jellyseerr stores the Jellyfin item ID in
+  // `mediaInfo.jellyfinMediaId`. Use it to build a `Both` MediaId so the
+  // detail screen can show a play button and the caller can navigate to
+  // the Jellyfin detail page — mirroring the Rust `detail_path(Both)` rule.
+  const jellyfinMediaId =
+    typeof raw.mediaInfo?.jellyfinMediaId === "string" && raw.mediaInfo.jellyfinMediaId
+      ? raw.mediaInfo.jellyfinMediaId
+      : undefined;
+  const mediaId = jellyfinMediaId
+    ? ({ kind: "both", jellyfinId: jellyfinMediaId, tmdbId: args.tmdbId } as const)
+    : ({ kind: "tmdb", tmdbId: args.tmdbId } as const);
+  const source = jellyfinMediaId ? "both" : "jellyseerr";
+
+  return {
+    id: mediaId,
+    source,
+    availability,
+    mediaType: isMovie ? "movie" : "series",
+    title,
+    sortTitle: title,
+    year: Number.isFinite(year) ? year : undefined,
+    overview: raw.overview ?? undefined,
+    posterUrl,
+    backdropUrl,
+    logoUrl: undefined,
+    genres,
+    rating,
+    progress: undefined,
+    runtimeMinutes,
+    userData: undefined,
+    seasonCount,
+    episodeCount: undefined,
+    seriesName: undefined,
+    seasonNumber: undefined,
+    episodeNumber: undefined,
+    seriesId: undefined,
+  };
+}
+
+// ──────────────────────────────────────────────────────────────────────
 // Requests list + download progress
 // ──────────────────────────────────────────────────────────────────────
 
@@ -475,13 +610,20 @@ export async function fetchJellyseerrRequests(
     if (req) mapped.push(req);
   }
 
-  // Enrich with real title + poster from the media detail endpoint — mirrors
-  // Rust's `get_item_by_tmdb` fan-out in `jellyseerr.rs::get_requests()`.
-  // Fire all enrichment calls in parallel; fall back to whatever the basic
-  // record had if the call fails.
+  // Enrich with real title + poster + jellyfinMediaId from the media detail
+  // endpoint — mirrors Rust's `get_item_by_tmdb` fan-out in
+  // `jellyseerr.rs::get_requests()`. The `jellyfinMediaId` field lets
+  // the requests screen navigate to the Jellyfin detail page when the
+  // item is available (mirroring the Rust `detail_path(MediaId::Both)` rule).
+  // Fire all enrichment calls in parallel; fall back to the basic record if
+  // the call fails.
   const enriched = await Promise.all(
     mapped.map(async (req) => {
-      if (req.title && req.posterUrl) return req; // already complete, skip round-trip
+      // Skip the round-trip only when title, poster AND the jellyfin id are
+      // all known — an available item always needs the detail call to pick
+      // up `jellyfinMediaId` (it's absent on the inline request media object).
+      const needsDetail = !req.title || !req.posterUrl || req.status === "available";
+      if (!needsDetail) return req;
       try {
         const path = req.mediaType === "tv" ? "tv" : "movie";
         const detailUrl = joinPath(args.baseUrl, `/api/v1/${path}/${req.tmdbId}`);
@@ -491,12 +633,17 @@ export async function fetchJellyseerrRequests(
           title?: string;
           name?: string;
           posterPath?: string | null;
+          mediaInfo?: { jellyfinMediaId?: string | null; status?: number };
         };
         const enrichedTitle = detail.title ?? detail.name ?? req.title;
         const enrichedPoster = detail.posterPath
           ? `https://image.tmdb.org/t/p/w342${detail.posterPath}`
           : req.posterUrl;
-        return { ...req, title: enrichedTitle, posterUrl: enrichedPoster };
+        const jellyfinMediaId =
+          typeof detail.mediaInfo?.jellyfinMediaId === "string" && detail.mediaInfo.jellyfinMediaId
+            ? detail.mediaInfo.jellyfinMediaId
+            : req.jellyfinMediaId;
+        return { ...req, title: enrichedTitle, posterUrl: enrichedPoster, jellyfinMediaId };
       } catch {
         return req;
       }
@@ -533,6 +680,7 @@ function mapRequestRecord(raw: RawRequest): MediaRequest | undefined {
     createdAt: raw.createdAt,
     seasons,
     downloadProgress: undefined,
+    jellyfinMediaId: undefined,
   };
 }
 

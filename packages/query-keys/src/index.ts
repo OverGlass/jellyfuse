@@ -42,6 +42,9 @@ export const STALE_TIMES = {
   /** TMDB TV seasons (incl. mediaInfo status) — 5 min. */
   tmdbTvSeasons: 5 * 60 * 1000,
 
+  /** TMDB-only detail (Jellyseerr items not yet in library) — 2 min. */
+  tmdbDetail: 2 * 60 * 1000,
+
   /** Search — 30 s (Rust: 30 s). */
   search: 30 * 1000,
 } as const;
@@ -79,7 +82,8 @@ export const queryKeys = {
   seriesDetail: (userId: string, jellyfinId: string) =>
     ["detail", userId, "series", jellyfinId] as const,
   /** TMDB-only detail (Jellyseerr items not yet in library). */
-  tmdbDetail: (userId: string, tmdbId: number) => ["detail", userId, "tmdb", tmdbId] as const,
+  tmdbDetail: (userId: string, tmdbId: number, mediaType: "movie" | "tv") =>
+    ["detail", userId, "tmdb", tmdbId, mediaType] as const,
   seasonEpisodes: (userId: string, seasonId: string) =>
     ["detail", userId, "season-episodes", seasonId] as const,
   seasonInfo: (userId: string, tmdbId: number) =>

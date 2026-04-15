@@ -75,7 +75,7 @@ describe("@jellyfuse/query-keys", () => {
     it("detail keys are scoped by userId", () => {
       expect(queryKeys.movieDetail("user-a", "jf-1")).toContain("user-a");
       expect(queryKeys.seriesDetail("user-a", "jf-1")).toContain("user-a");
-      expect(queryKeys.tmdbDetail("user-a", 603)).toContain("user-a");
+      expect(queryKeys.tmdbDetail("user-a", 603, "movie")).toContain("user-a");
     });
   });
 });

@@ -157,22 +157,26 @@ export function RequestsScreen() {
   );
 }
 
-// ──────────────────────────────────────────────────────────────────────
-// Row tap — TMDB-only detail route lands in a later phase. For now
-// an `available` request routes home (where the user can find it
-// via search / shelves), and the other statuses silently no-op so
-// the row still feels tappable in the interim.
-// ──────────────────────────────────────────────────────────────────────
-
+/**
+ * Navigate on row tap — mirrors the Rust `detail_path()` rule:
+ *   - `MediaId::Both`   → Jellyfin detail (prefer library when available)
+ *   - `MediaId::Tmdb`   → TMDB/Jellyseerr detail
+ *
+ * `jellyfinMediaId` is populated by the enrichment step in
+ * `fetchJellyseerrRequests` when Jellyseerr reports the item as
+ * available (status 5) and has synced the Jellyfin ID into its
+ * `mediaInfo`. When absent we fall back to the TMDB detail screen.
+ */
 function handleRowPress(request: MediaRequest) {
-  // TMDB-only detail route lands in a later phase. For now, if the
-  // media is already available, route to the Jellyfin-side detail.
-  // Otherwise we silently no-op so the row still feels tappable.
-  if (request.status === "available") {
-    // We don't have the Jellyfin id at this point (only tmdb),
-    // so bounce to search with the title pre-filled. Cheap and
-    // predictable until the TMDB detail screen exists.
-    router.push("/");
+  if (request.jellyfinMediaId) {
+    const pathname =
+      request.mediaType === "tv" ? "/detail/series/[jellyfinId]" : "/detail/movie/[jellyfinId]";
+    router.push({ pathname, params: { jellyfinId: request.jellyfinMediaId } });
+  } else {
+    router.push({
+      pathname: "/detail/tmdb/[tmdbId]",
+      params: { tmdbId: String(request.tmdbId), mediaType: request.mediaType },
+    });
   }
 }
 
