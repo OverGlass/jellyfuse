@@ -1,0 +1,9 @@
+{
+  "extends": "@jellyfuse/tsconfig-base/tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "jsx": "react-native"
+  },
+  "include": ["src/**/*.ts"]
+}

@@ -1,23 +1,24 @@
 import { colors, fontSize, fontWeight, opacity, radius, spacing } from "@jellyfuse/theme";
+import { type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 /**
- * Detail screen primary action row. Phase 2d ships `Play` (placeholder
- * until Phase 3 lands the MPV player) and `Download` / `Request`
- * buttons wired as callbacks so the parent screen can no-op them
- * without baking UI placeholders into the pure component.
- *
- * `Play` uses the accent CTA style; the secondary actions use the
- * surface background with secondary text for hierarchy.
+ * Detail screen primary action row. `Play` uses the accent CTA style;
+ * secondary actions use the surface background. `downloadSlot` accepts
+ * a `DownloadButton` (Phase 5) that shows state-aware iconography and
+ * a progress ring — the caller owns the interaction logic.
  */
 interface Props {
   hasResume: boolean;
   onPlay: () => void;
+  /** Called when the text "Download" label is tapped (legacy path). */
   onDownload?: () => void;
+  /** Slot for a `DownloadButton` component with state-aware visuals. */
+  downloadSlot?: ReactNode;
   onRequest?: () => void;
 }
 
-export function DetailActionRow({ hasResume, onPlay, onDownload, onRequest }: Props) {
+export function DetailActionRow({ hasResume, onPlay, onDownload, downloadSlot, onRequest }: Props) {
   return (
     <View style={styles.root}>
       <Pressable
@@ -28,16 +29,18 @@ export function DetailActionRow({ hasResume, onPlay, onDownload, onRequest }: Pr
       >
         <Text style={styles.primaryLabel}>{hasResume ? "Resume" : "Play"}</Text>
       </Pressable>
-      {onDownload ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Download"
-          onPress={onDownload}
-          style={({ pressed }) => [styles.secondary, pressed && styles.secondaryPressed]}
-        >
-          <Text style={styles.secondaryLabel}>Download</Text>
-        </Pressable>
-      ) : null}
+      {/* Prefer the slot (has state-aware progress ring) over the text button */}
+      {downloadSlot ??
+        (onDownload ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Download"
+            onPress={onDownload}
+            style={({ pressed }) => [styles.secondary, pressed && styles.secondaryPressed]}
+          >
+            <Text style={styles.secondaryLabel}>Download</Text>
+          </Pressable>
+        ) : null)}
       {onRequest ? (
         <Pressable
           accessibilityRole="button"

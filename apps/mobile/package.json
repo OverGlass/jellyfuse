@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@jellyfuse/api": "workspace:*",
+    "@jellyfuse/downloader": "workspace:*",
     "@jellyfuse/models": "workspace:*",
     "@jellyfuse/native-mpv": "workspace:*",
     "@jellyfuse/query-keys": "workspace:*",
