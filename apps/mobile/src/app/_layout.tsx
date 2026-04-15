@@ -3,6 +3,8 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { AuthProvider } from "@/services/auth/state";
+import { DownloaderProvider } from "@/services/downloads/context";
+import { useLocalDownloadsSync } from "@/services/downloads/use-local-downloads";
 import { QueryProvider } from "@/services/query";
 
 /**
@@ -23,19 +25,32 @@ import { QueryProvider } from "@/services/query";
  * group's `_layout.tsx` so the redirect logic is colocated with the group
  * it protects, per Expo Router conventions.
  */
+/**
+ * Inner layout rendered inside all providers — mounts the download
+ * sync hook which subscribes to Nitro events and keeps RQ up-to-date.
+ */
+function AppShell() {
+  useLocalDownloadsSync();
+  return (
+    <ThemeProvider value={DarkTheme}>
+      <StatusBar style="light" />
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="(app)" />
+        <Stack.Screen name="(auth)" />
+        <Stack.Screen name="profile-picker" options={{ presentation: "modal" }} />
+      </Stack>
+    </ThemeProvider>
+  );
+}
+
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <QueryProvider>
         <AuthProvider>
-          <ThemeProvider value={DarkTheme}>
-            <StatusBar style="light" />
-            <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="(app)" />
-              <Stack.Screen name="(auth)" />
-              <Stack.Screen name="profile-picker" options={{ presentation: "modal" }} />
-            </Stack>
-          </ThemeProvider>
+          <DownloaderProvider>
+            <AppShell />
+          </DownloaderProvider>
         </AuthProvider>
       </QueryProvider>
     </GestureHandlerRootView>

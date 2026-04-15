@@ -1,6 +1,8 @@
+import { buildAuthHeader, fetchPlaybackInfo, type AuthContext } from "@jellyfuse/api";
 import { colors, fontSize, layout, spacing } from "@jellyfuse/theme";
+import { useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, StyleSheet, Text, View } from "react-native";
 import Animated, { useAnimatedScrollHandler, useSharedValue } from "react-native-reanimated";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { BackButton } from "@/features/common/components/back-button";
@@ -8,8 +10,15 @@ import { StatusBarScrim } from "@/features/common/components/status-bar-scrim";
 import { DetailActionRow } from "@/features/detail/components/detail-action-row";
 import { DetailHero } from "@/features/detail/components/detail-hero";
 import { DetailMetaRow } from "@/features/detail/components/detail-meta-row";
+import { DownloadButton } from "@/features/downloads/components/download-button";
+import { buildDownloadOptions } from "@/services/downloads/enqueue";
+import { useDownloader } from "@/services/downloads/context";
+import { useDownloadRecord } from "@/services/downloads/use-local-downloads";
+import { resolvePlayback } from "@/services/playback/resolver";
+import { apiFetchAuthenticated } from "@/services/api/client";
 import { useMovieDetail } from "@/services/query";
 import { useScreenGutters } from "@/services/responsive";
+import { useAuth } from "@/services/auth/state";
 
 /**
  * Movie detail screen. Prefetches the player route so tapping Play
@@ -22,6 +31,10 @@ interface Props {
 
 export function MovieDetailScreen({ itemId }: Props) {
   const query = useMovieDetail(itemId);
+  const downloader = useDownloader();
+  const queryClient = useQueryClient();
+  const { serverUrl, activeUser } = useAuth();
+  const downloadRecord = useDownloadRecord(itemId, "");
 
   const gutters = useScreenGutters();
   const insets = useSafeAreaInsets();
@@ -29,6 +42,46 @@ export function MovieDetailScreen({ itemId }: Props) {
   const scrollHandler = useAnimatedScrollHandler((event) => {
     scrollY.value = event.contentOffset.y;
   });
+
+  async function handleDownloadPress() {
+    const record = downloadRecord;
+    if (record?.state === "done") {
+      router.push(`/player/${itemId}`);
+      return;
+    }
+    if (record?.state === "downloading") {
+      downloader.pause(record.id);
+      return;
+    }
+    if (record?.state === "paused") {
+      downloader.resume(record.id);
+      return;
+    }
+    if (!serverUrl || !activeUser) return;
+
+    try {
+      const authCtx = await queryClient.fetchQuery<AuthContext>({
+        queryKey: ["auth", "context", activeUser.userId] as const,
+        queryFn: async () => {
+          const { buildAuthContextForUser } = await import("@/services/auth/auth-context-builder");
+          return buildAuthContextForUser(activeUser);
+        },
+      });
+      const playbackInfo = await fetchPlaybackInfo(
+        { baseUrl: serverUrl, userId: activeUser.userId, token: activeUser.token, itemId },
+        apiFetchAuthenticated,
+      );
+      const resolved = resolvePlayback({
+        playbackInfo,
+        settings: { preferredAudioLanguage: "eng", subtitleMode: "OnlyForced" },
+      });
+      const item = query.data!;
+      const options = buildDownloadOptions(item, resolved, buildAuthHeader(authCtx), queryClient);
+      downloader.enqueue(options);
+    } catch (e) {
+      Alert.alert("Download failed", e instanceof Error ? e.message : "Unknown error");
+    }
+  }
 
   if (query.isPending) {
     return (
@@ -73,9 +126,8 @@ export function MovieDetailScreen({ itemId }: Props) {
           <DetailActionRow
             hasResume={hasResume}
             onPlay={() => router.push(`/player/${itemId}`)}
-            onDownload={() => {
-              console.warn(`download movie ${itemId}`);
-            }}
+            onDownload={handleDownloadPress}
+            downloadSlot={<DownloadButton record={downloadRecord} onPress={handleDownloadPress} />}
           />
           {item.overview ? <Text style={styles.overview}>{item.overview}</Text> : null}
         </View>

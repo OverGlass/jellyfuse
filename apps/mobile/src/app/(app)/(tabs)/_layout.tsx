@@ -1,5 +1,5 @@
-import { PillTabBar } from "@/features/common/components/pill-tab-bar";
 import { NerdIcon } from "@/features/common/components/nerd-icon";
+import { PillTabBar } from "@/features/common/components/pill-tab-bar";
 import { Tabs } from "expo-router";
 
 /**
@@ -24,6 +24,13 @@ export default function TabsLayout() {
         options={{
           title: "Home",
           tabBarIcon: ({ color, size }) => <NerdIcon name="home" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="downloads"
+        options={{
+          title: "Downloads",
+          tabBarIcon: ({ color, size }) => <NerdIcon name="download" size={size} color={color} />,
         }}
       />
       <Tabs.Screen

@@ -1,0 +1,19 @@
+{
+  "cxxNamespace": ["downloader"],
+  "ios": {
+    "iosModuleName": "Downloader"
+  },
+  "android": {
+    "androidNamespace": ["downloader"],
+    "androidCxxLibName": "downloader"
+  },
+  "autolinking": {
+    "Downloader": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridDownloader"
+      }
+    }
+  },
+  "ignorePaths": ["node_modules"]
+}

@@ -80,6 +80,8 @@ export const icons = {
   star: "\u{F005}", // nf-fa-star
   heart: "\u{F004}", // nf-fa-heart
   user: "\u{F007}", // nf-fa-user
+  trash: "\u{F1F8}", // nf-fa-trash
+  refresh: "\u{F021}", // nf-fa-refresh
 } as const;
 export type IconName = keyof typeof icons;
 

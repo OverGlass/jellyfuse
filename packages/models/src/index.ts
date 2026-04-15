@@ -432,6 +432,58 @@ export interface PendingReport {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
+// Offline downloads — ported from `crates/jf-core/src/models.rs::DownloadRecord`
+// ──────────────────────────────────────────────────────────────────────────────
+
+export type DownloadState = "queued" | "downloading" | "paused" | "done" | "failed";
+
+/**
+ * Rich playback metadata captured at enqueue time so the player works
+ * fully offline — no server round-trip needed. Mirrors
+ * `crates/jf-core/src/models.rs::DownloadMetadata`.
+ */
+export interface DownloadMetadata {
+  durationSeconds: number;
+  chapters: Chapter[];
+  trickplayInfo: TrickplayInfo | undefined;
+  introSkipperSegments: IntroSkipperSegments | undefined;
+}
+
+/**
+ * One offline download record. The canonical shape shared between the
+ * Nitro module (`NativeDownloadRecord`) and the JS services layer.
+ * Mirrors `crates/jf-core/src/models.rs::DownloadRecord`.
+ */
+export interface DownloadRecord {
+  /** UUID generated at enqueue time. */
+  id: string;
+  /** Jellyfin item id. */
+  itemId: string;
+  mediaSourceId: string;
+  playSessionId: string;
+  title: string;
+  seriesTitle: string | undefined;
+  seasonNumber: number | undefined;
+  episodeNumber: number | undefined;
+  /** Absolute poster image URL cached at enqueue time. */
+  imageUrl: string | undefined;
+  /** The original Jellyfin stream URL passed at enqueue time. */
+  streamUrl: string;
+  /**
+   * Path relative to the app's document directory where the media file
+   * lives once the download is complete. Rebased on every launch so
+   * stale absolute paths (from OS restores / dev rebuilds) still resolve.
+   */
+  destRelativePath: string;
+  bytesDownloaded: number;
+  bytesTotal: number;
+  state: DownloadState;
+  metadata: DownloadMetadata;
+  /** Unix milliseconds — used for list ordering. */
+  addedAtMs: number;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 // Tick helpers
 // ──────────────────────────────────────────────────────────────────────────────
 
