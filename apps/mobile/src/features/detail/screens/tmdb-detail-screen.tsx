@@ -54,7 +54,7 @@ export function TmdbDetailScreen({ tmdbId, mediaType }: Props) {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.centered}>
-          <Text style={styles.errorTitle}>Couldn't load this title</Text>
+          <Text style={styles.errorTitle}>Couldn&apos;t load this title</Text>
           <Text style={styles.errorBody}>
             {query.error instanceof Error ? query.error.message : "Unknown error"}
           </Text>

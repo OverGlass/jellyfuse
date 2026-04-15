@@ -65,7 +65,6 @@ interface Props {
 }
 
 const ROW_HEIGHT = 36;
-const BACK_SLOT_WIDTH = 36;
 
 export function ScreenHeader({
   title,

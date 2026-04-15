@@ -36,6 +36,7 @@ export const SecureStorageKey = {
   deviceId: `${KEY_PREFIX}device.id`,
 } as const;
 
+// eslint-disable-next-line @typescript-eslint/no-redeclare
 export type SecureStorageKey = (typeof SecureStorageKey)[keyof typeof SecureStorageKey];
 
 /** Read a value, or `undefined` if the key is not set. */

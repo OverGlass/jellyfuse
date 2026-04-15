@@ -120,7 +120,7 @@ export function RequestsScreen() {
             ) : null}
             {hasError ? (
               <View style={styles.centered}>
-                <Text style={styles.emptyTitle}>Couldn't load requests</Text>
+                <Text style={styles.emptyTitle}>Couldn&apos;t load requests</Text>
                 <Text style={styles.emptyBody}>
                   {requestsQuery.error instanceof Error
                     ? requestsQuery.error.message
