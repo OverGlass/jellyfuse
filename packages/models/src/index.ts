@@ -175,6 +175,14 @@ export interface MediaRequest {
   /** Empty = all seasons (or not a TV show). */
   seasons: number[];
   downloadProgress: DownloadProgress | undefined;
+  /**
+   * Jellyfin media ID extracted from Jellyseerr `mediaInfo.jellyfinMediaId`.
+   * Populated only when the item is `available` (status 5) — Jellyseerr
+   * records this after syncing the item into the library. When present, tap
+   * navigation should route to the Jellyfin detail page rather than the
+   * TMDB-only detail, mirroring the Rust `detail_path(MediaId::Both)` rule.
+   */
+  jellyfinMediaId: string | undefined;
 }
 
 /**

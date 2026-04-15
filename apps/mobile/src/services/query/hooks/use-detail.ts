@@ -1,7 +1,13 @@
-import { fetchEpisodes, fetchItemDetail, fetchSeasons, type MediaItem } from "@jellyfuse/api";
+import {
+  fetchEpisodes,
+  fetchItemDetail,
+  fetchJellyseerrMediaDetail,
+  fetchSeasons,
+  type MediaItem,
+} from "@jellyfuse/api";
 import { queryKeys, STALE_TIMES } from "@jellyfuse/query-keys";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
-import { apiFetchAuthenticated } from "@/services/api/client";
+import { apiFetch, apiFetchAuthenticated } from "@/services/api/client";
 import { useAuth } from "@/services/auth/state";
 
 /**
@@ -98,5 +104,41 @@ export function useEpisodes(
     },
     enabled: Boolean(serverUrl && userId && seriesId && seasonId),
     staleTime: STALE_TIMES.seasonEpisodes,
+  });
+}
+
+/**
+ * Fetches a Jellyseerr TMDB media detail (items not yet in the Jellyfin
+ * library). Returns a `MediaItem` shaped from the Jellyseerr response so
+ * `<TmdbDetailScreen>` can reuse `<DetailHero>` and `<DetailMetaRow>`
+ * without a separate component hierarchy.
+ *
+ * Scoped by `userId` (cache key only — the Jellyseerr session cookie
+ * discriminates the actual request, not the userId). Disabled when
+ * Jellyseerr is not connected.
+ */
+export function useTmdbDetail(
+  tmdbId: number | undefined,
+  mediaType: "movie" | "tv",
+): UseQueryResult<MediaItem> {
+  const { jellyseerrUrl, jellyseerrStatus, activeUser } = useAuth();
+  const userId = activeUser?.userId ?? "";
+  const enabled =
+    jellyseerrStatus === "connected" && jellyseerrUrl !== undefined && tmdbId !== undefined;
+  return useQuery({
+    queryKey: queryKeys.tmdbDetail(userId, tmdbId ?? 0, mediaType),
+    queryFn: ({ signal }) => {
+      if (!jellyseerrUrl || !tmdbId) {
+        throw new Error("useTmdbDetail called without jellyseerrUrl or tmdbId");
+      }
+      return fetchJellyseerrMediaDetail(
+        { baseUrl: jellyseerrUrl, tmdbId, mediaType },
+        apiFetch,
+        signal,
+      );
+    },
+    enabled,
+    staleTime: STALE_TIMES.tmdbDetail,
+    retry: 0,
   });
 }

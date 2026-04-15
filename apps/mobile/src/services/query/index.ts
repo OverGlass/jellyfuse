@@ -10,5 +10,11 @@ export {
   useNextUp,
   useRecentlyAdded,
 } from "./hooks/use-home-shelves";
-export { useEpisodes, useMovieDetail, useSeasons, useSeriesDetail } from "./hooks/use-detail";
+export {
+  useEpisodes,
+  useMovieDetail,
+  useSeasons,
+  useSeriesDetail,
+  useTmdbDetail,
+} from "./hooks/use-detail";
 export { useShelfInfinite } from "./hooks/use-shelf-infinite";
