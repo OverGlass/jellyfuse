@@ -1,6 +1,6 @@
 import { ConnectionBanner } from "@/features/common/components/connection-banner";
-import { NerdIcon } from "@/features/common/components/nerd-icon";
-import { ScreenHeader } from "@/features/common/components/screen-header";
+import { FloatingBlurHeader } from "@/features/common/components/floating-blur-header";
+import { PILL_TAB_CLEARANCE } from "@/features/common/components/pill-tab-bar";
 import { StatusBarScrim } from "@/features/common/components/status-bar-scrim";
 import { useRestoredScroll } from "@/features/common/hooks/use-restored-scroll";
 import { MediaShelf, type MediaShelfVariant } from "@/features/home/components/media-shelf";
@@ -21,22 +21,12 @@ import { useScreenGutters } from "@/services/responsive";
 import type { MediaItem } from "@jellyfuse/api";
 import { activeRequestItems, mediaIdJellyfin, mediaRequestToMediaItem } from "@jellyfuse/models";
 import type { ShelfKey } from "@jellyfuse/query-keys";
-import {
-  colors,
-  duration,
-  fontSize,
-  fontWeight,
-  opacity,
-  profileColorFor,
-  radius,
-  spacing,
-} from "@jellyfuse/theme";
+import { colors, fontSize, fontWeight, spacing } from "@jellyfuse/theme";
 import { FlashList } from "@shopify/flash-list";
-import { Image } from "expo-image";
 import { useKeepAwake } from "expo-keep-awake";
 import { router } from "expo-router";
 import { useDeferredValue, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import Animated, {
   Extrapolation,
   interpolate,
@@ -44,53 +34,34 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
 } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
 
 const AnimatedFlashList = Animated.createAnimatedComponent(FlashList<HomeShelf>);
 const AnimatedSearchList = Animated.createAnimatedComponent(FlashList<SearchRow>);
 
 /**
- * Home screen. Real Jellyfin shelves wired through the
- * `@jellyfuse/api` fetchers + RQ hooks. Responsive from day 1:
- * `useBreakpoint()` drives the screen padding, card sizing, and
- * search-results column count, so the same layout works on phone /
- * iPad / Mac Catalyst / Android TV without per-platform branches.
+ * Home screen. Jellyfin shelves through RQ hooks. Search lives
+ * in-place — typing ≥2 chars replaces shelves with blended results.
  *
- * **Search lives here**, not on a separate route. A pinned search
- * bar in the `ScreenHeader` drives `useSearchBlended`. Once the
- * user types two or more characters, the shelves are replaced
- * inline with a responsive grid of MediaCards built from the
- * blended Jellyfin + Jellyseerr results; clearing the input
- * restores the shelves. Mirrors the Rust `HomeView` in
- * `crates/jf-ui-kit/src/views/home.rs` which uses the same
- * in-place swap and a flex-wrap grid of cards.
+ * **Header**: just a floating blur bar with the search input — no
+ * title, no buttons. Mirrors the Rust mobile native search bar (`native_search.rs`).
  *
- * **Scroll choreography**, native-driven via Reanimated:
- * - The blur backdrop on the floating header fades from 0 → 1 as
- *   the user scrolls 0 → 60 dp, so the header reads as transparent
- *   at the top of the page and as a frosted bar once content
- *   begins to slide under it.
- * - The in-flow "welcome back" hero block dissolves and slides
- *   slightly upward as it scrolls past, so the transition into
- *   "small header pinned + content" feels like a natural shrink
- *   rather than a hard swap.
- * - Both come from a single `useAnimatedScrollHandler` worklet
- *   that mirrors the scrolled offset into a `SharedValue`, then
- *   into two `useAnimatedStyle` hooks. No `setState` in the scroll
- *   path, no `useEffect`.
+ * **Tab bar**: handled by the `PillTabBar` floating above the content.
+ * Scroll containers use `PILL_TAB_CLEARANCE + insets.bottom` as bottom
+ * padding so the last item stays visible above the pill.
  *
- * Shelf order (from the plan): Continue Watching → Next Up →
- * Recently Added → Latest Movies → Latest TV. Suggestions stays
- * deferred to a later phase (Jellyseerr-backed).
+ * Shelf order: Continue Watching → Next Up → Recently Added →
+ * Latest Movies → Latest TV → My Requests (Jellyseerr connected).
  */
 const MIN_SEARCH_LENGTH = 2;
-const HERO_FADE_END = 60;
 const BLUR_FADE_END = 60;
 
 export function HomeScreen() {
   useKeepAwake();
 
-  const { activeUser, jellyseerrStatus, signOutAll } = useAuth();
+  const insets = useSafeAreaInsets();
+  const { jellyseerrStatus } = useAuth();
   const gutters = useScreenGutters();
   const connectionStatus = useConnectionStatus();
   const scrollRestore = useRestoredScroll("/home");
@@ -107,8 +78,7 @@ export function HomeScreen() {
   const isSearching = trimmedQuery.length >= MIN_SEARCH_LENGTH;
   const search = useSearchBlended(deferredQuery);
 
-  // Native-driven scroll position. Single shared value feeds both
-  // the blur backdrop fade and the in-flow hero scroll-fade.
+  // Native-driven scroll position — feeds the header blur fade.
   const scrollY = useSharedValue(0);
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
@@ -125,26 +95,12 @@ export function HomeScreen() {
     };
   });
 
-  const heroStyle = useAnimatedStyle(() => {
-    "worklet";
-    const opacity = interpolate(scrollY.value, [0, HERO_FADE_END], [1, 0], Extrapolation.CLAMP);
-    const translateY = interpolate(
-      scrollY.value,
-      [0, HERO_FADE_END],
-      [0, -16],
-      Extrapolation.CLAMP,
-    );
-    return { opacity, transform: [{ translateY }] };
-  });
-
   const continueWatching = useContinueWatching();
   const nextUp = useNextUp();
   const recentlyAdded = useRecentlyAdded();
   const latestMovies = useLatestMovies();
   const latestTv = useLatestTv();
 
-  // Requests shelf — only when Jellyseerr is connected. Active (non-available)
-  // requests, downloading first, converted to MediaItems for MediaShelf.
   const requestsQuery = useJellyseerrRequests();
   const requestItems =
     jellyseerrStatus === "connected"
@@ -177,36 +133,15 @@ export function HomeScreen() {
     connectionStatus === "online" &&
     shelves.every((s) => (s.items?.length ?? s.query?.data?.length ?? 0) === 0);
 
-  // Search results render as inline rows (poster + title + overview
-  // + Library/Request badge), grouped under section headers — same
-  // as the standalone search screen we briefly had. Library items
-  // come first, then requestables. Empty sections collapse.
   const searchRows: SearchRow[] = isSearching ? buildSearchRows(search.data) : [];
   const searchInitialLoading = isSearching && search.isLoading && searchRows.length === 0;
   const searchNoResults = isSearching && !search.isLoading && searchRows.length === 0;
 
-  const greeting = activeUser?.displayName
-    ? `Welcome back, ${activeUser.displayName}`
-    : "Welcome back";
-
-  const heroBlock = (
-    <Animated.View style={heroStyle}>
-      <View style={[styles.hero, { paddingLeft: gutters.left, paddingRight: gutters.right }]}>
-        <Text style={styles.greeting} numberOfLines={1}>
-          {greeting}
-        </Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Sign out"
-          onPress={signOutAll}
-          style={({ pressed }) => [styles.signOut, pressed && styles.pressed]}
-        >
-          <Text style={styles.signOutLabel}>Sign out</Text>
-        </Pressable>
-      </View>
-      <ConnectionBanner status={connectionStatus} />
-    </Animated.View>
-  );
+  // Bottom padding keeps the last item above the floating pill tab bar.
+  // Pill sits at `(insets.bottom > 0 ? insets.bottom - 8 : 8)` from the
+  // screen edge; PILL_TAB_CLEARANCE covers the pill height + breathing room.
+  const pillBottom = insets.bottom > 0 ? insets.bottom - 8 : 8;
+  const listPaddingBottom = pillBottom + PILL_TAB_CLEARANCE;
 
   return (
     <View style={styles.root}>
@@ -217,8 +152,8 @@ export function HomeScreen() {
           keyExtractor={(row) => row.id}
           getItemType={(row) => row.kind}
           contentContainerStyle={{
-            paddingTop: headerHeight + spacing.md,
-            paddingBottom: spacing.xxl,
+            paddingTop: headerHeight,
+            paddingBottom: listPaddingBottom,
           }}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
@@ -266,7 +201,7 @@ export function HomeScreen() {
           onContentSizeChange={scrollRestore.onContentSizeChange}
           data={visibleShelves}
           keyExtractor={(shelf) => shelf.key}
-          contentContainerStyle={{ paddingTop: headerHeight, paddingBottom: spacing.xxl }}
+          contentContainerStyle={{ paddingTop: headerHeight, paddingBottom: listPaddingBottom }}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
@@ -274,7 +209,7 @@ export function HomeScreen() {
           scrollEventThrottle={16}
           ListHeaderComponent={
             <View>
-              {heroBlock}
+              <ConnectionBanner status={connectionStatus} />
               {anyShelfLoading && visibleShelves.length === 0 ? (
                 <View style={styles.centered}>
                   <ActivityIndicator color={colors.textSecondary} />
@@ -302,55 +237,21 @@ export function HomeScreen() {
           ItemSeparatorComponent={null}
         />
       )}
-      <ScreenHeader
-        title="Jellyfuse"
-        rightSlot={
-          <>
-            {jellyseerrStatus === "connected" ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Requests"
-                onPress={handleOpenRequests}
-                style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
-              >
-                <NerdIcon name="list" size={18} color={colors.textSecondary} />
-              </Pressable>
-            ) : null}
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Switch profile (currently ${activeUser?.displayName ?? "user"})`}
-              onPress={handleOpenProfiles}
-              style={({ pressed }) => [
-                styles.avatarButton,
-                !activeUser?.avatarUrl && {
-                  backgroundColor: profileColorFor(activeUser?.userId ?? "anonymous"),
-                },
-                pressed && styles.pressed,
-              ]}
-            >
-              {activeUser?.avatarUrl ? (
-                <Image
-                  source={activeUser.avatarUrl}
-                  style={styles.avatarImage}
-                  contentFit="cover"
-                  transition={duration.normal}
-                  recyclingKey={activeUser.avatarUrl}
-                  cachePolicy="memory-disk"
-                />
-              ) : (
-                <Text style={styles.avatarLetter}>
-                  {(activeUser?.displayName ?? "?").slice(0, 1).toUpperCase()}
-                </Text>
-              )}
-            </Pressable>
-          </>
-        }
-        bottomSlot={
-          <SearchInput value={query} onChangeText={setQuery} onClear={() => setQuery("")} />
-        }
+
+      {/*
+       * Floating header — just the search bar, no title, no buttons.
+       * Mirrors the Rust native UISearchBar overlay (`native_search.rs`).
+       * The blur fades in from transparent as the user scrolls past 60 dp.
+       */}
+      <FloatingBlurHeader
         backdropStyle={blurBackdropStyle}
         onTotalHeightChange={handleHeaderHeightChange}
-      />
+      >
+        <View style={{ paddingHorizontal: gutters.left }}>
+          <SearchInput value={query} onChangeText={setQuery} onClear={() => setQuery("")} />
+        </View>
+      </FloatingBlurHeader>
+
       <StatusBarScrim />
     </View>
   );
@@ -360,14 +261,11 @@ interface HomeShelf {
   key: ShelfKey;
   title: string;
   variant: MediaShelfVariant;
-  /** Jellyfin-backed shelves supply a RQ result. */
   query?: {
     data: MediaItem[] | undefined;
     isPending: boolean;
   };
-  /** Pre-computed items (e.g. Requests shelf derived from MediaRequest[]). */
   items?: MediaItem[];
-  /** Override item tap behaviour for this shelf (e.g. Continue Watching → player). */
   onItemPress?: (item: MediaItem) => void;
 }
 
@@ -425,14 +323,6 @@ function SectionHeader({ title }: SectionHeaderProps) {
 // Navigation helpers
 // ──────────────────────────────────────────────────────────────────────
 
-function handleOpenProfiles() {
-  router.push("/profile-picker");
-}
-
-function handleOpenRequests() {
-  router.push("/requests");
-}
-
 function handleSeeAll(shelfKey: ShelfKey) {
   if (shelfKey === "requests") {
     router.push("/requests");
@@ -460,17 +350,11 @@ function handleItemPress(item: MediaItem) {
     }
     return;
   }
-  // TMDB-only result — open the Jellyseerr request flow modal.
-  // Movies use Radarr profiles, series use Sonarr.
   if (item.id.kind === "tmdb") {
     const mediaType = item.mediaType === "series" ? "tv" : "movie";
     router.push({
-      pathname: "/request/[tmdbId]",
-      params: {
-        tmdbId: String(item.id.tmdbId),
-        mediaType,
-        title: item.title,
-      },
+      pathname: "/detail/tmdb/[tmdbId]",
+      params: { tmdbId: String(item.id.tmdbId), mediaType },
     });
   }
 }
@@ -479,58 +363,6 @@ const styles = StyleSheet.create({
   root: {
     backgroundColor: colors.background,
     flex: 1,
-  },
-  hero: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: spacing.md,
-    paddingBottom: spacing.lg,
-    paddingTop: spacing.md,
-  },
-  greeting: {
-    color: colors.textPrimary,
-    flex: 1,
-    fontSize: fontSize.title,
-    fontWeight: fontWeight.bold,
-  },
-  signOut: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-  },
-  signOutLabel: {
-    color: colors.textSecondary,
-    fontSize: fontSize.caption,
-  },
-  pressed: {
-    opacity: opacity.pressed,
-  },
-  avatarButton: {
-    alignItems: "center",
-    backgroundColor: colors.surface,
-    borderRadius: radius.full,
-    height: 36,
-    justifyContent: "center",
-    overflow: "hidden",
-    width: 36,
-  },
-  iconButton: {
-    alignItems: "center",
-    backgroundColor: colors.surface,
-    borderRadius: radius.full,
-    height: 36,
-    justifyContent: "center",
-    width: 36,
-  },
-  avatarImage: {
-    height: 36,
-    width: 36,
-  },
-  avatarLetter: {
-    color: colors.textPrimary,
-    fontSize: fontSize.body,
-    fontWeight: fontWeight.bold,
   },
   sectionHeader: {
     paddingHorizontal: spacing.lg,

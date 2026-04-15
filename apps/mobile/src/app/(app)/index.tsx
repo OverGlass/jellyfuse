@@ -1,9 +1,12 @@
-import { HomeScreen } from "@/features/home/screens/home-screen";
+import { Redirect } from "expo-router";
 
 /**
- * `(app)` home route. Thin router-facing wrapper around the feature
- * screen — keeps the Expo Router file tree decoupled from the feature
- * folder layout so feature refactors don't force file moves under
- * `app/`.
+ * Root route for the `(app)` group. Immediately redirects to the
+ * tabs home so the bottom tab bar is always present once the user
+ * is authenticated. Keeping this file as a redirect (rather than
+ * deleting it) preserves the Stack's default segment and prevents
+ * Expo Router from falling through to the auth group.
  */
-export default HomeScreen;
+export default function AppIndex() {
+  return <Redirect href="/home" />;
+}

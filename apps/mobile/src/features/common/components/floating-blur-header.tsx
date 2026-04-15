@@ -1,5 +1,5 @@
+import { spacing } from "@jellyfuse/theme";
 import MaskedView from "@react-native-masked-view/masked-view";
-import { colors, spacing } from "@jellyfuse/theme";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import type { ReactNode } from "react";
@@ -95,7 +95,7 @@ export function FloatingBlurHeader({ style, backdropStyle, children, onTotalHeig
       <View
         style={{
           paddingTop: insets.top + spacing.sm,
-          paddingBottom: spacing.lg,
+          paddingBottom: spacing.md,
         }}
       >
         {children}
