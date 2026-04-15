@@ -150,6 +150,54 @@ export interface MediaServer {
 export type SeasonAvailability = "available" | "requested" | "missing";
 
 /**
+ * Discrete request status ported from `crates/jf-core/src/models.rs`.
+ * Maps from Jellyseerr's numeric `status` codes: 2 → pending, 3 →
+ * approved, 5 → available, everything else → declined.
+ */
+export type MediaRequestStatus = "pending" | "approved" | "available" | "declined";
+
+/**
+ * One entry in the Jellyseerr requests list, mirroring the Rust
+ * `MediaRequest` in `crates/jf-core/src/models.rs`. Built from
+ * `GET /api/v1/request?take=…&skip=…&sort=added` and enriched with
+ * an optional `downloadProgress` patched in by `useDownloadProgressMap`
+ * once Radarr / Sonarr has started the download.
+ */
+export interface MediaRequest {
+  id: number;
+  status: MediaRequestStatus;
+  mediaType: "movie" | "tv";
+  tmdbId: number;
+  title: string;
+  posterUrl: string | undefined;
+  requestedBy: string;
+  createdAt: string | undefined;
+  /** Empty = all seasons (or not a TV show). */
+  seasons: number[];
+  downloadProgress: DownloadProgress | undefined;
+}
+
+/**
+ * Aggregated download state for one request's underlying Radarr /
+ * Sonarr queue entries. Mirrors `crates/jf-core/src/models.rs::DownloadProgress`.
+ *
+ * - `fraction: number` in the range `[0, 1]` when Radarr/Sonarr is
+ *   actively downloading and reporting `size` + `sizeLeft`. Computed
+ *   as `Σ(size - sizeLeft) / Σ(size)` across every queue entry for
+ *   the TMDB id.
+ * - `fraction === -1` is the "queued with no bytes yet" sentinel —
+ *   Radarr has accepted the request but hasn't started pulling the
+ *   file yet, so the UI should render an indeterminate indicator
+ *   instead of a percent-filled bar.
+ * - `timeLeft` is Radarr's human-readable ETA string (e.g. `"2h 30m"`).
+ */
+export interface DownloadProgress {
+  fraction: number;
+  status: string;
+  timeLeft: string | undefined;
+}
+
+/**
  * One season of a TV show as the request modal sees it. Mirrors the
  * Rust `SeasonInfo` in `crates/jf-core/src/models.rs`. Built by
  * combining the TMDB `seasons[]` array with the Jellyseerr

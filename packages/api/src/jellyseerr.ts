@@ -1,4 +1,7 @@
 import type {
+  DownloadProgress,
+  MediaRequest,
+  MediaRequestStatus,
   MediaServer,
   QualityProfile,
   SeasonAvailability,
@@ -390,6 +393,199 @@ export async function createJellyseerrRequest(
   if (!response.ok) {
     throw new JellyseerrRequestError("/api/v1/request", response.status);
   }
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Requests list + download progress
+// ──────────────────────────────────────────────────────────────────────
+
+interface RawRequestMedia {
+  tmdbId?: number;
+  mediaType?: string;
+  title?: string;
+  name?: string;
+  posterPath?: string | null;
+  downloadStatus?: RawDownloadStatusEntry[];
+  downloadStatus4k?: RawDownloadStatusEntry[];
+}
+
+interface RawDownloadStatusEntry {
+  size?: number;
+  sizeLeft?: number;
+  status?: string;
+  timeLeft?: string;
+}
+
+interface RawRequestedBy {
+  displayName?: string;
+  username?: string;
+}
+
+interface RawRequest {
+  id?: number;
+  status?: number;
+  type?: string;
+  media?: RawRequestMedia;
+  requestedBy?: RawRequestedBy;
+  createdAt?: string;
+  seasons?: { seasonNumber?: number }[];
+}
+
+interface RawRequestsResponse {
+  results?: RawRequest[];
+  pageInfo?: {
+    pages?: number;
+    pageSize?: number;
+    results?: number;
+    page?: number;
+  };
+}
+
+/**
+ * `GET /api/v1/request?take=…&skip=…&sort=added` — list media
+ * requests the current Jellyseerr user is allowed to see. The Rust
+ * client pulls a single page of 100 (the hardcoded upper limit in
+ * `fetchers::get_requests`) and we match that default. Pagination is
+ * available via `take` + `skip` if callers need it later.
+ *
+ * `downloadProgress` is *not* populated here — it comes from the
+ * per-item media detail endpoint and is merged in client-side
+ * (see `fetchDownloadProgress` + the React Query hook).
+ */
+export async function fetchJellyseerrRequests(
+  args: { baseUrl: string; take?: number; skip?: number },
+  fetcher: FetchLike,
+  signal?: AbortSignal,
+): Promise<MediaRequest[]> {
+  const take = args.take ?? 100;
+  const skip = args.skip ?? 0;
+  const url = joinPath(args.baseUrl, `/api/v1/request?take=${take}&skip=${skip}&sort=added`);
+  const response = await fetcher(url, signal ? { signal } : undefined);
+  if (!response.ok) {
+    throw new JellyseerrRequestError("/api/v1/request", response.status);
+  }
+  const raw = (await response.json()) as RawRequestsResponse;
+  const results = Array.isArray(raw.results) ? raw.results : [];
+  const out: MediaRequest[] = [];
+  for (const r of results) {
+    const mapped = mapRequestRecord(r);
+    if (mapped) out.push(mapped);
+  }
+  return out;
+}
+
+function mapRequestRecord(raw: RawRequest): MediaRequest | undefined {
+  if (typeof raw.id !== "number") return undefined;
+  const type = raw.type === "tv" ? "tv" : raw.type === "movie" ? "movie" : undefined;
+  if (!type) return undefined;
+  const media = raw.media ?? {};
+  if (typeof media.tmdbId !== "number") return undefined;
+  const title = media.title ?? media.name ?? "";
+  if (!title) return undefined;
+  const posterUrl = media.posterPath
+    ? `https://image.tmdb.org/t/p/w342${media.posterPath}`
+    : undefined;
+  const requestedBy = raw.requestedBy?.displayName ?? raw.requestedBy?.username ?? "Unknown";
+  const seasons = Array.isArray(raw.seasons)
+    ? raw.seasons.map((s) => s.seasonNumber).filter((n): n is number => typeof n === "number")
+    : [];
+
+  return {
+    id: raw.id,
+    status: mapRequestStatusCode(raw.status),
+    mediaType: type,
+    tmdbId: media.tmdbId,
+    title,
+    posterUrl,
+    requestedBy,
+    createdAt: raw.createdAt,
+    seasons,
+    downloadProgress: undefined,
+  };
+}
+
+// Jellyseerr numeric status codes (see `server/constants/media.ts`
+// in the Jellyseerr repo): 2 = pending, 3 = approved, 5 = available,
+// everything else (1 = unknown, 4 = declined, …) → declined.
+function mapRequestStatusCode(status: number | undefined): MediaRequestStatus {
+  switch (status) {
+    case 2:
+      return "pending";
+    case 3:
+      return "approved";
+    case 5:
+      return "available";
+    default:
+      return "declined";
+  }
+}
+
+interface RawMediaDetailWithInfo {
+  mediaInfo?: {
+    downloadStatus?: RawDownloadStatusEntry[];
+  };
+}
+
+/**
+ * `GET /api/v1/{movie|tv}/{tmdbId}` — fetches the Jellyseerr media
+ * detail and extracts the aggregated download progress from
+ * `mediaInfo.downloadStatus`. Returns `undefined` when Jellyseerr
+ * has nothing in the queue for this TMDB id (the download hasn't
+ * started, or the media is already fully available).
+ *
+ * Progress calculation mirrors `crates/jf-api/src/jellyseerr.rs::fetch_download_progress`:
+ *
+ * - If `downloadStatus` is missing or empty → `undefined`.
+ * - If all entries report `size === 0` → `fraction: -1` (queued,
+ *   no bytes yet — UI renders an indeterminate indicator).
+ * - Otherwise → `fraction = (totalSize - totalSizeLeft) / totalSize`,
+ *   clamped to `[0, 1]`.
+ */
+export async function fetchJellyseerrDownloadProgress(
+  args: { baseUrl: string; tmdbId: number; mediaType: "movie" | "tv" },
+  fetcher: FetchLike,
+  signal?: AbortSignal,
+): Promise<DownloadProgress | undefined> {
+  const url = joinPath(args.baseUrl, `/api/v1/${args.mediaType}/${args.tmdbId}`);
+  const response = await fetcher(url, signal ? { signal } : undefined);
+  if (!response.ok) {
+    throw new JellyseerrRequestError(`/api/v1/${args.mediaType}/${args.tmdbId}`, response.status);
+  }
+  const raw = (await response.json()) as RawMediaDetailWithInfo;
+  const entries = raw.mediaInfo?.downloadStatus;
+  if (!Array.isArray(entries) || entries.length === 0) return undefined;
+
+  let totalSize = 0;
+  let totalSizeLeft = 0;
+  let firstStatus: string | undefined;
+  let firstTimeLeft: string | undefined;
+  for (const entry of entries) {
+    const size = typeof entry.size === "number" ? entry.size : 0;
+    const sizeLeft = typeof entry.sizeLeft === "number" ? entry.sizeLeft : 0;
+    totalSize += size;
+    totalSizeLeft += sizeLeft;
+    if (firstStatus === undefined && typeof entry.status === "string") {
+      firstStatus = entry.status;
+    }
+    if (firstTimeLeft === undefined && typeof entry.timeLeft === "string") {
+      firstTimeLeft = entry.timeLeft;
+    }
+  }
+
+  if (totalSize <= 0) {
+    return {
+      fraction: -1,
+      status: firstStatus ?? "queued",
+      timeLeft: firstTimeLeft,
+    };
+  }
+  const rawFraction = (totalSize - totalSizeLeft) / totalSize;
+  const fraction = Math.max(0, Math.min(1, rawFraction));
+  return {
+    fraction,
+    status: firstStatus ?? "downloading",
+    timeLeft: firstTimeLeft,
+  };
 }
 
 /**

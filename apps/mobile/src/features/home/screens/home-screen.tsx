@@ -26,6 +26,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import { ConnectionBanner } from "@/features/common/components/connection-banner";
+import { NerdIcon } from "@/features/common/components/nerd-icon";
 import { ScreenHeader } from "@/features/common/components/screen-header";
 import { StatusBarScrim } from "@/features/common/components/status-bar-scrim";
 import { useRestoredScroll } from "@/features/common/hooks/use-restored-scroll";
@@ -88,7 +89,7 @@ const BLUR_FADE_END = 60;
 export function HomeScreen() {
   useKeepAwake();
 
-  const { activeUser, signOutAll } = useAuth();
+  const { activeUser, jellyseerrStatus, signOutAll } = useAuth();
   const gutters = useScreenGutters();
   const connectionStatus = useConnectionStatus();
   const scrollRestore = useRestoredScroll("/home");
@@ -292,33 +293,45 @@ export function HomeScreen() {
       <ScreenHeader
         title="Jellyfuse"
         rightSlot={
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Switch profile (currently ${activeUser?.displayName ?? "user"})`}
-            onPress={handleOpenProfiles}
-            style={({ pressed }) => [
-              styles.avatarButton,
-              !activeUser?.avatarUrl && {
-                backgroundColor: profileColorFor(activeUser?.userId ?? "anonymous"),
-              },
-              pressed && styles.pressed,
-            ]}
-          >
-            {activeUser?.avatarUrl ? (
-              <Image
-                source={activeUser.avatarUrl}
-                style={styles.avatarImage}
-                contentFit="cover"
-                transition={duration.normal}
-                recyclingKey={activeUser.avatarUrl}
-                cachePolicy="memory-disk"
-              />
-            ) : (
-              <Text style={styles.avatarLetter}>
-                {(activeUser?.displayName ?? "?").slice(0, 1).toUpperCase()}
-              </Text>
-            )}
-          </Pressable>
+          <>
+            {jellyseerrStatus === "connected" ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Requests"
+                onPress={handleOpenRequests}
+                style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
+              >
+                <NerdIcon name="list" size={18} color={colors.textSecondary} />
+              </Pressable>
+            ) : null}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Switch profile (currently ${activeUser?.displayName ?? "user"})`}
+              onPress={handleOpenProfiles}
+              style={({ pressed }) => [
+                styles.avatarButton,
+                !activeUser?.avatarUrl && {
+                  backgroundColor: profileColorFor(activeUser?.userId ?? "anonymous"),
+                },
+                pressed && styles.pressed,
+              ]}
+            >
+              {activeUser?.avatarUrl ? (
+                <Image
+                  source={activeUser.avatarUrl}
+                  style={styles.avatarImage}
+                  contentFit="cover"
+                  transition={duration.normal}
+                  recyclingKey={activeUser.avatarUrl}
+                  cachePolicy="memory-disk"
+                />
+              ) : (
+                <Text style={styles.avatarLetter}>
+                  {(activeUser?.displayName ?? "?").slice(0, 1).toUpperCase()}
+                </Text>
+              )}
+            </Pressable>
+          </>
         }
         bottomSlot={
           <SearchInput value={query} onChangeText={setQuery} onClear={() => setQuery("")} />
@@ -399,6 +412,10 @@ function handleOpenProfiles() {
   router.push("/profile-picker");
 }
 
+function handleOpenRequests() {
+  router.push("/requests");
+}
+
 function handleSeeAll(shelfKey: ShelfKey) {
   router.push(`/shelf/${shelfKey}`);
 }
@@ -468,6 +485,14 @@ const styles = StyleSheet.create({
     height: 36,
     justifyContent: "center",
     overflow: "hidden",
+    width: 36,
+  },
+  iconButton: {
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderRadius: radius.full,
+    height: 36,
+    justifyContent: "center",
     width: 36,
   },
   avatarImage: {
