@@ -2,6 +2,7 @@ import { ConnectionBanner } from "@/features/common/components/connection-banner
 import { FloatingBlurHeader } from "@/features/common/components/floating-blur-header";
 import { PILL_TAB_CLEARANCE } from "@/features/common/components/pill-tab-bar";
 import { StatusBarScrim } from "@/features/common/components/status-bar-scrim";
+import { useFloatingHeaderScroll } from "@/features/common/hooks/use-floating-header-scroll";
 import { useRestoredScroll } from "@/features/common/hooks/use-restored-scroll";
 import { MediaShelf, type MediaShelfVariant } from "@/features/home/components/media-shelf";
 import { SearchInput } from "@/features/search/components/search-input";
@@ -27,13 +28,7 @@ import { useKeepAwake } from "expo-keep-awake";
 import { router } from "expo-router";
 import { useDeferredValue, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
-import Animated, {
-  Extrapolation,
-  interpolate,
-  useAnimatedScrollHandler,
-  useAnimatedStyle,
-  useSharedValue,
-} from "react-native-reanimated";
+import Animated, { useAnimatedScrollHandler } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
 
@@ -55,7 +50,6 @@ const AnimatedSearchList = Animated.createAnimatedComponent(FlashList<SearchRow>
  * Latest Movies → Latest TV → My Requests (Jellyseerr connected).
  */
 const MIN_SEARCH_LENGTH = 2;
-const BLUR_FADE_END = 60;
 
 export function HomeScreen() {
   useKeepAwake();
@@ -67,32 +61,22 @@ export function HomeScreen() {
   const scrollRestore = useRestoredScroll("/home");
 
   const [query, setQuery] = useState("");
-  const [headerHeight, setHeaderHeight] = useState(0);
-  function handleHeaderHeightChange(next: number) {
-    if (Math.abs(next - headerHeight) > 0.5) {
-      setHeaderHeight(next);
-    }
-  }
+  const { headerHeight, onHeaderHeightChange, scrollY, backdropStyle } = useFloatingHeaderScroll();
   const deferredQuery = useDeferredValue(query);
   const trimmedQuery = deferredQuery.trim();
   const isSearching = trimmedQuery.length >= MIN_SEARCH_LENGTH;
   const search = useSearchBlended(deferredQuery);
 
-  // Native-driven scroll position — feeds the header blur fade.
-  const scrollY = useSharedValue(0);
+  // Custom scroll handler: updates the shared `scrollY` from the hook
+  // (so the backdrop blur fade is driven) AND pipes the offset into
+  // `useRestoredScroll` so returning to the home tab restores the
+  // previous position.
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
       "worklet";
       scrollY.value = event.contentOffset.y;
       scheduleOnRN(scrollRestore.setOffset, event.contentOffset.y);
     },
-  });
-
-  const blurBackdropStyle = useAnimatedStyle(() => {
-    "worklet";
-    return {
-      opacity: interpolate(scrollY.value, [0, BLUR_FADE_END], [0, 1], Extrapolation.CLAMP),
-    };
   });
 
   const continueWatching = useContinueWatching();
@@ -243,10 +227,7 @@ export function HomeScreen() {
        * Mirrors the Rust native UISearchBar overlay (`native_search.rs`).
        * The blur fades in from transparent as the user scrolls past 60 dp.
        */}
-      <FloatingBlurHeader
-        backdropStyle={blurBackdropStyle}
-        onTotalHeightChange={handleHeaderHeightChange}
-      >
+      <FloatingBlurHeader backdropStyle={backdropStyle} onTotalHeightChange={onHeaderHeightChange}>
         <View style={{ paddingHorizontal: gutters.left }}>
           <SearchInput value={query} onChangeText={setQuery} onClear={() => setQuery("")} />
         </View>

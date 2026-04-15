@@ -6,17 +6,12 @@ import { FlashList } from "@shopify/flash-list";
 import { router } from "expo-router";
 import { useDeferredValue, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
-import Animated, {
-  Extrapolation,
-  interpolate,
-  useAnimatedScrollHandler,
-  useAnimatedStyle,
-  useSharedValue,
-} from "react-native-reanimated";
+import Animated, { useAnimatedScrollHandler } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ScreenHeader } from "@/features/common/components/screen-header";
 import { StatusBarScrim } from "@/features/common/components/status-bar-scrim";
+import { useFloatingHeaderScroll } from "@/features/common/hooks/use-floating-header-scroll";
 import { useRestoredScroll } from "@/features/common/hooks/use-restored-scroll";
 import { MediaCard } from "@/features/home/components/media-card";
 import { SearchInput } from "@/features/search/components/search-input";
@@ -91,7 +86,6 @@ const SHELF_SEARCH_MODE: Record<ShelfKey, ShelfSearchMode> = {
 };
 
 const MIN_SEARCH_LENGTH = 2;
-const BLUR_FADE_END = 60;
 
 export function ShelfScreen({ shelfKey }: Props) {
   const pageable = PAGEABLE_SHELVES[shelfKey];
@@ -104,12 +98,7 @@ export function ShelfScreen({ shelfKey }: Props) {
   const scrollRestore = useRestoredScroll(`/shelf/${shelfKey}`);
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [headerHeight, setHeaderHeight] = useState(0);
-  function handleHeaderHeightChange(next: number) {
-    if (Math.abs(next - headerHeight) > 0.5) {
-      setHeaderHeight(next);
-    }
-  }
+  const { headerHeight, onHeaderHeightChange, scrollY, backdropStyle } = useFloatingHeaderScroll();
   const deferredQuery = useDeferredValue(searchQuery);
   const trimmedQuery = deferredQuery.trim();
   const isSearching = trimmedQuery.length >= MIN_SEARCH_LENGTH;
@@ -122,20 +111,15 @@ export function ShelfScreen({ shelfKey }: Props) {
       : {},
   );
 
-  const scrollY = useSharedValue(0);
+  // Custom scroll handler: updates the shared scrollY from the hook
+  // (for backdrop fade) AND pipes the offset into useRestoredScroll so
+  // navigating back restores the previous position.
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
       "worklet";
       scrollY.value = event.contentOffset.y;
       scheduleOnRN(scrollRestore.setOffset, event.contentOffset.y);
     },
-  });
-
-  const blurBackdropStyle = useAnimatedStyle(() => {
-    "worklet";
-    return {
-      opacity: interpolate(scrollY.value, [0, BLUR_FADE_END], [0, 1], Extrapolation.CLAMP),
-    };
   });
 
   if (!pageable) {
@@ -147,8 +131,8 @@ export function ShelfScreen({ shelfKey }: Props) {
         <ScreenHeader
           showBack
           title={title}
-          backdropStyle={blurBackdropStyle}
-          onTotalHeightChange={handleHeaderHeightChange}
+          backdropStyle={backdropStyle}
+          onTotalHeightChange={onHeaderHeightChange}
         />
         <StatusBarScrim />
       </View>
@@ -236,8 +220,8 @@ export function ShelfScreen({ shelfKey }: Props) {
             onClear={() => setSearchQuery("")}
           />
         }
-        backdropStyle={blurBackdropStyle}
-        onTotalHeightChange={handleHeaderHeightChange}
+        backdropStyle={backdropStyle}
+        onTotalHeightChange={onHeaderHeightChange}
       />
       {isInitialLoading ? (
         <View style={styles.overlay}>
