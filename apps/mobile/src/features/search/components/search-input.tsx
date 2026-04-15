@@ -1,7 +1,7 @@
-import { colors, fontSize, opacity, radius, spacing } from "@jellyfuse/theme";
+import { NerdIcon } from "@/features/common/components/nerd-icon";
+import { colors, fontSize, opacity, radius, spacing, withAlpha } from "@jellyfuse/theme";
 import { useRef } from "react";
 import { Pressable, StyleSheet, TextInput, View } from "react-native";
-import { NerdIcon } from "@/features/common/components/nerd-icon";
 
 /**
  * Search input field used on the home screen and shelf grid screens.
@@ -76,8 +76,8 @@ export function SearchInput({
 const styles = StyleSheet.create({
   root: {
     alignItems: "center",
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
+    backgroundColor: withAlpha(colors.surface, 0.5),
+    borderRadius: radius.full,
     flexDirection: "row",
     gap: spacing.sm,
     height: 44,
