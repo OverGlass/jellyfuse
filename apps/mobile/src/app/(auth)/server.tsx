@@ -107,7 +107,7 @@ export default function ServerScreen() {
               style={styles.input}
             />
             <Text style={styles.helper}>
-              Used for requests and suggestions. Leave empty if you don't use Jellyseerr.
+              Used for requests and suggestions. Leave empty if you don&apos;t use Jellyseerr.
             </Text>
           </View>
 

@@ -17,7 +17,9 @@ vi.mock("@/services/api/client", () => ({
   apiFetchAuthenticated: (...args: unknown[]) => mockFetch(...args),
 }));
 
+// eslint-disable-next-line import/first
 import { reportStart, reportProgress, reportStopped } from "./reporter";
+// eslint-disable-next-line import/first
 import { peekCount } from "./pending-store";
 
 afterEach(() => {

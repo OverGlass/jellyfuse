@@ -155,7 +155,7 @@ export function SeriesDetailScreen({ itemId }: Props) {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.centered}>
-          <Text style={styles.errorTitle}>Couldn't load this series</Text>
+          <Text style={styles.errorTitle}>Couldn&apos;t load this series</Text>
           <Text style={styles.errorBody}>
             {seriesQuery.error instanceof Error ? seriesQuery.error.message : "Unknown error"}
           </Text>

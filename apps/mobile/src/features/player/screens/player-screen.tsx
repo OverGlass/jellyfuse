@@ -4,7 +4,7 @@ import { colors } from "@jellyfuse/theme";
 import { useKeepAwake } from "expo-keep-awake";
 import { router } from "expo-router";
 import { useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { resolvePlayback } from "@/services/playback/resolver";
 import { useMovieDetail } from "@/services/query";
 import { ControlsOverlay } from "../components/controls-overlay";

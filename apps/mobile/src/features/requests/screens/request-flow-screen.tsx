@@ -137,7 +137,7 @@ export function RequestFlowScreen({ tmdbId, mediaType, title }: Props) {
       {
         onSuccess: () => dispatch({ type: "SUBMIT_SUCCESS" }),
         onError: (error) => {
-          const message = error instanceof Error ? error.message : "Couldn't submit request.";
+          const message = error instanceof Error ? error.message : "Couldn&apos;t submit request.";
           dispatch({ type: "SUBMIT_ERROR", message });
         },
       },
@@ -172,7 +172,7 @@ export function RequestFlowScreen({ tmdbId, mediaType, title }: Props) {
     ) : state.step === "error" ? (
       <View style={styles.centered}>
         <NerdIcon name="warning" size={28} color={colors.danger} />
-        <Text style={styles.errorTitle}>Couldn't submit request</Text>
+        <Text style={styles.errorTitle}>Couldn&apos;t submit request</Text>
         <Text style={styles.emptyBody}>{state.errorMessage ?? "Unknown error"}</Text>
       </View>
     ) : isLoadingFirstFetch ? (

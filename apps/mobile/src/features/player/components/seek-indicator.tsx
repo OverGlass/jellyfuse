@@ -7,7 +7,7 @@
 
 import { colors, fontFamily, icons, opacity, radius, spacing, withAlpha } from "@jellyfuse/theme";
 import { useEffect, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text } from "react-native";
 import Animated from "react-native-reanimated";
 
 const VISIBLE_MS = 500;

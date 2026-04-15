@@ -95,6 +95,7 @@ export function useMpvPlayer(
       mpv.release();
       mpvRef.current = null;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Mount/unmount only — callbacks are stable via useEffectEvent
 
   // ── Load stream when URL changes ──────────────────────────────────
@@ -117,7 +118,8 @@ export function useMpvPlayer(
       console.error("[player] load failed:", e);
       onError(e instanceof Error ? e.message : String(e));
     }
-  }, [streamUrl, startPositionSeconds]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [streamUrl, startPositionSeconds]); // onError is stable via useEffectEvent
 
   // ── Imperative controls ───────────────────────────────────────────
 

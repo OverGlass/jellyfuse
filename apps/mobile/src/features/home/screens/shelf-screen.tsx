@@ -246,7 +246,7 @@ export function ShelfScreen({ shelfKey }: Props) {
       ) : null}
       {hasError ? (
         <View style={styles.overlay}>
-          <Text style={styles.errorTitle}>Couldn't load this shelf</Text>
+          <Text style={styles.errorTitle}>Couldn&apos;t load this shelf</Text>
           <Text style={styles.errorBody}>
             {query.error instanceof Error ? query.error.message : "Unknown error"}
           </Text>

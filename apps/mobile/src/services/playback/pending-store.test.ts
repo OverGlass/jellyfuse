@@ -12,6 +12,7 @@ vi.mock("@/services/query/storage", () => ({
   },
 }));
 
+// eslint-disable-next-line import/first
 import { clearPendingReports, drainReports, enqueueReport, peekCount } from "./pending-store";
 
 function makeReport(overrides: Partial<PendingReport> = {}): PendingReport {
