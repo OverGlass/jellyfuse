@@ -119,21 +119,36 @@ private final class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegat
     if nsErr.code == NSURLErrorCancelled { return }
     owner?.handleFailed(id: id, error: error.localizedDescription)
   }
+
+  /// Called after every queued background event has been delivered.
+  /// Forwards to the completion handler iOS gave the AppDelegate so
+  /// the process can be safely suspended.
+  func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
+    owner?.finishBackgroundEvents()
+  }
 }
 
 // MARK: - HybridDownloader
 
 /// `Downloader` hybrid object. Created once at app root, lives for the
 /// app lifetime. The URLSession background configuration survives
-/// process death — `handleEventsForBackgroundURLSession` in AppDelegate
-/// must call `session.finishTasksAndInvalidate()` if needed for proper
-/// background completion delivery.
+/// process death; the on-disk manifest tracks every state transition,
+/// so downloads complete correctly even if iOS tears the process down
+/// between events.
 public final class HybridDownloader: HybridDownloaderSpec {
+
+  /// Notification posted by the AppDelegate config-plugin override when
+  /// iOS relaunches the app to deliver background URLSession events.
+  /// The `userInfo["completionHandler"]` entry is the `() -> Void`
+  /// handler we must call once every queued event has been drained.
+  private static let backgroundEventsNotification =
+    Notification.Name("com.jellyfuse.downloader.backgroundEvents")
 
   // MARK: Internal state
 
   private let queue = DispatchQueue(label: "com.jellyfuse.downloader", qos: .utility)
   private var activeTasks: [String: URLSessionDownloadTask] = [:]
+  private var backgroundCompletionHandler: (() -> Void)?
 
   private lazy var sessionDelegate = DownloadSessionDelegate()
   private lazy var session: URLSession = {
@@ -183,8 +198,36 @@ public final class HybridDownloader: HybridDownloaderSpec {
       withIntermediateDirectories: true,
       attributes: nil
     )
+    // Observe the AppDelegate-relay notification for background events
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(handleBackgroundEventsNotification(_:)),
+      name: HybridDownloader.backgroundEventsNotification,
+      object: nil
+    )
     // Reconnect URLSession so background events are delivered
     _ = session
+  }
+
+  deinit {
+    NotificationCenter.default.removeObserver(self)
+  }
+
+  // MARK: - Background URLSession completion
+
+  @objc private func handleBackgroundEventsNotification(_ note: Notification) {
+    guard let handler = note.userInfo?["completionHandler"] as? () -> Void else { return }
+    queue.sync { backgroundCompletionHandler = handler }
+  }
+
+  fileprivate func finishBackgroundEvents() {
+    let handler = queue.sync { () -> (() -> Void)? in
+      let h = backgroundCompletionHandler
+      backgroundCompletionHandler = nil
+      return h
+    }
+    guard let handler = handler else { return }
+    DispatchQueue.main.async { handler() }
   }
 
   // MARK: - Manifest I/O
