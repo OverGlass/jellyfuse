@@ -21,6 +21,7 @@ import type {
   ResolvedStream,
   TrickplayInfo,
 } from "@jellyfuse/models";
+import { buildDownloadUrl } from "@jellyfuse/api";
 import { queryKeys } from "@jellyfuse/query-keys";
 
 /**
@@ -38,6 +39,7 @@ export function buildDownloadOptions(
   resolved: ResolvedStream,
   authHeader: string,
   queryClient: QueryClient,
+  download: { baseUrl: string; token: string },
 ): DownloadOptions {
   const jellyfinId =
     item.id.kind === "jellyfin" || item.id.kind === "both" ? item.id.jellyfinId : "";
@@ -58,8 +60,18 @@ export function buildDownloadOptions(
   // predictable path lets rebaseAllPaths work without knowing the ext.
   const destRelativePath = `downloads/${jellyfinId}-${resolved.mediaSourceId}/media`;
 
+  // Canonical `/Items/{id}/Download` endpoint — sends a real
+  // `Content-Length` (so progress works) and a playable media file with
+  // `Content-Disposition: attachment`. Sidesteps the HLS m3u8 path that
+  // PlaybackInfo would pick when the server decides to transcode.
+  const downloadUrl = buildDownloadUrl({
+    baseUrl: download.baseUrl,
+    itemId: jellyfinId,
+    token: download.token,
+  });
+
   return {
-    url: resolved.streamUrl,
+    url: downloadUrl,
     itemId: jellyfinId,
     mediaSourceId: resolved.mediaSourceId,
     playSessionId: resolved.playSessionId,
@@ -72,7 +84,7 @@ export function buildDownloadOptions(
     seasonNumber: item.seasonNumber,
     episodeNumber: item.episodeNumber,
     imageUrl: item.posterUrl,
-    streamUrl: resolved.streamUrl,
+    streamUrl: downloadUrl,
     metadata: {
       durationSeconds: resolved.durationSeconds,
       chapters: resolved.chapters.map((c) => ({
