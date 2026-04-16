@@ -13,6 +13,7 @@
  */
 import { colors, duration, opacity, type IconName } from "@jellyfuse/theme";
 import type { DownloadRecord, DownloadState } from "@jellyfuse/models";
+import MaskedView from "@react-native-masked-view/masked-view";
 import { useEffect, useRef } from "react";
 import { Animated, Pressable, StyleSheet, View } from "react-native";
 import { NerdIcon } from "@/features/common/components/nerd-icon";
@@ -20,6 +21,7 @@ import { NerdIcon } from "@/features/common/components/nerd-icon";
 const BUTTON_SIZE = 44;
 const RING_SIZE = BUTTON_SIZE;
 const RING_STROKE = 3;
+const RING_HALF = RING_SIZE / 2;
 
 interface Props {
   record: DownloadRecord | undefined;
@@ -58,7 +60,6 @@ export function DownloadButton({ record, onPress, size = BUTTON_SIZE }: Props) {
   const state = record?.state;
   const progress = record && record.bytesTotal > 0 ? record.bytesDownloaded / record.bytesTotal : 0;
 
-  // Animate the progress ring stroke dash offset
   const animatedProgress = useRef(new Animated.Value(progress)).current;
 
   useEffect(() => {
@@ -70,6 +71,19 @@ export function DownloadButton({ record, onPress, size = BUTTON_SIZE }: Props) {
   }, [animatedProgress, progress]);
 
   const showRing = state === "queued" || state === "downloading";
+
+  // Right half of the ring fills over progress 0 → 0.5.
+  // Left half fills over progress 0.5 → 1. Each half is a half-disk (D-shape)
+  // that rotates around the ring centre; the surrounding clip hides the parts
+  // of the disk that haven't swept in yet.
+  const rightRotate = animatedProgress.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: ["180deg", "360deg", "360deg"],
+  });
+  const leftRotate = animatedProgress.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: ["180deg", "180deg", "360deg"],
+  });
 
   return (
     <Pressable
@@ -83,20 +97,22 @@ export function DownloadButton({ record, onPress, size = BUTTON_SIZE }: Props) {
       ]}
     >
       {showRing ? (
-        <View style={styles.ringContainer}>
-          {/* Background track */}
-          <View
-            style={[
-              styles.ringTrack,
-              {
-                width: RING_SIZE,
-                height: RING_SIZE,
-                borderRadius: RING_SIZE / 2,
-                borderWidth: RING_STROKE,
-              },
-            ]}
-          />
-        </View>
+        <MaskedView
+          style={styles.ringContainer}
+          maskElement={
+            <View style={styles.ringMaskOuter}>
+              <View style={styles.ringMaskStroke} />
+            </View>
+          }
+        >
+          <View style={styles.ringTrack} />
+          <View style={styles.rightClip}>
+            <Animated.View style={[styles.rightFill, { transform: [{ rotate: rightRotate }] }]} />
+          </View>
+          <View style={styles.leftClip}>
+            <Animated.View style={[styles.leftFill, { transform: [{ rotate: leftRotate }] }]} />
+          </View>
+        </MaskedView>
       ) : null}
       <NerdIcon name={iconForState(state)} size={size * 0.55} color={colorForState(state)} />
     </Pressable>
@@ -112,12 +128,59 @@ const styles = StyleSheet.create({
     opacity: opacity.pressed,
   },
   ringContainer: {
+    position: "absolute",
+    width: RING_SIZE,
+    height: RING_SIZE,
+  },
+  ringMaskOuter: {
+    width: RING_SIZE,
+    height: RING_SIZE,
     alignItems: "center",
     justifyContent: "center",
-    ...StyleSheet.absoluteFillObject,
+  },
+  ringMaskStroke: {
+    width: RING_SIZE,
+    height: RING_SIZE,
+    borderRadius: RING_HALF,
+    borderWidth: RING_STROKE,
+    borderColor: "black",
   },
   ringTrack: {
-    borderColor: `${colors.textPrimary}30`,
     position: "absolute",
+    width: RING_SIZE,
+    height: RING_SIZE,
+    backgroundColor: `${colors.textPrimary}30`,
+  },
+  rightClip: {
+    position: "absolute",
+    left: RING_HALF,
+    top: 0,
+    width: RING_HALF,
+    height: RING_SIZE,
+    overflow: "hidden",
+  },
+  rightFill: {
+    width: RING_HALF,
+    height: RING_SIZE,
+    backgroundColor: colors.accent,
+    borderTopRightRadius: RING_HALF,
+    borderBottomRightRadius: RING_HALF,
+    transformOrigin: "0% 50%",
+  },
+  leftClip: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    width: RING_HALF,
+    height: RING_SIZE,
+    overflow: "hidden",
+  },
+  leftFill: {
+    width: RING_HALF,
+    height: RING_SIZE,
+    backgroundColor: colors.accent,
+    borderTopLeftRadius: RING_HALF,
+    borderBottomLeftRadius: RING_HALF,
+    transformOrigin: "100% 50%",
   },
 });
