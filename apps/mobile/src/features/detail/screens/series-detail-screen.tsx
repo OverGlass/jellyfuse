@@ -1,4 +1,5 @@
 import type { MediaItem } from "@jellyfuse/api";
+import type { DownloadRecord } from "@jellyfuse/models";
 import { colors, fontSize, layout, spacing } from "@jellyfuse/theme";
 import { router } from "expo-router";
 import { useState } from "react";
@@ -19,6 +20,9 @@ import { DetailMetaRow } from "@/features/detail/components/detail-meta-row";
 import { DetailHero } from "@/features/detail/components/detail-hero";
 import { EpisodeRow } from "@/features/detail/components/episode-row";
 import { SeasonTabs } from "@/features/detail/components/season-tabs";
+import { DownloadButton } from "@/features/downloads/components/download-button";
+import { useItemDownload } from "@/services/downloads/use-item-download";
+import { useLocalDownloads } from "@/services/downloads/use-local-downloads";
 import { useEpisodes, useSeasons, useSeriesDetail } from "@/services/query";
 import { useScreenGutters } from "@/services/responsive";
 
@@ -53,6 +57,8 @@ export function SeriesDetailScreen({ itemId }: Props) {
   const resolvedActiveSeasonId = activeSeasonId ?? defaultSeasonId(seasonsQuery.data);
 
   const episodesQuery = useEpisodes(itemId, resolvedActiveSeasonId);
+  const downloads = useLocalDownloads();
+  const handleItemDownload = useItemDownload();
   const gutters = useScreenGutters();
   const insets = useSafeAreaInsets();
   const scrollY = useSharedValue(0);
@@ -237,13 +243,26 @@ export function SeriesDetailScreen({ itemId }: Props) {
             ]}
           >
             {episodesQuery.isPending ? <ActivityIndicator color={colors.textSecondary} /> : null}
-            {episodes.map((episode) => (
-              <EpisodeRow
-                key={keyFor(episode)}
-                item={episode}
-                onPress={() => router.push(`/player/${keyFor(episode)}`)}
-              />
-            ))}
+            {episodes.map((episode) => {
+              const episodeId = keyFor(episode);
+              const record = pickRecordForItem(downloads, episodeId);
+              return (
+                <EpisodeRow
+                  key={episodeId}
+                  item={episode}
+                  onPress={() => router.push(`/player/${episodeId}`)}
+                  rightSlot={
+                    <DownloadButton
+                      record={record}
+                      size={36}
+                      onPress={() => {
+                        void handleItemDownload(episode, record);
+                      }}
+                    />
+                  }
+                />
+              );
+            })}
           </View>
         ) : null}
       </Animated.ScrollView>
@@ -316,6 +335,29 @@ function defaultSeasonId(seasons: MediaItem[] | undefined): string | undefined {
 
 function keyFor(item: MediaItem): string {
   return item.id.kind === "tmdb" ? `tmdb-${item.id.tmdbId}` : item.id.jellyfinId;
+}
+
+/**
+ * Pick the most-relevant download record for a given episode itemId.
+ * State priority matches `useDownloadForItem`:
+ *   downloading > queued > paused > done > failed.
+ * Returns undefined when the episode isn't in the downloads list.
+ */
+const RECORD_PRIORITY: Record<DownloadRecord["state"], number> = {
+  downloading: 0,
+  queued: 1,
+  paused: 2,
+  done: 3,
+  failed: 4,
+};
+
+function pickRecordForItem(records: DownloadRecord[], itemId: string): DownloadRecord | undefined {
+  let best: DownloadRecord | undefined;
+  for (const r of records) {
+    if (r.itemId !== itemId) continue;
+    if (!best || RECORD_PRIORITY[r.state] < RECORD_PRIORITY[best.state]) best = r;
+  }
+  return best;
 }
 
 const styles = StyleSheet.create({
