@@ -1,22 +1,28 @@
 import type { MediaItem } from "@jellyfuse/api";
 import { colors, duration, fontSize, fontWeight, opacity, radius, spacing } from "@jellyfuse/theme";
 import { Image } from "expo-image";
+import { type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 /**
  * One row in the series detail episode list. Thumbnail + index + title
  * + optional runtime + progress bar (from `UserData.PlayedPercentage`).
  * Pure component — props in, `onPress` out.
+ *
+ * `rightSlot` is an optional render slot used for per-episode actions
+ * (e.g. the offline `DownloadButton`). The parent owns the state and
+ * callbacks; the row just reserves layout room on the right edge.
  */
 interface Props {
   item: MediaItem;
   onPress: () => void;
+  rightSlot?: ReactNode;
 }
 
 const THUMB_WIDTH = 140;
 const THUMB_HEIGHT = 80; // 16:9-ish
 
-export function EpisodeRow({ item, onPress }: Props) {
+export function EpisodeRow({ item, onPress, rightSlot }: Props) {
   const indexLabel = item.episodeNumber !== undefined ? `${item.episodeNumber}.` : "";
   const runtime = item.runtimeMinutes !== undefined ? `${item.runtimeMinutes}m` : undefined;
   const progress = item.progress ?? 0;
@@ -58,6 +64,7 @@ export function EpisodeRow({ item, onPress }: Props) {
           </Text>
         ) : null}
       </View>
+      {rightSlot ? <View style={styles.rightSlot}>{rightSlot}</View> : null}
     </Pressable>
   );
 }
@@ -115,5 +122,10 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: fontSize.caption,
     marginTop: spacing.xs,
+  },
+  rightSlot: {
+    alignItems: "center",
+    alignSelf: "center",
+    justifyContent: "center",
   },
 });
