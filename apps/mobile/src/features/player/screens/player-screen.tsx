@@ -6,6 +6,8 @@ import { router } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { resolvePlayback } from "@/services/playback/resolver";
+import { resolveLocalStream } from "@/services/downloads/local-stream";
+import { useDownloadForItem } from "@/services/downloads/use-local-downloads";
 import { useMovieDetail } from "@/services/query";
 import { ControlsOverlay } from "../components/controls-overlay";
 import { SkipSegmentPill } from "../components/skip-segment-pill";
@@ -28,18 +30,27 @@ export function PlayerScreen({ jellyfinId }: Props) {
 
   const { serverUrl } = useAuth();
   const detail = useMovieDetail(jellyfinId);
-  const playbackInfoQuery = usePlaybackInfo(jellyfinId);
-  const introSkipperQuery = useIntroSkipperSegments(jellyfinId);
-  const trickplayQuery = useTrickplayInfo(jellyfinId);
+  // Local-first: if a completed download exists, skip the server
+  // playback-info round trip entirely and play from the on-disk file.
+  // Intro-skipper + trickplay + chapters + duration are all captured
+  // at enqueue time and carried on the record.
+  const localRecord = useDownloadForItem(jellyfinId);
+  const hasLocal = localRecord?.state === "done";
+  const playbackInfoQuery = usePlaybackInfo(hasLocal ? undefined : jellyfinId);
+  const introSkipperQuery = useIntroSkipperSegments(hasLocal ? undefined : jellyfinId);
+  const trickplayQuery = useTrickplayInfo(hasLocal ? undefined : jellyfinId);
 
   // Pure derivation — resolvePlayback is a pure function, not async
-  const resolved = playbackInfoQuery.data
-    ? resolvePlayback({
-        playbackInfo: playbackInfoQuery.data,
-        settings: { preferredAudioLanguage: "eng", subtitleMode: "Off" },
-        introSkipperSegments: introSkipperQuery.data ?? undefined,
-      })
-    : null;
+  const resolved =
+    hasLocal && localRecord
+      ? resolveLocalStream(localRecord)
+      : playbackInfoQuery.data
+        ? resolvePlayback({
+            playbackInfo: playbackInfoQuery.data,
+            settings: { preferredAudioLanguage: "eng", subtitleMode: "Off" },
+            introSkipperSegments: introSkipperQuery.data ?? undefined,
+          })
+        : null;
 
   // Resume position from user data
   const startPosition = detail.data?.userData?.playbackPositionTicks
@@ -60,9 +71,11 @@ export function PlayerScreen({ jellyfinId }: Props) {
 
   // Buffering during initial load OR mid-playback — the overlay
   // shows the spinner in place of the play button while this is true.
-  const isBuffering = playbackInfoQuery.isPending || player.isBuffering;
+  // Local playback never waits on playback-info, so its `isPending`
+  // collapses to just native buffering.
+  const isBuffering = (!hasLocal && playbackInfoQuery.isPending) || player.isBuffering;
 
-  if (playbackInfoQuery.isError) {
+  if (!hasLocal && playbackInfoQuery.isError) {
     return (
       <View style={styles.container}>
         <View style={styles.errorOverlay}>
