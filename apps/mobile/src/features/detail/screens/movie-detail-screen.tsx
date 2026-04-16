@@ -1,8 +1,6 @@
-import { buildAuthHeader, fetchPlaybackInfo, type AuthContext } from "@jellyfuse/api";
 import { colors, fontSize, layout, spacing } from "@jellyfuse/theme";
-import { useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { ActivityIndicator, Alert, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import Animated, { useAnimatedScrollHandler, useSharedValue } from "react-native-reanimated";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { BackButton } from "@/features/common/components/back-button";
@@ -11,13 +9,10 @@ import { DetailActionRow } from "@/features/detail/components/detail-action-row"
 import { DetailHero } from "@/features/detail/components/detail-hero";
 import { DetailMetaRow } from "@/features/detail/components/detail-meta-row";
 import { DownloadButton } from "@/features/downloads/components/download-button";
-import { buildDownloadOptions } from "@/services/downloads/enqueue";
-import { useDownloaderActions, useDownloadForItem } from "@/services/downloads/use-local-downloads";
-import { resolvePlayback } from "@/services/playback/resolver";
-import { apiFetchAuthenticated } from "@/services/api/client";
+import { useDownloadForItem } from "@/services/downloads/use-local-downloads";
+import { useItemDownload } from "@/services/downloads/use-item-download";
 import { useMovieDetail } from "@/services/query";
 import { useScreenGutters } from "@/services/responsive";
-import { useAuth } from "@/services/auth/state";
 
 /**
  * Movie detail screen. Prefetches the player route so tapping Play
@@ -30,10 +25,8 @@ interface Props {
 
 export function MovieDetailScreen({ itemId }: Props) {
   const query = useMovieDetail(itemId);
-  const actions = useDownloaderActions();
-  const queryClient = useQueryClient();
-  const { serverUrl, activeUser } = useAuth();
   const downloadRecord = useDownloadForItem(itemId);
+  const handleItemDownload = useItemDownload();
 
   const gutters = useScreenGutters();
   const insets = useSafeAreaInsets();
@@ -42,59 +35,9 @@ export function MovieDetailScreen({ itemId }: Props) {
     scrollY.value = event.contentOffset.y;
   });
 
-  async function handleDownloadPress() {
-    const record = downloadRecord;
-    // Button dispatch table, exhaustive over `DownloadRecord["state"]`:
-    //   done        → play locally
-    //   downloading → pause
-    //   paused      → resume
-    //   queued      → no-op (already queued, will start on its own)
-    //   failed      → delete and fall through to enqueue a fresh one
-    //   undefined   → enqueue
-    // This fixes the dedup bug where stale records caused multiple
-    // parallel downloads of the same item.
-    if (record?.state === "done") {
-      router.push(`/player/${itemId}`);
-      return;
-    }
-    if (record?.state === "downloading") {
-      actions.pause(record.id);
-      return;
-    }
-    if (record?.state === "paused") {
-      actions.resume(record.id);
-      return;
-    }
-    if (record?.state === "queued") {
-      return;
-    }
-    if (record?.state === "failed") {
-      actions.remove(record.id);
-    }
-    if (!serverUrl || !activeUser) return;
-
-    try {
-      const authCtx = await queryClient.fetchQuery<AuthContext>({
-        queryKey: ["auth", "context", activeUser.userId] as const,
-        queryFn: async () => {
-          const { buildAuthContextForUser } = await import("@/services/auth/auth-context-builder");
-          return buildAuthContextForUser(activeUser);
-        },
-      });
-      const playbackInfo = await fetchPlaybackInfo(
-        { baseUrl: serverUrl, userId: activeUser.userId, token: activeUser.token, itemId },
-        apiFetchAuthenticated,
-      );
-      const resolved = resolvePlayback({
-        playbackInfo,
-        settings: { preferredAudioLanguage: "eng", subtitleMode: "OnlyForced" },
-      });
-      const item = query.data!;
-      const options = buildDownloadOptions(item, resolved, buildAuthHeader(authCtx), queryClient);
-      actions.enqueue(options);
-    } catch (e) {
-      Alert.alert("Download failed", e instanceof Error ? e.message : "Unknown error");
-    }
+  function handleDownloadPress() {
+    if (!query.data) return;
+    void handleItemDownload(query.data, downloadRecord);
   }
 
   if (query.isPending) {

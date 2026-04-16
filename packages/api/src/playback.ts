@@ -399,6 +399,27 @@ function parseIntroSkipperSegments(
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
+// Download URL — canonical `/Items/{id}/Download` endpoint.
+//
+// Jellyfin server (`LibraryController.GetDownload`) is the proper offline
+// download route: gated by the `EnableContentDownloading` user permission,
+// calls `item.CanDownload(user)` (blocks BluRay/DVD + parental), logs a
+// `UserDownloadingContent` activity entry, supports HTTP Range, and sends
+// a `Content-Disposition: attachment; filename="..."` header so the
+// downloader receives a real filename + extension.
+//
+// This replaces the earlier `/Videos/{id}/stream?Static=true` URL, which
+// worked but bypassed the server's content-download policy and activity
+// log and didn't carry a filename. Only limitation: always serves the
+// primary `MediaSource`; alternate sources are not addressable here.
+// ──────────────────────────────────────────────────────────────────────────────
+export function buildDownloadUrl(args: { baseUrl: string; itemId: string; token: string }): string {
+  return buildUrl(args.baseUrl, `/Items/${args.itemId}/Download`, {
+    api_key: args.token,
+  });
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ──────────────────────────────────────────────────────────────────────────────
 
