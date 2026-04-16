@@ -59,6 +59,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         fonts: ["./assets/fonts/JetBrainsMonoNerdFontMono-Regular.ttf"],
       },
     ],
+    "@jellyfuse/downloader",
   ],
   experiments: {
     typedRoutes: true,
