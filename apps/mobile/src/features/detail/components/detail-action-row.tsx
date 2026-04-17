@@ -16,18 +16,38 @@ interface Props {
   /** Slot for a `DownloadButton` component with state-aware visuals. */
   downloadSlot?: ReactNode;
   onRequest?: () => void;
+  /**
+   * When false (offline + no local copy), the play button is dimmed,
+   * disabled, and its label switches to "Offline" so users understand
+   * why it can't be tapped. Default true.
+   */
+  canPlay?: boolean;
 }
 
-export function DetailActionRow({ hasResume, onPlay, onDownload, downloadSlot, onRequest }: Props) {
+export function DetailActionRow({
+  hasResume,
+  onPlay,
+  onDownload,
+  downloadSlot,
+  onRequest,
+  canPlay = true,
+}: Props) {
+  const primaryLabel = !canPlay ? "Offline" : hasResume ? "Resume" : "Play";
   return (
     <View style={styles.root}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={hasResume ? "Resume" : "Play"}
+        accessibilityLabel={primaryLabel}
+        accessibilityState={{ disabled: !canPlay }}
+        disabled={!canPlay}
         onPress={onPlay}
-        style={({ pressed }) => [styles.primary, pressed && styles.primaryPressed]}
+        style={({ pressed }) => [
+          styles.primary,
+          pressed && styles.primaryPressed,
+          !canPlay && styles.primaryDisabled,
+        ]}
       >
-        <Text style={styles.primaryLabel}>{hasResume ? "Resume" : "Play"}</Text>
+        <Text style={styles.primaryLabel}>{primaryLabel}</Text>
       </Pressable>
       {/* Prefer the slot (has state-aware progress ring) over the text button */}
       {downloadSlot ??
@@ -73,6 +93,9 @@ const styles = StyleSheet.create({
   },
   primaryPressed: {
     opacity: opacity.pressed,
+  },
+  primaryDisabled: {
+    opacity: opacity.disabled,
   },
   primaryLabel: {
     color: colors.accentContrast,
