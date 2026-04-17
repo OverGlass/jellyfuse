@@ -450,6 +450,23 @@ export interface DownloadMetadata {
 }
 
 /**
+ * External subtitle file (`.srt` / `.vtt` / `.ass`) downloaded
+ * alongside the media so subtitles still display when offline.
+ */
+export interface SubtitleSidecar {
+  /** Jellyfin subtitle stream index — matches the server-side track. */
+  index: number;
+  language: string | undefined;
+  displayTitle: string;
+  isForced: boolean;
+  isDefault: boolean;
+  /** "vtt" | "srt" | "ass" — taken from the delivery URL extension. */
+  format: string;
+  /** Path relative to the app's document directory. */
+  relativePath: string;
+}
+
+/**
  * One offline download record. The canonical shape shared between the
  * Nitro module (`NativeDownloadRecord`) and the JS services layer.
  * Mirrors `crates/jf-core/src/models.rs::DownloadRecord`.
@@ -479,6 +496,22 @@ export interface DownloadRecord {
   bytesTotal: number;
   state: DownloadState;
   metadata: DownloadMetadata;
+  /**
+   * `true` when the download is the canonical source file (all audio
+   * and subtitle tracks embedded). `false` when it is a server-side
+   * transcode baked to a single audio + (optional) subtitle track.
+   * Drives the local-first resolver policy.
+   */
+  wasOriginal: boolean;
+  /**
+   * Number of trickplay sheet JPGs on disk at
+   * `downloads/<id>/trickplay/{0..n-1}.jpg`. `0` when trickplay tiles
+   * were not captured (transcoded download, fetch failure, or the
+   * server didn't have trickplay data for this item).
+   */
+  trickplayTileCount: number;
+  /** External subtitle tracks downloaded alongside the media. */
+  subtitleSidecars: SubtitleSidecar[];
   /** Unix milliseconds — used for list ordering. */
   addedAtMs: number;
 }

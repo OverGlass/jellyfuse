@@ -105,6 +105,12 @@ export const queryKeys = {
   localDownloads: (userId: string) => ["local-downloads", userId] as const,
   localDownload: (userId: string, jellyfinId: string, mediaSourceId: string) =>
     ["local-downloads", userId, jellyfinId, mediaSourceId] as const,
+
+  // Transient slot for the `MediaItem` pending in the quality-picker
+  // formSheet screen. Written by `useItemDownload` before navigating;
+  // read by the sheet to avoid re-plumbing the full MediaItem through
+  // route params. Cleared on sheet dismiss.
+  pendingDownload: (jellyfinId: string) => ["pending-download", jellyfinId] as const,
 } as const;
 
 /**

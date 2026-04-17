@@ -9,33 +9,29 @@
  *   downloading → pause
  *   paused      → resume
  *   queued      → no-op
- *   failed      → remove the stale record, then fall through to enqueue
- *   undefined   → fetch PlaybackInfo, resolve, enqueue a fresh download
+ *   failed      → remove the stale record, then open the quality picker
+ *   undefined   → open the quality picker formSheet
  *
- * The enqueue branch fetches a per-user `AuthContext` through React
- * Query (cached), fetches `/Items/{id}/PlaybackInfo`, resolves a
- * stream, and calls `buildDownloadOptions` — identical to the Rust
- * `handle_download` pipeline.
+ * The quality picker lives at `/download-quality/[itemId]` and is
+ * presented as a native formSheet. We stash the pending `MediaItem`
+ * into the RQ cache under `queryKeys.pendingDownload(itemId)` before
+ * navigating so the sheet can pick up the full item (series/episode
+ * metadata included) without route-param plumbing. The sheet owns
+ * the PlaybackInfo fetch + enqueue pipeline.
  */
-import { buildAuthHeader, fetchPlaybackInfo, type AuthContext } from "@jellyfuse/api";
 import type { MediaItem, DownloadRecord } from "@jellyfuse/models";
+import { queryKeys } from "@jellyfuse/query-keys";
 import { useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useCallback } from "react";
-import { Alert } from "react-native";
-import { useAuth } from "@/services/auth/state";
-import { apiFetchAuthenticated } from "@/services/api/client";
-import { resolvePlayback } from "@/services/playback/resolver";
-import { buildDownloadOptions } from "./enqueue";
 import { useDownloaderActions } from "./use-local-downloads";
 
 export function useItemDownload() {
   const actions = useDownloaderActions();
   const queryClient = useQueryClient();
-  const { serverUrl, activeUser } = useAuth();
 
   return useCallback(
-    async (item: MediaItem, record: DownloadRecord | undefined) => {
+    (item: MediaItem, record: DownloadRecord | undefined) => {
       const jellyfinId =
         item.id.kind === "jellyfin" || item.id.kind === "both" ? item.id.jellyfinId : undefined;
       if (!jellyfinId) return;
@@ -58,42 +54,10 @@ export function useItemDownload() {
       if (record?.state === "failed") {
         actions.remove(record.id);
       }
-      if (!serverUrl || !activeUser) return;
 
-      try {
-        const authCtx = await queryClient.fetchQuery<AuthContext>({
-          queryKey: ["auth", "context", activeUser.userId] as const,
-          queryFn: async () => {
-            const { buildAuthContextForUser } =
-              await import("@/services/auth/auth-context-builder");
-            return buildAuthContextForUser(activeUser);
-          },
-        });
-        const playbackInfo = await fetchPlaybackInfo(
-          {
-            baseUrl: serverUrl,
-            userId: activeUser.userId,
-            token: activeUser.token,
-            itemId: jellyfinId,
-          },
-          apiFetchAuthenticated,
-        );
-        const resolved = resolvePlayback({
-          playbackInfo,
-          settings: { preferredAudioLanguage: "eng", subtitleMode: "OnlyForced" },
-        });
-        const options = buildDownloadOptions(
-          item,
-          resolved,
-          buildAuthHeader(authCtx),
-          queryClient,
-          { baseUrl: serverUrl, token: activeUser.token },
-        );
-        actions.enqueue(options);
-      } catch (e) {
-        Alert.alert("Download failed", e instanceof Error ? e.message : "Unknown error");
-      }
+      queryClient.setQueryData(queryKeys.pendingDownload(jellyfinId), item);
+      router.push(`/download-quality/${jellyfinId}`);
     },
-    [actions, queryClient, serverUrl, activeUser],
+    [actions, queryClient],
   );
 }

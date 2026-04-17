@@ -27,6 +27,18 @@ export default function AppLayout() {
         options={{ presentation: "fullScreenModal", animation: "fade" }}
       />
       <Stack.Screen
+        name="download-quality/[itemId]"
+        options={{
+          // Native sheet with a single compact detent — the quality
+          // list is four rows, so we size to content instead of the
+          // 50%/95% detents used by the richer request flow.
+          presentation: "formSheet",
+          sheetGrabberVisible: true,
+          sheetAllowedDetents: "fitToContents",
+          sheetCornerRadius: 24,
+        }}
+      />
+      <Stack.Screen
         name="request/[tmdbId]"
         options={{
           // `formSheet` resolves natively per platform: bottom sheet

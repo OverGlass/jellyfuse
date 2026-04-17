@@ -173,20 +173,21 @@ final class MpvGLView: UIView {
         let apiType = strdup("opengl")!
         defer { free(apiType) }
 
-        var params: [mpv_render_param] = [
-            mpv_render_param(
-                type: MPV_RENDER_PARAM_API_TYPE,
-                data: UnsafeMutableRawPointer(apiType)
-            ),
-            mpv_render_param(
-                type: MPV_RENDER_PARAM_OPENGL_INIT_PARAMS,
-                data: UnsafeMutableRawPointer(&initParams)
-            ),
-            mpv_render_param(type: mpv_render_param_type(rawValue: 0), data: nil),  // terminator
-        ]
-
         var ctx: OpaquePointer?
-        let rc = mpv_render_context_create(&ctx, mpv, &params)
+        let rc = withUnsafeMutablePointer(to: &initParams) { initParamsPtr -> Int32 in
+            var params: [mpv_render_param] = [
+                mpv_render_param(
+                    type: MPV_RENDER_PARAM_API_TYPE,
+                    data: UnsafeMutableRawPointer(apiType)
+                ),
+                mpv_render_param(
+                    type: MPV_RENDER_PARAM_OPENGL_INIT_PARAMS,
+                    data: UnsafeMutableRawPointer(initParamsPtr)
+                ),
+                mpv_render_param(type: mpv_render_param_type(rawValue: 0), data: nil),
+            ]
+            return mpv_render_context_create(&ctx, mpv, &params)
+        }
         if rc < 0 {
             NSLog("[MpvGLView] mpv_render_context_create failed: %d (%s)",
                   rc, String(cString: mpv_error_string(rc)))
@@ -295,19 +296,22 @@ final class MpvGLView: UIView {
         )
         var flipY: Int32 = 1  // CAEAGLLayer needs flip (unlike CVPixelBuffer in Rust)
 
-        var renderParams: [mpv_render_param] = [
-            mpv_render_param(
-                type: MPV_RENDER_PARAM_OPENGL_FBO,
-                data: UnsafeMutableRawPointer(&fbo)
-            ),
-            mpv_render_param(
-                type: MPV_RENDER_PARAM_FLIP_Y,
-                data: UnsafeMutableRawPointer(&flipY)
-            ),
-            mpv_render_param(type: mpv_render_param_type(rawValue: 0), data: nil),
-        ]
-
-        mpv_render_context_render(renderCtx, &renderParams)
+        withUnsafeMutablePointer(to: &fbo) { fboPtr in
+            withUnsafeMutablePointer(to: &flipY) { flipYPtr in
+                var renderParams: [mpv_render_param] = [
+                    mpv_render_param(
+                        type: MPV_RENDER_PARAM_OPENGL_FBO,
+                        data: UnsafeMutableRawPointer(fboPtr)
+                    ),
+                    mpv_render_param(
+                        type: MPV_RENDER_PARAM_FLIP_Y,
+                        data: UnsafeMutableRawPointer(flipYPtr)
+                    ),
+                    mpv_render_param(type: mpv_render_param_type(rawValue: 0), data: nil),
+                ]
+                mpv_render_context_render(renderCtx, &renderParams)
+            }
+        }
 
         // Present the renderbuffer
         glBindRenderbuffer(GLenum(GL_RENDERBUFFER), colorRenderbuffer)

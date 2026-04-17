@@ -21,6 +21,7 @@ public protocol HybridDownloaderSpec_protocol: HybridObject {
   func rebaseAllPaths(newDocumentDirectory: String) throws -> Void
   func clearAll() throws -> Void
   func list() throws -> [NativeDownloadRecord]
+  func attachSidecars(id: String, attachment: NativeSidecarAttachment) throws -> Void
   func addProgressListener(onProgress: @escaping (_ id: String, _ bytesDownloaded: Double, _ bytesTotal: Double) -> Void) throws -> DownloaderListener
   func addStateChangeListener(onStateChange: @escaping (_ id: String, _ state: NativeDownloadState) -> Void) throws -> DownloaderListener
 }

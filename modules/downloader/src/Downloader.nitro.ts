@@ -70,6 +70,39 @@ export interface NativeDownloadMetadata {
   introSkipperSegments: NativeIntroSkipperSegments | undefined;
 }
 
+/**
+ * External subtitle file downloaded alongside the media. Path is
+ * relative to the app's document directory. Filename convention:
+ * `downloads/<id>/subs/<index>.<ext>`.
+ */
+export interface NativeSubtitleSidecar {
+  /** Jellyfin subtitle stream index (stable across sessions). */
+  index: number;
+  language: string | undefined;
+  displayTitle: string;
+  isForced: boolean;
+  isDefault: boolean;
+  /** "vtt" | "srt" | "ass" — taken from the delivery URL extension. */
+  format: string;
+  /** Relative path under document directory. */
+  relativePath: string;
+}
+
+/**
+ * Sidecar metadata attached to a download after the main media + side
+ * files have finished downloading. Written in a single
+ * `attachSidecars()` call so the manifest stays consistent.
+ */
+export interface NativeSidecarAttachment {
+  /**
+   * Number of trickplay sheet JPGs written to
+   * `downloads/<id>/trickplay/{0..n-1}.jpg`. `0` means no trickplay
+   * tiles available offline (server failure, etc).
+   */
+  trickplayTileCount: number;
+  subtitleSidecars: NativeSubtitleSidecar[];
+}
+
 /** Options passed to `enqueue()`. Populated by `buildDownloadOptions`. */
 export interface DownloadOptions {
   /** The URL to download (DirectPlay-forced Jellyfin stream URL). */
@@ -94,6 +127,25 @@ export interface DownloadOptions {
   imageUrl: string | undefined;
   /** The original stream URL (stored for offline playback reference). */
   streamUrl: string;
+  /**
+   * Client-side size estimate in bytes. Used to seed `bytesTotal` on the
+   * manifest when the server does not send a `Content-Length` header
+   * (transcoded streams, chunked responses). `0` means "unknown".
+   *
+   * For transcoded downloads: `(maxBitrate * durationSeconds) / 8`.
+   * For original downloads: `0` (the real `Content-Length` arrives with
+   * the first response header and overrides this).
+   */
+  estimatedBytes: number;
+  /**
+   * `true` when the download pulls the canonical source file
+   * (`/Items/{id}/Download`) with every audio/subtitle track embedded.
+   * `false` when it pulls a server-transcoded MP4 with a single baked
+   * audio and (optionally) subtitle track. Drives the local-first
+   * resolver policy: Original is always preferred over the server
+   * stream; Transcoded is only preferred when the device is offline.
+   */
+  wasOriginal: boolean;
   metadata: NativeDownloadMetadata;
 }
 
@@ -119,6 +171,15 @@ export interface NativeDownloadRecord {
   bytesTotal: number;
   state: NativeDownloadState;
   metadata: NativeDownloadMetadata;
+  /** See `DownloadOptions.wasOriginal`. */
+  wasOriginal: boolean;
+  /**
+   * Number of trickplay sheet JPGs written to
+   * `downloads/<id>/trickplay/{0..n-1}.jpg`. `0` if none were
+   * downloaded (transcoded-only, fetch failure, etc).
+   */
+  trickplayTileCount: number;
+  subtitleSidecars: NativeSubtitleSidecar[];
   /** Unix milliseconds. */
   addedAtMs: number;
 }
@@ -196,6 +257,18 @@ export interface Downloader extends HybridObject<{ ios: "swift" }> {
    * Called on app boot to hydrate the JS state before the first render.
    */
   list(): NativeDownloadRecord[];
+
+  /**
+   * Merge downloaded sidecar metadata (trickplay tile count + external
+   * subtitle tracks) into the manifest after the JS layer finishes
+   * fetching them. Safe to call any number of times — always overwrites
+   * the previous attachment. No-op if the manifest is missing.
+   *
+   * The actual sidecar files are written to disk by the JS layer (via
+   * `expo-file-system`) before this call. This method only persists
+   * the metadata on the manifest so it survives app restarts.
+   */
+  attachSidecars(id: string, attachment: NativeSidecarAttachment): void;
 
   // ── Event listeners ────────────────────────────────────────────────
 

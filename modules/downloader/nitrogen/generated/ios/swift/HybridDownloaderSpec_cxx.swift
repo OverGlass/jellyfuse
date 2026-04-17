@@ -221,6 +221,17 @@ open class HybridDownloaderSpec_cxx {
   }
   
   @inline(__always)
+  public final func attachSidecars(id: std.string, attachment: NativeSidecarAttachment) -> bridge.Result_void_ {
+    do {
+      try self.__implementation.attachSidecars(id: String(id), attachment: attachment)
+      return bridge.create_Result_void_()
+    } catch (let __error) {
+      let __exceptionPtr = __error.toCpp()
+      return bridge.create_Result_void_(__exceptionPtr)
+    }
+  }
+  
+  @inline(__always)
   public final func addProgressListener(onProgress: bridge.Func_void_std__string_double_double) -> bridge.Result_DownloaderListener_ {
     do {
       let __result = try self.__implementation.addProgressListener(onProgress: { () -> (String, Double, Double) -> Void in
