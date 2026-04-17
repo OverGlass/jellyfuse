@@ -100,16 +100,23 @@ export function PlayerScreen({ jellyfinId }: Props) {
   // collapses to just native buffering.
   const isBuffering = (!hasLocal && playbackInfoQuery.isPending) || player.isBuffering;
 
-  if (!hasLocal && playbackInfoQuery.isError) {
+  if ((!hasLocal && playbackInfoQuery.isError) || player.error) {
+    // `mpv.not_implemented` is the sentinel the Android stub throws
+    // until Phase C lands libmpv. Show a friendlier copy for that
+    // specific code — anything else is a real playback failure.
+    const isUnsupported = player.error === "mpv.not_implemented";
+    const title = isUnsupported ? "Playback Unavailable" : "Playback Error";
+    const body = isUnsupported
+      ? "Video playback isn't supported on Android yet. It's on the way."
+      : (player.error ??
+        (playbackInfoQuery.error instanceof Error
+          ? playbackInfoQuery.error.message
+          : "Failed to load playback info"));
     return (
       <View style={styles.container}>
         <View style={styles.errorOverlay}>
-          <Text style={styles.errorTitle}>Playback Error</Text>
-          <Text style={styles.errorBody}>
-            {playbackInfoQuery.error instanceof Error
-              ? playbackInfoQuery.error.message
-              : "Failed to load playback info"}
-          </Text>
+          <Text style={styles.errorTitle}>{title}</Text>
+          <Text style={styles.errorBody}>{body}</Text>
         </View>
       </View>
     );

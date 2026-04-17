@@ -2,14 +2,17 @@
   "name": "@jellyfuse/native-mpv",
   "version": "0.0.0",
   "private": true,
-  "description": "MPV player Nitro module for Jellyfuse (iOS). Vendors MPVKit static libs.",
+  "description": "MPV player Nitro module for Jellyfuse (iOS + Android). Vendors MPVKit (iOS) and libmpv (Android) static libs.",
   "files": [
     "src",
     "ios",
+    "android",
     "nitrogen",
     "nitro.json",
     "NativeMpv.podspec",
+    "app.plugin.js",
     "scripts/fetch-mpvkit.sh",
+    "scripts/fetch-libmpv-android.sh",
     "vendor"
   ],
   "main": "src/index.ts",

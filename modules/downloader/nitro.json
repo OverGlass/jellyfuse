@@ -5,12 +5,16 @@
   },
   "android": {
     "androidNamespace": ["downloader"],
-    "androidCxxLibName": "downloader"
+    "androidCxxLibName": "Downloader"
   },
   "autolinking": {
     "Downloader": {
       "ios": {
         "language": "swift",
+        "implementationClassName": "HybridDownloader"
+      },
+      "android": {
+        "language": "kotlin",
         "implementationClassName": "HybridDownloader"
       }
     }

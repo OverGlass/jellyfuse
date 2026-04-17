@@ -125,7 +125,7 @@ export interface MpvSubtitleTrack {
  * listeners via `addXxxListener(...)`, `load()` a stream URL, and
  * always call `release()` before unmount.
  */
-export interface NativeMpv extends HybridObject<{ ios: "swift" }> {
+export interface NativeMpv extends HybridObject<{ ios: "swift"; android: "kotlin" }> {
   /**
    * Unique identifier for this player instance. Used to connect a
    * `MpvVideoView` to this player via `attachPlayer(instanceId)`.

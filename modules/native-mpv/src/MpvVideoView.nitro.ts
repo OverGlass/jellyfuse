@@ -35,4 +35,8 @@ export interface MpvVideoViewMethods extends HybridViewMethods {
   detachPlayer(): void;
 }
 
-export type MpvVideoView = HybridView<MpvVideoViewProps, MpvVideoViewMethods, { ios: "swift" }>;
+export type MpvVideoView = HybridView<
+  MpvVideoViewProps,
+  MpvVideoViewMethods,
+  { ios: "swift"; android: "kotlin" }
+>;

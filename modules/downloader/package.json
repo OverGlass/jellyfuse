@@ -6,6 +6,7 @@
   "files": [
     "src",
     "ios",
+    "android",
     "nitrogen",
     "plugin",
     "app.plugin.js",

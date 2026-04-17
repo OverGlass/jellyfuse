@@ -5,18 +5,26 @@
   },
   "android": {
     "androidNamespace": ["nativempv"],
-    "androidCxxLibName": "nativempv"
+    "androidCxxLibName": "NativeMpv"
   },
   "autolinking": {
     "NativeMpv": {
       "ios": {
         "language": "swift",
         "implementationClassName": "HybridNativeMpv"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridNativeMpv"
       }
     },
     "MpvVideoView": {
       "ios": {
         "language": "swift",
+        "implementationClassName": "HybridMpvVideoView"
+      },
+      "android": {
+        "language": "kotlin",
         "implementationClassName": "HybridMpvVideoView"
       }
     }

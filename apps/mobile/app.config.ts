@@ -37,6 +37,19 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       monochromeImage: "./assets/images/android-icon-monochrome.png",
     },
     predictiveBackGestureEnabled: true,
+    // Cleartext for LAN Jellyfin servers is enabled via
+    // `plugins/with-android-cleartext.js` (manifest + network security
+    // config XML). The `android.usesCleartextTraffic` shortcut was
+    // removed from Expo's schema in SDK 52+.
+    permissions: [
+      "android.permission.INTERNET",
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.WAKE_LOCK",
+      "android.permission.MODIFY_AUDIO_SETTINGS",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.FOREGROUND_SERVICE_DATA_SYNC",
+      "android.permission.POST_NOTIFICATIONS",
+    ],
   },
   web: {
     output: "static",
@@ -45,6 +58,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   plugins: [
     "expo-router",
     "expo-secure-store",
+    "../../modules/native-mpv/app.plugin.js",
+    "./plugins/with-android-cleartext.js",
     [
       "expo-splash-screen",
       {

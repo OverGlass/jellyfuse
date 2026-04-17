@@ -85,7 +85,16 @@ export function useMpvPlayer(
   // ── Sync mpv lifecycle with React ─────────────────────────────────
 
   useEffect(() => {
-    const mpv = createNativeMpv();
+    let mpv: NativeMpv;
+    try {
+      mpv = createNativeMpv();
+    } catch (e) {
+      // createNativeMpv() should never throw on iOS; on Android the
+      // Phase A stub constructs cleanly but we guard anyway so a native
+      // init failure routes to the error overlay rather than crashing.
+      onError(e instanceof Error ? e.message : String(e));
+      return;
+    }
     mpvRef.current = mpv;
 
     const subs: MpvListener[] = [

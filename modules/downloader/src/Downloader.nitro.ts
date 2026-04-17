@@ -200,7 +200,7 @@ export interface NativeDownloadRecord {
  * downloader.addProgressListener((id, downloaded, total) => { ... });
  * ```
  */
-export interface Downloader extends HybridObject<{ ios: "swift" }> {
+export interface Downloader extends HybridObject<{ ios: "swift"; android: "kotlin" }> {
   /**
    * Enqueue a new download. Writes the manifest to disk immediately,
    * starts the URLSession task, and returns the assigned UUID.
