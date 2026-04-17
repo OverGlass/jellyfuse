@@ -10,8 +10,11 @@
 #include <fbjni/fbjni.h>
 #include "MpvLoadOptions.hpp"
 
+#include "JMpvExternalSubtitle.hpp"
+#include "MpvExternalSubtitle.hpp"
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace margelo::nitro::nativempv {
 
@@ -44,13 +47,25 @@ namespace margelo::nitro::nativempv {
       jni::local_ref<jni::JDouble> volume = this->getFieldValue(fieldVolume);
       static const auto fieldUserAgent = clazz->getField<jni::JString>("userAgent");
       jni::local_ref<jni::JString> userAgent = this->getFieldValue(fieldUserAgent);
+      static const auto fieldExternalSubtitles = clazz->getField<jni::JArrayClass<JMpvExternalSubtitle>>("externalSubtitles");
+      jni::local_ref<jni::JArrayClass<JMpvExternalSubtitle>> externalSubtitles = this->getFieldValue(fieldExternalSubtitles);
       return MpvLoadOptions(
         startPositionSeconds != nullptr ? std::make_optional(startPositionSeconds->value()) : std::nullopt,
         audioTrackIndex != nullptr ? std::make_optional(audioTrackIndex->value()) : std::nullopt,
         subtitleTrackIndex != nullptr ? std::make_optional(subtitleTrackIndex->value()) : std::nullopt,
         playbackRate != nullptr ? std::make_optional(playbackRate->value()) : std::nullopt,
         volume != nullptr ? std::make_optional(volume->value()) : std::nullopt,
-        userAgent != nullptr ? std::make_optional(userAgent->toStdString()) : std::nullopt
+        userAgent != nullptr ? std::make_optional(userAgent->toStdString()) : std::nullopt,
+        externalSubtitles != nullptr ? std::make_optional([&]() {
+          size_t __size = externalSubtitles->size();
+          std::vector<MpvExternalSubtitle> __vector;
+          __vector.reserve(__size);
+          for (size_t __i = 0; __i < __size; __i++) {
+            auto __element = externalSubtitles->getElement(__i);
+            __vector.push_back(__element->toCpp());
+          }
+          return __vector;
+        }()) : std::nullopt
       );
     }
 
@@ -60,7 +75,7 @@ namespace margelo::nitro::nativempv {
      */
     [[maybe_unused]]
     static jni::local_ref<JMpvLoadOptions::javaobject> fromCpp(const MpvLoadOptions& value) {
-      using JSignature = JMpvLoadOptions(jni::alias_ref<jni::JDouble>, jni::alias_ref<jni::JDouble>, jni::alias_ref<jni::JDouble>, jni::alias_ref<jni::JDouble>, jni::alias_ref<jni::JDouble>, jni::alias_ref<jni::JString>);
+      using JSignature = JMpvLoadOptions(jni::alias_ref<jni::JDouble>, jni::alias_ref<jni::JDouble>, jni::alias_ref<jni::JDouble>, jni::alias_ref<jni::JDouble>, jni::alias_ref<jni::JDouble>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JArrayClass<JMpvExternalSubtitle>>);
       static const auto clazz = javaClassStatic();
       static const auto create = clazz->getStaticMethod<JSignature>("fromCpp");
       return create(
@@ -70,7 +85,17 @@ namespace margelo::nitro::nativempv {
         value.subtitleTrackIndex.has_value() ? jni::JDouble::valueOf(value.subtitleTrackIndex.value()) : nullptr,
         value.playbackRate.has_value() ? jni::JDouble::valueOf(value.playbackRate.value()) : nullptr,
         value.volume.has_value() ? jni::JDouble::valueOf(value.volume.value()) : nullptr,
-        value.userAgent.has_value() ? jni::make_jstring(value.userAgent.value()) : nullptr
+        value.userAgent.has_value() ? jni::make_jstring(value.userAgent.value()) : nullptr,
+        value.externalSubtitles.has_value() ? [&]() {
+          size_t __size = value.externalSubtitles.value().size();
+          jni::local_ref<jni::JArrayClass<JMpvExternalSubtitle>> __array = jni::JArrayClass<JMpvExternalSubtitle>::newArray(__size);
+          for (size_t __i = 0; __i < __size; __i++) {
+            const auto& __element = value.externalSubtitles.value()[__i];
+            auto __elementJni = JMpvExternalSubtitle::fromCpp(__element);
+            __array->setElement(__i, *__elementJni);
+          }
+          return __array;
+        }() : nullptr
       );
     }
   };

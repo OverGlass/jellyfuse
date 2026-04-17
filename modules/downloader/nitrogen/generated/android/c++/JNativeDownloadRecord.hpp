@@ -15,12 +15,14 @@
 #include "JNativeDownloadState.hpp"
 #include "JNativeIntroSkipperSegments.hpp"
 #include "JNativeSkipSegment.hpp"
+#include "JNativeSubtitleSidecar.hpp"
 #include "JNativeTrickplayInfo.hpp"
 #include "NativeChapter.hpp"
 #include "NativeDownloadMetadata.hpp"
 #include "NativeDownloadState.hpp"
 #include "NativeIntroSkipperSegments.hpp"
 #include "NativeSkipSegment.hpp"
+#include "NativeSubtitleSidecar.hpp"
 #include "NativeTrickplayInfo.hpp"
 #include <optional>
 #include <string>
@@ -75,6 +77,12 @@ namespace margelo::nitro::downloader {
       jni::local_ref<JNativeDownloadState> state = this->getFieldValue(fieldState);
       static const auto fieldMetadata = clazz->getField<JNativeDownloadMetadata>("metadata");
       jni::local_ref<JNativeDownloadMetadata> metadata = this->getFieldValue(fieldMetadata);
+      static const auto fieldWasOriginal = clazz->getField<jboolean>("wasOriginal");
+      jboolean wasOriginal = this->getFieldValue(fieldWasOriginal);
+      static const auto fieldTrickplayTileCount = clazz->getField<double>("trickplayTileCount");
+      double trickplayTileCount = this->getFieldValue(fieldTrickplayTileCount);
+      static const auto fieldSubtitleSidecars = clazz->getField<jni::JArrayClass<JNativeSubtitleSidecar>>("subtitleSidecars");
+      jni::local_ref<jni::JArrayClass<JNativeSubtitleSidecar>> subtitleSidecars = this->getFieldValue(fieldSubtitleSidecars);
       static const auto fieldAddedAtMs = clazz->getField<double>("addedAtMs");
       double addedAtMs = this->getFieldValue(fieldAddedAtMs);
       return NativeDownloadRecord(
@@ -93,6 +101,18 @@ namespace margelo::nitro::downloader {
         bytesTotal,
         state->toCpp(),
         metadata->toCpp(),
+        static_cast<bool>(wasOriginal),
+        trickplayTileCount,
+        [&]() {
+          size_t __size = subtitleSidecars->size();
+          std::vector<NativeSubtitleSidecar> __vector;
+          __vector.reserve(__size);
+          for (size_t __i = 0; __i < __size; __i++) {
+            auto __element = subtitleSidecars->getElement(__i);
+            __vector.push_back(__element->toCpp());
+          }
+          return __vector;
+        }(),
         addedAtMs
       );
     }
@@ -103,7 +123,7 @@ namespace margelo::nitro::downloader {
      */
     [[maybe_unused]]
     static jni::local_ref<JNativeDownloadRecord::javaobject> fromCpp(const NativeDownloadRecord& value) {
-      using JSignature = JNativeDownloadRecord(jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JDouble>, jni::alias_ref<jni::JDouble>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, double, double, jni::alias_ref<JNativeDownloadState>, jni::alias_ref<JNativeDownloadMetadata>, double);
+      using JSignature = JNativeDownloadRecord(jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JDouble>, jni::alias_ref<jni::JDouble>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, double, double, jni::alias_ref<JNativeDownloadState>, jni::alias_ref<JNativeDownloadMetadata>, jboolean, double, jni::alias_ref<jni::JArrayClass<JNativeSubtitleSidecar>>, double);
       static const auto clazz = javaClassStatic();
       static const auto create = clazz->getStaticMethod<JSignature>("fromCpp");
       return create(
@@ -123,6 +143,18 @@ namespace margelo::nitro::downloader {
         value.bytesTotal,
         JNativeDownloadState::fromCpp(value.state),
         JNativeDownloadMetadata::fromCpp(value.metadata),
+        value.wasOriginal,
+        value.trickplayTileCount,
+        [&]() {
+          size_t __size = value.subtitleSidecars.size();
+          jni::local_ref<jni::JArrayClass<JNativeSubtitleSidecar>> __array = jni::JArrayClass<JNativeSubtitleSidecar>::newArray(__size);
+          for (size_t __i = 0; __i < __size; __i++) {
+            const auto& __element = value.subtitleSidecars[__i];
+            auto __elementJni = JNativeSubtitleSidecar::fromCpp(__element);
+            __array->setElement(__i, *__elementJni);
+          }
+          return __array;
+        }(),
         value.addedAtMs
       );
     }

@@ -11,6 +11,8 @@
 namespace margelo::nitro::nativempv { struct MpvListener; }
 // Forward declaration of `MpvLoadOptions` to properly resolve imports.
 namespace margelo::nitro::nativempv { struct MpvLoadOptions; }
+// Forward declaration of `MpvExternalSubtitle` to properly resolve imports.
+namespace margelo::nitro::nativempv { struct MpvExternalSubtitle; }
 // Forward declaration of `MpvPlaybackState` to properly resolve imports.
 namespace margelo::nitro::nativempv { enum class MpvPlaybackState; }
 // Forward declaration of `MpvAudioTrack` to properly resolve imports.
@@ -27,13 +29,15 @@ namespace margelo::nitro::nativempv { struct MpvSubtitleTrack; }
 #include "MpvLoadOptions.hpp"
 #include "JMpvLoadOptions.hpp"
 #include <optional>
+#include "MpvExternalSubtitle.hpp"
+#include <vector>
+#include "JMpvExternalSubtitle.hpp"
 #include "JFunc_void_double_double.hpp"
 #include "MpvPlaybackState.hpp"
 #include "JFunc_void_MpvPlaybackState.hpp"
 #include "JMpvPlaybackState.hpp"
 #include "JFunc_void_std__string.hpp"
 #include "MpvAudioTrack.hpp"
-#include <vector>
 #include "MpvSubtitleTrack.hpp"
 #include "JFunc_void_std__vector_MpvAudioTrack__std__vector_MpvSubtitleTrack_.hpp"
 #include "JMpvAudioTrack.hpp"

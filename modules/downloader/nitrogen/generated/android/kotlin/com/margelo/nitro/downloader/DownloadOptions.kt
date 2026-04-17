@@ -55,6 +55,12 @@ data class DownloadOptions(
   val streamUrl: String,
   @DoNotStrip
   @Keep
+  val estimatedBytes: Double,
+  @DoNotStrip
+  @Keep
+  val wasOriginal: Boolean,
+  @DoNotStrip
+  @Keep
   val metadata: NativeDownloadMetadata
 ) {
   /* primary constructor */
@@ -67,8 +73,8 @@ data class DownloadOptions(
     @Keep
     @Suppress("unused")
     @JvmStatic
-    private fun fromCpp(url: String, itemId: String, mediaSourceId: String, playSessionId: String, destRelativePath: String, headers: Map<String, String>, title: String, seriesTitle: String?, seasonNumber: Double?, episodeNumber: Double?, imageUrl: String?, streamUrl: String, metadata: NativeDownloadMetadata): DownloadOptions {
-      return DownloadOptions(url, itemId, mediaSourceId, playSessionId, destRelativePath, headers, title, seriesTitle, seasonNumber, episodeNumber, imageUrl, streamUrl, metadata)
+    private fun fromCpp(url: String, itemId: String, mediaSourceId: String, playSessionId: String, destRelativePath: String, headers: Map<String, String>, title: String, seriesTitle: String?, seasonNumber: Double?, episodeNumber: Double?, imageUrl: String?, streamUrl: String, estimatedBytes: Double, wasOriginal: Boolean, metadata: NativeDownloadMetadata): DownloadOptions {
+      return DownloadOptions(url, itemId, mediaSourceId, playSessionId, destRelativePath, headers, title, seriesTitle, seasonNumber, episodeNumber, imageUrl, streamUrl, estimatedBytes, wasOriginal, metadata)
     }
   }
 }

@@ -64,6 +64,15 @@ data class NativeDownloadRecord(
   val metadata: NativeDownloadMetadata,
   @DoNotStrip
   @Keep
+  val wasOriginal: Boolean,
+  @DoNotStrip
+  @Keep
+  val trickplayTileCount: Double,
+  @DoNotStrip
+  @Keep
+  val subtitleSidecars: Array<NativeSubtitleSidecar>,
+  @DoNotStrip
+  @Keep
   val addedAtMs: Double
 ) {
   /* primary constructor */
@@ -76,8 +85,8 @@ data class NativeDownloadRecord(
     @Keep
     @Suppress("unused")
     @JvmStatic
-    private fun fromCpp(id: String, itemId: String, mediaSourceId: String, playSessionId: String, title: String, seriesTitle: String?, seasonNumber: Double?, episodeNumber: Double?, imageUrl: String?, streamUrl: String, destRelativePath: String, bytesDownloaded: Double, bytesTotal: Double, state: NativeDownloadState, metadata: NativeDownloadMetadata, addedAtMs: Double): NativeDownloadRecord {
-      return NativeDownloadRecord(id, itemId, mediaSourceId, playSessionId, title, seriesTitle, seasonNumber, episodeNumber, imageUrl, streamUrl, destRelativePath, bytesDownloaded, bytesTotal, state, metadata, addedAtMs)
+    private fun fromCpp(id: String, itemId: String, mediaSourceId: String, playSessionId: String, title: String, seriesTitle: String?, seasonNumber: Double?, episodeNumber: Double?, imageUrl: String?, streamUrl: String, destRelativePath: String, bytesDownloaded: Double, bytesTotal: Double, state: NativeDownloadState, metadata: NativeDownloadMetadata, wasOriginal: Boolean, trickplayTileCount: Double, subtitleSidecars: Array<NativeSubtitleSidecar>, addedAtMs: Double): NativeDownloadRecord {
+      return NativeDownloadRecord(id, itemId, mediaSourceId, playSessionId, title, seriesTitle, seasonNumber, episodeNumber, imageUrl, streamUrl, destRelativePath, bytesDownloaded, bytesTotal, state, metadata, wasOriginal, trickplayTileCount, subtitleSidecars, addedAtMs)
     }
   }
 }

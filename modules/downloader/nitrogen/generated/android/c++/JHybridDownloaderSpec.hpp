@@ -62,6 +62,7 @@ namespace margelo::nitro::downloader {
     void rebaseAllPaths(const std::string& newDocumentDirectory) override;
     void clearAll() override;
     std::vector<NativeDownloadRecord> list() override;
+    void attachSidecars(const std::string& id, const NativeSidecarAttachment& attachment) override;
     DownloaderListener addProgressListener(const std::function<void(const std::string& /* id */, double /* bytesDownloaded */, double /* bytesTotal */)>& onProgress) override;
     DownloaderListener addStateChangeListener(const std::function<void(const std::string& /* id */, NativeDownloadState /* state */)>& onStateChange) override;
 

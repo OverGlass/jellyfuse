@@ -68,6 +68,10 @@ namespace margelo::nitro::downloader {
       jni::local_ref<jni::JString> imageUrl = this->getFieldValue(fieldImageUrl);
       static const auto fieldStreamUrl = clazz->getField<jni::JString>("streamUrl");
       jni::local_ref<jni::JString> streamUrl = this->getFieldValue(fieldStreamUrl);
+      static const auto fieldEstimatedBytes = clazz->getField<double>("estimatedBytes");
+      double estimatedBytes = this->getFieldValue(fieldEstimatedBytes);
+      static const auto fieldWasOriginal = clazz->getField<jboolean>("wasOriginal");
+      jboolean wasOriginal = this->getFieldValue(fieldWasOriginal);
       static const auto fieldMetadata = clazz->getField<JNativeDownloadMetadata>("metadata");
       jni::local_ref<JNativeDownloadMetadata> metadata = this->getFieldValue(fieldMetadata);
       return DownloadOptions(
@@ -90,6 +94,8 @@ namespace margelo::nitro::downloader {
         episodeNumber != nullptr ? std::make_optional(episodeNumber->value()) : std::nullopt,
         imageUrl != nullptr ? std::make_optional(imageUrl->toStdString()) : std::nullopt,
         streamUrl->toStdString(),
+        estimatedBytes,
+        static_cast<bool>(wasOriginal),
         metadata->toCpp()
       );
     }
@@ -100,7 +106,7 @@ namespace margelo::nitro::downloader {
      */
     [[maybe_unused]]
     static jni::local_ref<JDownloadOptions::javaobject> fromCpp(const DownloadOptions& value) {
-      using JSignature = JDownloadOptions(jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JMap<jni::JString, jni::JString>>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JDouble>, jni::alias_ref<jni::JDouble>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jni::alias_ref<JNativeDownloadMetadata>);
+      using JSignature = JDownloadOptions(jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JMap<jni::JString, jni::JString>>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JDouble>, jni::alias_ref<jni::JDouble>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, double, jboolean, jni::alias_ref<JNativeDownloadMetadata>);
       static const auto clazz = javaClassStatic();
       static const auto create = clazz->getStaticMethod<JSignature>("fromCpp");
       return create(
@@ -123,6 +129,8 @@ namespace margelo::nitro::downloader {
         value.episodeNumber.has_value() ? jni::JDouble::valueOf(value.episodeNumber.value()) : nullptr,
         value.imageUrl.has_value() ? jni::make_jstring(value.imageUrl.value()) : nullptr,
         jni::make_jstring(value.streamUrl),
+        value.estimatedBytes,
+        value.wasOriginal,
         JNativeDownloadMetadata::fromCpp(value.metadata)
       );
     }

@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+  xmlns:tools="http://schemas.android.com/tools">
 
   <!--
     Permissions for background downloads:
@@ -14,9 +15,17 @@
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
   <uses-permission android:name="android.permission.WAKE_LOCK" />
 
-  <!--
-    The download foreground service will be declared in the app-merged
-    manifest once Phase B ships DownloadForegroundService. For Phase A the
-    Kotlin module is a stub so no <service> is registered.
-  -->
+  <application>
+    <!--
+      WorkManager runs all foreground CoroutineWorkers through its own
+      `SystemForegroundService`. On API 34+ the service's manifest entry
+      MUST declare a `foregroundServiceType` or `startForeground()` fails.
+      We merge `dataSync` into WorkManager's manifest declaration so the
+      download worker can promote itself via `setForeground(...)`.
+    -->
+    <service
+      android:name="androidx.work.impl.foreground.SystemForegroundService"
+      android:foregroundServiceType="dataSync"
+      tools:node="merge" />
+  </application>
 </manifest>

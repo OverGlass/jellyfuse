@@ -34,7 +34,10 @@ data class MpvLoadOptions(
   val volume: Double?,
   @DoNotStrip
   @Keep
-  val userAgent: String?
+  val userAgent: String?,
+  @DoNotStrip
+  @Keep
+  val externalSubtitles: Array<MpvExternalSubtitle>?
 ) {
   /* primary constructor */
 
@@ -46,8 +49,8 @@ data class MpvLoadOptions(
     @Keep
     @Suppress("unused")
     @JvmStatic
-    private fun fromCpp(startPositionSeconds: Double?, audioTrackIndex: Double?, subtitleTrackIndex: Double?, playbackRate: Double?, volume: Double?, userAgent: String?): MpvLoadOptions {
-      return MpvLoadOptions(startPositionSeconds, audioTrackIndex, subtitleTrackIndex, playbackRate, volume, userAgent)
+    private fun fromCpp(startPositionSeconds: Double?, audioTrackIndex: Double?, subtitleTrackIndex: Double?, playbackRate: Double?, volume: Double?, userAgent: String?, externalSubtitles: Array<MpvExternalSubtitle>?): MpvLoadOptions {
+      return MpvLoadOptions(startPositionSeconds, audioTrackIndex, subtitleTrackIndex, playbackRate, volume, userAgent, externalSubtitles)
     }
   }
 }

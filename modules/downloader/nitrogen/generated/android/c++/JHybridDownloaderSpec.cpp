@@ -21,10 +21,14 @@ namespace margelo::nitro::downloader { struct NativeTrickplayInfo; }
 namespace margelo::nitro::downloader { struct NativeIntroSkipperSegments; }
 // Forward declaration of `NativeSkipSegment` to properly resolve imports.
 namespace margelo::nitro::downloader { struct NativeSkipSegment; }
+// Forward declaration of `NativeSubtitleSidecar` to properly resolve imports.
+namespace margelo::nitro::downloader { struct NativeSubtitleSidecar; }
 // Forward declaration of `DownloaderListener` to properly resolve imports.
 namespace margelo::nitro::downloader { struct DownloaderListener; }
 // Forward declaration of `DownloadOptions` to properly resolve imports.
 namespace margelo::nitro::downloader { struct DownloadOptions; }
+// Forward declaration of `NativeSidecarAttachment` to properly resolve imports.
+namespace margelo::nitro::downloader { struct NativeSidecarAttachment; }
 
 #include <string>
 #include "NativeDownloadRecord.hpp"
@@ -43,6 +47,8 @@ namespace margelo::nitro::downloader { struct DownloadOptions; }
 #include "JNativeIntroSkipperSegments.hpp"
 #include "NativeSkipSegment.hpp"
 #include "JNativeSkipSegment.hpp"
+#include "NativeSubtitleSidecar.hpp"
+#include "JNativeSubtitleSidecar.hpp"
 #include "DownloaderListener.hpp"
 #include "JDownloaderListener.hpp"
 #include <functional>
@@ -51,6 +57,8 @@ namespace margelo::nitro::downloader { struct DownloadOptions; }
 #include "DownloadOptions.hpp"
 #include "JDownloadOptions.hpp"
 #include <unordered_map>
+#include "NativeSidecarAttachment.hpp"
+#include "JNativeSidecarAttachment.hpp"
 #include "JFunc_void_std__string_double_double.hpp"
 #include "JFunc_void_std__string_NativeDownloadState.hpp"
 
@@ -129,6 +137,10 @@ namespace margelo::nitro::downloader {
       }
       return __vector;
     }();
+  }
+  void JHybridDownloaderSpec::attachSidecars(const std::string& id, const NativeSidecarAttachment& attachment) {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<void(jni::alias_ref<jni::JString> /* id */, jni::alias_ref<JNativeSidecarAttachment> /* attachment */)>("attachSidecars");
+    method(_javaPart, jni::make_jstring(id), JNativeSidecarAttachment::fromCpp(attachment));
   }
   DownloaderListener JHybridDownloaderSpec::addProgressListener(const std::function<void(const std::string& /* id */, double /* bytesDownloaded */, double /* bytesTotal */)>& onProgress) {
     static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<JDownloaderListener>(jni::alias_ref<JFunc_void_std__string_double_double::javaobject> /* onProgress */)>("addProgressListener_cxx");

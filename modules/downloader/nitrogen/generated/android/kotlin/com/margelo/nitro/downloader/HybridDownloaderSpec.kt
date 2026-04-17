@@ -60,6 +60,10 @@ abstract class HybridDownloaderSpec: HybridObject() {
   @Keep
   abstract fun list(): Array<NativeDownloadRecord>
   
+  @DoNotStrip
+  @Keep
+  abstract fun attachSidecars(id: String, attachment: NativeSidecarAttachment): Unit
+  
   abstract fun addProgressListener(onProgress: (id: String, bytesDownloaded: Double, bytesTotal: Double) -> Unit): DownloaderListener
   
   @DoNotStrip
