@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# fetch-libmpv-android.sh — populate vendor/android/ from the 1Password
-# document uploaded by `build-libmpv-android.sh`. Mirrors the iOS
-# `fetch-mpvkit.sh` shape so CI + local dev use the same entrypoint.
+# fetch-libmpv-android.sh — populate vendor/android/ from a GitHub
+# Release published by `build-libmpv-android.sh`. Mirrors the iOS
+# `fetch-mpvkit.sh` shape (which also pulls from GitHub Releases) so
+# CI + local dev use the same entrypoint.
 #
 # Layout produced (relative to modules/native-mpv/):
 #   vendor/android/
@@ -15,12 +16,14 @@
 # multiple worktrees don't re-download the same ~40 MB tarball.
 #
 # Source selection (first match wins):
-#   1. ${LIBMPV_ANDROID_TARBALL}       — local path, dev escape hatch
+#   1. ${LIBMPV_ANDROID_TARBALL}    — local path, dev escape hatch
 #      (set this when iterating on build-libmpv-android.sh output
-#      before uploading).
-#   2. 1Password document in "Jellyfuse CI" vault titled
-#      "libmpv-android-${MPV_ANDROID_VERSION}" — requires `op` CLI
-#      signed in; used by CI + normal dev flow.
+#      before publishing the release).
+#   2. GitHub Release tagged `libmpv-android-${MPV_ANDROID_VERSION}`
+#      on ${LIBMPV_GH_REPO} (defaults to OverGlass/jellyfuse). Uses
+#      `gh release download` — authenticates via the same login
+#      `gh auth status` shows. CI sets GH_TOKEN / GITHUB_TOKEN in
+#      env and `gh` picks it up automatically.
 #
 # Idempotent: cache-hit → just re-symlink vendor/android.
 
@@ -32,8 +35,9 @@ MODULE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 MPV_ANDROID_VERSION="${MPV_ANDROID_VERSION:-$(cat "${MODULE_DIR}/MPV_ANDROID_VERSION")}"
 CACHE_ROOT="${HOME}/.cache/jellyfuse/libmpv-android/${MPV_ANDROID_VERSION}"
 VENDOR_DIR="${MODULE_DIR}/vendor/android"
-VAULT="${LIBMPV_OP_VAULT:-Jellyfuse CI}"
-DOC_TITLE="libmpv-android-${MPV_ANDROID_VERSION}"
+LIBMPV_GH_REPO="${LIBMPV_GH_REPO:-OverGlass/jellyfuse}"
+RELEASE_TAG="libmpv-android-${MPV_ANDROID_VERSION}"
+ASSET_NAME="libmpv-android-${MPV_ANDROID_VERSION}.tar.gz"
 
 # ── cache hit? ──────────────────────────────────────────────────────────────
 if [[ -f "${CACHE_ROOT}/.complete" ]]; then
@@ -50,29 +54,37 @@ else
     fi
     echo "==> Extracting ${LIBMPV_ANDROID_TARBALL} → ${CACHE_ROOT}"
     tar -xzf "${LIBMPV_ANDROID_TARBALL}" -C "${CACHE_ROOT}"
-  elif command -v op >/dev/null 2>&1 && op document get "${DOC_TITLE}" --vault "${VAULT}" --output /dev/null >/dev/null 2>&1; then
+  elif command -v gh >/dev/null 2>&1 && gh release view "${RELEASE_TAG}" --repo "${LIBMPV_GH_REPO}" >/dev/null 2>&1; then
     TMP="$(mktemp -d)"
     trap 'rm -rf "${TMP}"' EXIT
-    echo "==> Pulling ${DOC_TITLE} from 1Password vault '${VAULT}'"
-    op document get "${DOC_TITLE}" --vault "${VAULT}" --output "${TMP}/libmpv.tar.gz"
-    tar -xzf "${TMP}/libmpv.tar.gz" -C "${CACHE_ROOT}"
+    echo "==> Downloading ${ASSET_NAME} from ${LIBMPV_GH_REPO}@${RELEASE_TAG}"
+    gh release download "${RELEASE_TAG}" \
+      --repo "${LIBMPV_GH_REPO}" \
+      --pattern "${ASSET_NAME}" \
+      --dir "${TMP}"
+    tar -xzf "${TMP}/${ASSET_NAME}" -C "${CACHE_ROOT}"
   else
     # No source available. Phase C.1 accepts this: the CMake layer
-    # falls back to stubs-only when vendor/android is missing. Phase
-    # C.2 (Kotlin/JNI port) will make this path a hard error.
+    # falls back to stubs-only when vendor/android is missing. The
+    # Kotlin JNI bridge checks MpvBridge.isLinked() and surfaces
+    # `mpv.not_implemented` so the player screen shows the
+    # "Playback Unavailable" overlay.
     cat >&2 <<EOF
-warning: libmpv-android ${MPV_ANDROID_VERSION} not available locally or via 1Password.
+warning: libmpv-android ${MPV_ANDROID_VERSION} not available locally or on GitHub.
          Falling back to stubs-only Android build. To get real playback:
 
            • Build locally:
                bash modules/native-mpv/scripts/build-libmpv-android.sh
-             then upload to 1Password:
-               op document create \\
-                 --vault "${VAULT}" --title "${DOC_TITLE}" \\
-                 modules/native-mpv/dist/libmpv-android-${MPV_ANDROID_VERSION}.tar.gz
+             then publish the release:
+               gh release create "${RELEASE_TAG}" \\
+                 --repo "${LIBMPV_GH_REPO}" \\
+                 --title "libmpv-android ${MPV_ANDROID_VERSION}" \\
+                 modules/native-mpv/dist/${ASSET_NAME}
 
            • Or point at an existing tarball:
                LIBMPV_ANDROID_TARBALL=... bash $0
+
+         If gh is installed, check auth with: gh auth status
 EOF
     # Leave CACHE_ROOT empty so vendor/android stays absent and
     # CMakeLists takes the stubs-only branch. Exit 0 so Gradle

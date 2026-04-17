@@ -13,14 +13,18 @@
 #                                     stream_cb.h)
 #     BUILD_INFO                     (upstream SHA + build date)
 #
-# The tarball is what `fetch-libmpv-android.sh` pulls from 1Password
-# (CI) or the local shared cache (dev). After this script finishes,
-# upload the tarball to 1Password:
+# The tarball is what `fetch-libmpv-android.sh` pulls via `gh release
+# download` (CI + dev) or the local shared cache. After this script
+# finishes, publish the tarball as a GitHub Release on the jellyfuse
+# repo:
 #
-#   op document create \
-#     --vault "Jellyfuse CI" \
-#     --title "libmpv-android-${VERSION}" \
+#   gh release create "libmpv-android-${VERSION}" \
+#     --title "libmpv-android ${VERSION}" \
+#     --notes "mpv-android buildscripts SHA <sha>, --no-gpl" \
 #     dist/libmpv-android-${VERSION}.tar.gz
+#
+# The release tag name is the source of truth for the version pin —
+# it MUST match `MPV_ANDROID_VERSION` in the repo.
 #
 # Requires Docker (builds inside an Ubuntu container — works on
 # macOS / Linux hosts). First run takes ~60-90 min; rebuilds are
@@ -115,8 +119,8 @@ tar -czf "${TARBALL}" -C "${STAGE_DIR}" .
 echo ""
 echo "Done: ${TARBALL}"
 echo ""
-echo "Next step — upload to 1Password:"
-echo "  op document create \\"
-echo "    --vault \"Jellyfuse CI\" \\"
-echo "    --title \"libmpv-android-${MPV_ANDROID_VERSION}\" \\"
+echo "Next step — publish as a GitHub Release:"
+echo "  gh release create \"libmpv-android-${MPV_ANDROID_VERSION}\" \\"
+echo "    --title \"libmpv-android ${MPV_ANDROID_VERSION}\" \\"
+echo "    --notes \"mpv-android buildscripts SHA ${UPSTREAM_SHA}, --no-gpl\" \\"
 echo "    \"${TARBALL}\""
