@@ -18,10 +18,14 @@ import {
   withAlpha,
 } from "@jellyfuse/theme";
 import MaskedView from "@react-native-masked-view/masked-view";
-import { useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { useRef, useState } from "react";
+import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  type SharedValue,
+} from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import { TrickplayThumbnail } from "./trickplay-thumbnail";
 
@@ -86,6 +90,12 @@ export function PlayerScrubber({
   const [isDragging, setIsDragging] = useState(false);
   const [dragSeconds, setDragSeconds] = useState(0);
   const dragProgress = useSharedValue(0);
+  // Throttle JS-side drag state updates to ~20Hz. The thumb and fill
+  // animate on the UI thread via dragProgress (shared value) so the
+  // scrubber stays silky; we only need the JS state to drive the
+  // time label, trickplay thumbnail, and chapter name — none of
+  // which benefit from 120Hz updates.
+  const lastUpdateMs = useRef(0);
 
   const progress = duration > 0 ? position / duration : 0;
   const segments = buildSegments(chapters, duration);
@@ -106,6 +116,13 @@ export function PlayerScrubber({
     setDragSeconds(p * duration);
   }
 
+  function onDragUpdateThrottled(p: number) {
+    const now = Date.now();
+    if (now - lastUpdateMs.current < 50) return;
+    lastUpdateMs.current = now;
+    setDragSeconds(p * duration);
+  }
+
   const panGesture = Gesture.Pan()
     .onStart((e) => {
       "worklet";
@@ -118,11 +135,12 @@ export function PlayerScrubber({
       "worklet";
       const p = Math.max(0, Math.min(1, e.x / trackWidth));
       dragProgress.value = p;
-      scheduleOnRN(onDragUpdate, p);
+      scheduleOnRN(onDragUpdateThrottled, p);
     })
     .onEnd(() => {
       "worklet";
       const seekTo = dragProgress.value * duration;
+      scheduleOnRN(onDragUpdate, dragProgress.value);
       scheduleOnRN(onSeek, seekTo);
       scheduleOnRN(setDraggingWithNotify, false);
     })
@@ -146,8 +164,6 @@ export function PlayerScrubber({
     left: (isDragging ? dragProgress.value : progress) * trackWidth - THUMB_SIZE / 2,
   }));
 
-  const dragX = duration > 0 ? (dragSeconds / duration) * trackWidth : 0;
-
   return (
     <View style={styles.root}>
       {/* Time display */}
@@ -162,124 +178,170 @@ export function PlayerScrubber({
           style={styles.trackContainer}
           onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}
         >
-          {/* Masked segmented track — center-aligned within the touch
-              container. The MaskedView grows on drag (CSS transition)
-              but the container stays fixed → no layout shift. */}
-          <View
-            style={[
-              styles.trackWrapper,
-              {
-                height: ACTIVE_SEGMENT_HEIGHT,
-                transitionProperty: "height",
-                transitionDuration: 150,
-              },
-            ]}
-          >
-            <MaskedView
-              style={StyleSheet.absoluteFill}
-              maskElement={
-                <View style={styles.maskRow}>
-                  {segments.map((seg, i) => {
-                    const isActive = isDragging && i === activeIndex;
-                    const height = isDragging
-                      ? isActive
-                        ? ACTIVE_SEGMENT_HEIGHT
-                        : TRACK_HEIGHT_DRAG
-                      : TRACK_HEIGHT_IDLE;
-                    const leftPx =
-                      (seg.startPct / 100) * trackWidth + (i === 0 ? 0 : SEGMENT_GAP / 2);
-                    const rightTrimPx = i === segments.length - 1 ? 0 : SEGMENT_GAP / 2;
-                    const widthPx =
-                      (seg.widthPct / 100) * trackWidth -
-                      (i === 0 ? 0 : SEGMENT_GAP / 2) -
-                      rightTrimPx;
-                    const isFirst = i === 0;
-                    const isLast = i === segments.length - 1;
-                    const endRadius = height / 2;
-                    return (
-                      <Animated.View
-                        key={i}
-                        style={[
-                          styles.maskSegment,
-                          {
-                            left: leftPx,
-                            width: Math.max(0, widthPx),
-                            height,
-                            top: (ACTIVE_SEGMENT_HEIGHT - height) / 2,
-                            // Round only the outer ends of the whole
-                            // scrubber — the first segment's left and
-                            // the last segment's right. Internal
-                            // segment boundaries stay square.
-                            borderTopLeftRadius: isFirst ? endRadius : 0,
-                            borderBottomLeftRadius: isFirst ? endRadius : 0,
-                            borderTopRightRadius: isLast ? endRadius : 0,
-                            borderBottomRightRadius: isLast ? endRadius : 0,
-                            transitionProperty: ["height", "top"],
-                            transitionDuration: HEIGHT_TRANSITION_MS,
-                          },
-                        ]}
-                      />
-                    );
-                  })}
-                </View>
-              }
-            >
-              {/* Background bar — dark, full width */}
-              <View style={styles.bgBar} />
-
-              {/* Active segment highlight — lighter, only at the
-                  active chapter's bounds. Rendered behind the fill so
-                  the accent still paints over the filled portion. */}
-              {isDragging && activeChapter && duration > 0 ? (
-                <View
-                  style={[
-                    styles.activeHighlight,
-                    {
-                      left: (activeChapter.startPct / 100) * trackWidth,
-                      width: (activeChapter.widthPct / 100) * trackWidth,
-                    },
-                  ]}
-                />
-              ) : null}
-
-              {/* Fill bar — continuous, masked by segments */}
-              <Animated.View style={[styles.fill, fillStyle]} />
-            </MaskedView>
-          </View>
+          <ScrubberMask
+            segments={segments}
+            activeIndex={activeIndex}
+            isDragging={isDragging}
+            trackWidth={trackWidth}
+            activeChapter={activeChapter}
+            duration={duration}
+            fillStyle={fillStyle}
+          />
 
           {/* Thumb — visible on drag */}
           {isDragging ? <Animated.View style={[styles.thumb, thumbStyle]} /> : null}
 
-          {/* Trickplay preview + chapter name — follow drag position.
-              Wrapper is CHAPTER_LABEL_WIDTH wide, centered on dragX,
-              clamped to stay within the track. Children align center. */}
           {isDragging ? (
-            <View
-              style={[
-                styles.previewAnchor,
-                {
-                  left: Math.max(
-                    0,
-                    Math.min(trackWidth - CHAPTER_LABEL_WIDTH, dragX - CHAPTER_LABEL_WIDTH / 2),
-                  ),
-                },
-              ]}
-            >
-              {trickplay ? (
-                <TrickplayThumbnail trickplay={trickplay} positionSeconds={dragSeconds} />
-              ) : null}
-              {activeChapter && activeChapter.name ? (
-                <View style={styles.chapterLabel}>
-                  <Text style={styles.chapterName} numberOfLines={1}>
-                    {activeChapter.name}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
+            <DragPreview
+              progress={dragProgress}
+              duration={duration}
+              trackWidth={trackWidth}
+              trickplay={trickplay}
+              activeChapter={activeChapter}
+            />
           ) : null}
         </View>
       </GestureDetector>
     </View>
+  );
+}
+
+// Isolated so the expensive segment map only re-renders when
+// activeIndex crosses a chapter boundary, not on every drag tick.
+// React Compiler caches this by props.
+interface ScrubberMaskProps {
+  segments: Segment[];
+  activeIndex: number;
+  isDragging: boolean;
+  trackWidth: number;
+  activeChapter: Segment | undefined;
+  duration: number;
+  fillStyle: StyleProp<ViewStyle>;
+}
+
+function ScrubberMask({
+  segments,
+  activeIndex,
+  isDragging,
+  trackWidth,
+  activeChapter,
+  duration,
+  fillStyle,
+}: ScrubberMaskProps) {
+  return (
+    <View
+      style={[
+        styles.trackWrapper,
+        {
+          height: ACTIVE_SEGMENT_HEIGHT,
+          transitionProperty: "height",
+          transitionDuration: HEIGHT_TRANSITION_MS,
+        },
+      ]}
+    >
+      <MaskedView
+        style={StyleSheet.absoluteFill}
+        maskElement={
+          <View style={styles.maskRow}>
+            {segments.map((seg, i) => {
+              const isActive = isDragging && i === activeIndex;
+              const height = isDragging
+                ? isActive
+                  ? ACTIVE_SEGMENT_HEIGHT
+                  : TRACK_HEIGHT_DRAG
+                : TRACK_HEIGHT_IDLE;
+              const leftPx = (seg.startPct / 100) * trackWidth + (i === 0 ? 0 : SEGMENT_GAP / 2);
+              const rightTrimPx = i === segments.length - 1 ? 0 : SEGMENT_GAP / 2;
+              const widthPx =
+                (seg.widthPct / 100) * trackWidth - (i === 0 ? 0 : SEGMENT_GAP / 2) - rightTrimPx;
+              const isFirst = i === 0;
+              const isLast = i === segments.length - 1;
+              const endRadius = height / 2;
+              return (
+                <Animated.View
+                  key={i}
+                  style={[
+                    styles.maskSegment,
+                    {
+                      left: leftPx,
+                      width: Math.max(0, widthPx),
+                      height,
+                      top: (ACTIVE_SEGMENT_HEIGHT - height) / 2,
+                      borderTopLeftRadius: isFirst ? endRadius : 0,
+                      borderBottomLeftRadius: isFirst ? endRadius : 0,
+                      borderTopRightRadius: isLast ? endRadius : 0,
+                      borderBottomRightRadius: isLast ? endRadius : 0,
+                      transitionProperty: ["height", "top"],
+                      transitionDuration: HEIGHT_TRANSITION_MS,
+                    },
+                  ]}
+                />
+              );
+            })}
+          </View>
+        }
+      >
+        <View style={styles.bgBar} />
+
+        {isDragging && activeChapter && duration > 0 ? (
+          <View
+            style={[
+              styles.activeHighlight,
+              {
+                left: (activeChapter.startPct / 100) * trackWidth,
+                width: (activeChapter.widthPct / 100) * trackWidth,
+              },
+            ]}
+          />
+        ) : null}
+
+        <Animated.View style={[styles.fill, fillStyle]} />
+      </MaskedView>
+    </View>
+  );
+}
+
+// Per-tick body during drag — anchor left and trickplay crop both
+// ride the shared progress value on the UI thread, so this component
+// only re-renders when activeChapter / trickplay / trackWidth change.
+interface DragPreviewProps {
+  progress: SharedValue<number>;
+  duration: number;
+  trackWidth: number;
+  trickplay: TrickplayData | undefined;
+  activeChapter: Segment | undefined;
+}
+
+function DragPreview({
+  progress,
+  duration,
+  trackWidth,
+  trickplay,
+  activeChapter,
+}: DragPreviewProps) {
+  const anchorStyle = useAnimatedStyle(() => {
+    const dragX = progress.value * trackWidth;
+    return {
+      left: Math.max(
+        0,
+        Math.min(trackWidth - CHAPTER_LABEL_WIDTH, dragX - CHAPTER_LABEL_WIDTH / 2),
+      ),
+    };
+  });
+
+  return (
+    <Animated.View style={[styles.previewAnchor, anchorStyle]}>
+      {trickplay ? (
+        <TrickplayThumbnail trickplay={trickplay} progress={progress} duration={duration} />
+      ) : null}
+      {activeChapter && activeChapter.name ? (
+        <View style={styles.chapterLabel}>
+          <Text style={styles.chapterName} numberOfLines={1}>
+            {activeChapter.name}
+          </Text>
+        </View>
+      ) : null}
+    </Animated.View>
   );
 }
 
