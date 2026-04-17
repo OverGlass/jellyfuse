@@ -1,0 +1,6 @@
+# vendor/android is a symlink populated by `fetch-libmpv-android.sh`
+# pointing into ~/.cache/jellyfuse/libmpv-android/<version>. Skip it
+# so the per-machine absolute path never gets committed — iOS has the
+# same pattern but its symlinks were checked in pre-Phase-A and are
+# left intact for historical compatibility.
+android

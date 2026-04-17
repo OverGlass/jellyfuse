@@ -45,6 +45,31 @@ apply from: '../nitrogen/generated/android/NativeMpv+autolinking.gradle'
 
 apply plugin: "com.facebook.react"
 
+// Fetch libmpv-android before the CMake configure step. Mirrors the
+// iOS flow where `fetch-mpvkit.sh` runs as part of `pod install`.
+// Skipped if the vendor dir already has the expected `.complete` marker
+// so normal rebuilds don't re-hit 1Password.
+def mpvVendorDir = file("${projectDir}/../vendor/android")
+def mpvCompleteMarker = file("${mpvVendorDir}/.complete")
+def fetchLibmpv = tasks.register("fetchLibmpvAndroid", Exec) {
+  group = "libmpv"
+  description = "Populate vendor/android with libmpv.so + headers from 1Password"
+  workingDir = projectDir
+  commandLine "bash", "${projectDir}/../scripts/fetch-libmpv-android.sh"
+  outputs.file(mpvCompleteMarker)
+  onlyIf { !mpvCompleteMarker.exists() }
+}
+afterEvaluate {
+  tasks.matching { it.name.startsWith("configureCMake") }.configureEach {
+    dependsOn fetchLibmpv
+  }
+  // jniLibs.srcDirs reads from vendor/android too, so merge tasks also
+  // need the fetch to run first. Gradle 9 validates this explicitly.
+  tasks.matching { it.name.startsWith("merge") && it.name.endsWith("JniLibFolders") }.configureEach {
+    dependsOn fetchLibmpv
+  }
+}
+
 def getExtOrIntegerDefault(name) {
   return rootProject.ext.has(name) ? rootProject.ext.get(name) : (project.properties["NativeMpv_" + name]).toInteger()
 }
@@ -82,6 +107,15 @@ android {
     }
   }
 
+  // Pack the vendored libmpv.so into the AAR. Per-ABI layout at
+  // modules/native-mpv/vendor/android/<abi>/libmpv.so is exactly what
+  // the Android build system expects from a jniLibs source set.
+  sourceSets {
+    main {
+      jniLibs.srcDirs = ["${projectDir}/../vendor/android"]
+    }
+  }
+
   packagingOptions {
     excludes = [
       "META-INF",
@@ -101,6 +135,13 @@ android {
       "**/libreact_nativemodule_core.so",
       "**/libjscexecutor.so",
     ]
+    // libmpv.so is unstripped in the vendored tarball (mpv-android's
+    // buildall.sh keeps symbols for debuggability). Don't strip at APK
+    // time, and dedup when a secondary module also happens to see it.
+    jniLibs {
+      keepDebugSymbols += ["*/libmpv.so"]
+      pickFirsts += ["**/libmpv.so"]
+    }
   }
 
   buildFeatures {
