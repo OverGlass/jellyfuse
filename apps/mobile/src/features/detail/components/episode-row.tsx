@@ -17,12 +17,15 @@ interface Props {
   item: MediaItem;
   onPress: () => void;
   rightSlot?: ReactNode;
+  /** When true, the row is dimmed and press is a no-op. Used for
+   *  offline-unavailable episodes (no local copy). */
+  disabled?: boolean;
 }
 
 const THUMB_WIDTH = 140;
 const THUMB_HEIGHT = 80; // 16:9-ish
 
-export function EpisodeRow({ item, onPress, rightSlot }: Props) {
+export function EpisodeRow({ item, onPress, rightSlot, disabled = false }: Props) {
   const indexLabel = item.episodeNumber !== undefined ? `${item.episodeNumber}.` : "";
   const runtime = item.runtimeMinutes !== undefined ? `${item.runtimeMinutes}m` : undefined;
   const progress = item.progress ?? 0;
@@ -31,8 +34,14 @@ export function EpisodeRow({ item, onPress, rightSlot }: Props) {
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`Episode ${item.episodeNumber ?? ""} ${item.title}`}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
       onPress={onPress}
-      style={({ pressed }) => [styles.root, pressed && styles.rootPressed]}
+      style={({ pressed }) => [
+        styles.root,
+        pressed && styles.rootPressed,
+        disabled && styles.rootDisabled,
+      ]}
     >
       <View style={styles.thumbWrap}>
         {item.posterUrl ? (
@@ -77,6 +86,9 @@ const styles = StyleSheet.create({
   },
   rootPressed: {
     opacity: opacity.pressed,
+  },
+  rootDisabled: {
+    opacity: opacity.disabled,
   },
   thumbWrap: {
     borderRadius: radius.md,

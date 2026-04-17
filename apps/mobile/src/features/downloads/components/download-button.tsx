@@ -27,6 +27,13 @@ interface Props {
   record: DownloadRecord | undefined;
   onPress: () => void;
   size?: number;
+  /**
+   * Disable the button (offline + not-yet-downloaded). Dims the icon
+   * and blocks presses. Done/queued/downloading records remain
+   * interactive even when `disabled` is true so the user can still
+   * pause, cancel, or delete what's already on device.
+   */
+  disabled?: boolean;
 }
 
 function iconForState(state: DownloadState | undefined): IconName {
@@ -56,8 +63,12 @@ function colorForState(state: DownloadState | undefined): string {
   }
 }
 
-export function DownloadButton({ record, onPress, size = BUTTON_SIZE }: Props) {
+export function DownloadButton({ record, onPress, size = BUTTON_SIZE, disabled = false }: Props) {
   const state = record?.state;
+  // Only disable when nothing exists on device yet. Keep interactive for
+  // records that represent stored / in-progress data (user may still
+  // want to cancel, pause, retry, or delete them while offline).
+  const effectiveDisabled = disabled && state === undefined;
   const progress = record && record.bytesTotal > 0 ? record.bytesDownloaded / record.bytesTotal : 0;
 
   const animatedProgress = useRef(new Animated.Value(progress)).current;
@@ -89,11 +100,14 @@ export function DownloadButton({ record, onPress, size = BUTTON_SIZE }: Props) {
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`Download: ${state ?? "not downloaded"}`}
+      accessibilityState={{ disabled: effectiveDisabled }}
+      disabled={effectiveDisabled}
       onPress={onPress}
       style={({ pressed }) => [
         styles.button,
         { width: size, height: size },
         pressed && styles.pressed,
+        effectiveDisabled && styles.disabled,
       ]}
     >
       {showRing ? (
@@ -126,6 +140,9 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: opacity.pressed,
+  },
+  disabled: {
+    opacity: opacity.disabled,
   },
   ringContainer: {
     position: "absolute",

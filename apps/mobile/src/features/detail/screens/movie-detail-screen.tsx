@@ -9,6 +9,7 @@ import { DetailActionRow } from "@/features/detail/components/detail-action-row"
 import { DetailHero } from "@/features/detail/components/detail-hero";
 import { DetailMetaRow } from "@/features/detail/components/detail-meta-row";
 import { DownloadButton } from "@/features/downloads/components/download-button";
+import { useConnectionStatus } from "@/services/connection/monitor";
 import { useDownloadForItem } from "@/services/downloads/use-local-downloads";
 import { useItemDownload } from "@/services/downloads/use-item-download";
 import { useMovieDetail } from "@/services/query";
@@ -27,6 +28,15 @@ export function MovieDetailScreen({ itemId }: Props) {
   const query = useMovieDetail(itemId);
   const downloadRecord = useDownloadForItem(itemId);
   const handleItemDownload = useItemDownload();
+  const connection = useConnectionStatus();
+  // Local-first policy mirrors `PlayerScreen` (see
+  // `player-screen.tsx` — originals always local, transcodes only
+  // when offline). When offline without a local copy, Play is
+  // disabled. New downloads can't be enqueued offline either.
+  const hasLocal =
+    downloadRecord?.state === "done" && (downloadRecord.wasOriginal || connection === "offline");
+  const canPlay = connection !== "offline" || hasLocal;
+  const canDownload = connection !== "offline";
 
   const gutters = useScreenGutters();
   const insets = useSafeAreaInsets();
@@ -82,9 +92,16 @@ export function MovieDetailScreen({ itemId }: Props) {
           <DetailMetaRow item={item} />
           <DetailActionRow
             hasResume={hasResume}
+            canPlay={canPlay}
             onPlay={() => router.push(`/player/${itemId}`)}
             onDownload={handleDownloadPress}
-            downloadSlot={<DownloadButton record={downloadRecord} onPress={handleDownloadPress} />}
+            downloadSlot={
+              <DownloadButton
+                record={downloadRecord}
+                onPress={handleDownloadPress}
+                disabled={!canDownload}
+              />
+            }
           />
           {item.overview ? <Text style={styles.overview}>{item.overview}</Text> : null}
         </View>

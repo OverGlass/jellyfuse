@@ -21,6 +21,7 @@ import { DetailHero } from "@/features/detail/components/detail-hero";
 import { EpisodeRow } from "@/features/detail/components/episode-row";
 import { SeasonTabs } from "@/features/detail/components/season-tabs";
 import { DownloadButton } from "@/features/downloads/components/download-button";
+import { useConnectionStatus } from "@/services/connection/monitor";
 import { useItemDownload } from "@/services/downloads/use-item-download";
 import { useLocalDownloads } from "@/services/downloads/use-local-downloads";
 import { useEpisodes, useSeasons, useSeriesDetail } from "@/services/query";
@@ -59,6 +60,8 @@ export function SeriesDetailScreen({ itemId }: Props) {
   const episodesQuery = useEpisodes(itemId, resolvedActiveSeasonId);
   const downloads = useLocalDownloads();
   const handleItemDownload = useItemDownload();
+  const connection = useConnectionStatus();
+  const isOffline = connection === "offline";
   const gutters = useScreenGutters();
   const insets = useSafeAreaInsets();
   const scrollY = useSharedValue(0);
@@ -177,6 +180,10 @@ export function SeriesDetailScreen({ itemId }: Props) {
   const resumeTarget = pickResumeTarget(episodes);
   const playTarget = resumeTarget ?? episodes[0];
   const playTargetHref = playTarget ? (`/player/${keyFor(playTarget)}` as const) : undefined;
+  const playTargetPlayable = playTarget
+    ? !isOffline || hasPlayableLocal(downloads, keyFor(playTarget))
+    : false;
+  const canPlaySeries = !isOffline || playTargetPlayable;
 
   return (
     <SafeAreaView style={styles.safe} edges={[]}>
@@ -197,6 +204,7 @@ export function SeriesDetailScreen({ itemId }: Props) {
           <DetailMetaRow item={series} />
           <DetailActionRow
             hasResume={hasResume}
+            canPlay={canPlaySeries}
             onPlay={() => {
               if (playTargetHref) router.push(playTargetHref);
             }}
@@ -243,15 +251,21 @@ export function SeriesDetailScreen({ itemId }: Props) {
             {episodes.map((episode) => {
               const episodeId = keyFor(episode);
               const record = pickRecordForItem(downloads, episodeId);
+              // While online: any episode is playable (stream from server).
+              // Offline: only if a completed local copy exists (transcodes
+              // count while offline — the player's local-first policy).
+              const episodePlayable = !isOffline || record?.state === "done";
               return (
                 <EpisodeRow
                   key={episodeId}
                   item={episode}
+                  disabled={!episodePlayable}
                   onPress={() => router.push(`/player/${episodeId}`)}
                   rightSlot={
                     <DownloadButton
                       record={record}
                       size={36}
+                      disabled={isOffline}
                       onPress={() => {
                         void handleItemDownload(episode, record);
                       }}
@@ -355,6 +369,15 @@ function pickRecordForItem(records: DownloadRecord[], itemId: string): DownloadR
     if (!best || RECORD_PRIORITY[r.state] < RECORD_PRIORITY[best.state]) best = r;
   }
   return best;
+}
+
+/**
+ * True when the item has a completed local download. While offline,
+ * transcodes are also eligible (see `PlayerScreen` local-first policy).
+ */
+function hasPlayableLocal(records: DownloadRecord[], itemId: string): boolean {
+  const record = pickRecordForItem(records, itemId);
+  return record?.state === "done";
 }
 
 const styles = StyleSheet.create({
