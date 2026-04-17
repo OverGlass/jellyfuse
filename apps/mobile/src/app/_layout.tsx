@@ -2,6 +2,7 @@ import { DarkTheme, ThemeProvider } from "@react-navigation/native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider } from "@/services/auth/state";
 import { DownloaderProvider } from "@/services/downloads/context";
 import { useLocalDownloadsSync } from "@/services/downloads/use-local-downloads";
@@ -46,13 +47,15 @@ function AppShell() {
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <QueryProvider>
-        <AuthProvider>
-          <DownloaderProvider>
-            <AppShell />
-          </DownloaderProvider>
-        </AuthProvider>
-      </QueryProvider>
+      <SafeAreaProvider>
+        <QueryProvider>
+          <AuthProvider>
+            <DownloaderProvider>
+              <AppShell />
+            </DownloaderProvider>
+          </AuthProvider>
+        </QueryProvider>
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }
