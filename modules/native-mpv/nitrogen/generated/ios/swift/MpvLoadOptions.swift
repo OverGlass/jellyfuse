@@ -18,7 +18,7 @@ public extension MpvLoadOptions {
   /**
    * Create a new instance of `MpvLoadOptions`.
    */
-  init(startPositionSeconds: Double?, audioTrackIndex: Double?, subtitleTrackIndex: Double?, playbackRate: Double?, volume: Double?, userAgent: String?) {
+  init(startPositionSeconds: Double?, audioTrackIndex: Double?, subtitleTrackIndex: Double?, playbackRate: Double?, volume: Double?, userAgent: String?, externalSubtitles: [MpvExternalSubtitle]?) {
     self.init({ () -> bridge.std__optional_double_ in
       if let __unwrappedValue = startPositionSeconds {
         return bridge.create_std__optional_double_(__unwrappedValue)
@@ -52,6 +52,18 @@ public extension MpvLoadOptions {
     }(), { () -> bridge.std__optional_std__string_ in
       if let __unwrappedValue = userAgent {
         return bridge.create_std__optional_std__string_(std.string(__unwrappedValue))
+      } else {
+        return .init()
+      }
+    }(), { () -> bridge.std__optional_std__vector_MpvExternalSubtitle__ in
+      if let __unwrappedValue = externalSubtitles {
+        return bridge.create_std__optional_std__vector_MpvExternalSubtitle__({ () -> bridge.std__vector_MpvExternalSubtitle_ in
+          var __vector = bridge.create_std__vector_MpvExternalSubtitle_(__unwrappedValue.count)
+          for __item in __unwrappedValue {
+            __vector.push_back(__item)
+          }
+          return __vector
+        }())
       } else {
         return .init()
       }
@@ -124,6 +136,18 @@ public extension MpvLoadOptions {
       if bridge.has_value_std__optional_std__string_(self.__userAgent) {
         let __unwrapped = bridge.get_std__optional_std__string_(self.__userAgent)
         return String(__unwrapped)
+      } else {
+        return nil
+      }
+    }()
+  }
+  
+  @inline(__always)
+  var externalSubtitles: [MpvExternalSubtitle]? {
+    return { () -> [MpvExternalSubtitle]? in
+      if bridge.has_value_std__optional_std__vector_MpvExternalSubtitle__(self.__externalSubtitles) {
+        let __unwrapped = bridge.get_std__optional_std__vector_MpvExternalSubtitle__(self.__externalSubtitles)
+        return __unwrapped.map({ __item in __item })
       } else {
         return nil
       }

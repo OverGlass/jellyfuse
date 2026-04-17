@@ -1,4 +1,4 @@
-import { MpvVideoView, callback } from "@jellyfuse/native-mpv";
+import { MpvVideoView, callback, type MpvExternalSubtitle } from "@jellyfuse/native-mpv";
 import { ticksToSeconds } from "@jellyfuse/models";
 import { colors } from "@jellyfuse/theme";
 import { useKeepAwake } from "expo-keep-awake";
@@ -6,7 +6,7 @@ import { router } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { resolvePlayback } from "@/services/playback/resolver";
-import { resolveLocalStream } from "@/services/downloads/local-stream";
+import { localTrickplayData, resolveLocalStream } from "@/services/downloads/local-stream";
 import { useDownloadForItem } from "@/services/downloads/use-local-downloads";
 import { useConnectionStatus } from "@/services/connection/monitor";
 import { useMovieDetail } from "@/services/query";
@@ -64,8 +64,24 @@ export function PlayerScreen({ jellyfinId }: Props) {
     ? ticksToSeconds(detail.data.userData.playbackPositionTicks)
     : undefined;
 
+  // External subtitle sidecars for offline transcoded playback. For
+  // Originals and online streams this is empty: the server-side tracks
+  // already live in the container (Original) or are handled via HLS
+  // manifest (transcoded stream). Order must match resolved.subtitleTracks
+  // so the UI's position+1 → mpv sid mapping holds.
+  const externalSubtitles: MpvExternalSubtitle[] | undefined =
+    hasLocal && resolved
+      ? resolved.subtitleTracks
+          .filter((t): t is typeof t & { deliveryUrl: string } => t.deliveryUrl !== undefined)
+          .map((t) => ({
+            uri: t.deliveryUrl,
+            title: t.displayTitle,
+            language: t.language,
+          }))
+      : undefined;
+
   // mpv lifecycle — creates instance, subscribes to events, loads stream
-  const player = useMpvPlayer(resolved, startPosition);
+  const player = useMpvPlayer(resolved, startPosition, externalSubtitles);
 
   // Playback reporting — start/progress/stopped to Jellyfin
   useReportingSession({
@@ -131,7 +147,11 @@ export function PlayerScreen({ jellyfinId }: Props) {
         position={player.position}
         duration={player.duration}
         chapters={resolved?.chapters}
-        trickplay={trickplayQuery.data ?? undefined}
+        trickplay={
+          hasLocal && localRecord
+            ? localTrickplayData(localRecord)
+            : (trickplayQuery.data ?? undefined)
+        }
         onPlayPause={player.isPlaying ? player.pause : player.play}
         onSeek={player.seek}
         onSkipForward={player.skipForward}

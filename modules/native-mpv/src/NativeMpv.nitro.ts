@@ -39,6 +39,21 @@ export interface MpvListener {
  * object for the simplest case. Populated from the playback resolver
  * in Phase 3c.
  */
+/**
+ * One external subtitle file to load alongside the main stream. Used
+ * for offline playback of downloaded sidecar subs (`.vtt` / `.srt` /
+ * `.ass`) — the URI is a local `file://` path. Each entry becomes a
+ * separate track in mpv's track-list with the given `title` / `language`.
+ */
+export interface MpvExternalSubtitle {
+  /** Absolute URI — `file://...` for local, `https://...` for remote. */
+  uri: string;
+  /** Display title shown in the track picker. Defaults to filename. */
+  title?: string;
+  /** ISO 639 language code. */
+  language?: string;
+}
+
 export interface MpvLoadOptions {
   /** Seek to this offset (seconds) on start. Undefined = 0. */
   startPositionSeconds?: number;
@@ -56,6 +71,20 @@ export interface MpvLoadOptions {
    * affinity.
    */
   userAgent?: string;
+  /**
+   * External subtitle files to attach after `loadfile`. Each runs
+   * through `sub-add <uri> auto <title> <lang>`. The new tracks appear
+   * in the track list via `addTracksListener` once mpv finishes
+   * parsing them.
+   *
+   * Order matters: mpv assigns sids sequentially (embedded tracks
+   * first, then externals in sub-add order). Callers map from a
+   * Jellyfin/UI index to an mpv sid by position — so pass these in
+   * the same order as they appear in the UI's subtitle list, and do
+   * NOT interleave with embedded tracks. Mirrors
+   * `crates/jf-ui-kit/src/views/player/mod.rs::PlayerView::new`.
+   */
+  externalSubtitles?: MpvExternalSubtitle[];
 }
 
 export type MpvPlaybackState = "idle" | "loading" | "playing" | "paused" | "ended" | "error";

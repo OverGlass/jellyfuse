@@ -8,7 +8,12 @@
 // - useEffect to sync external system (mpv) with React state
 // - useEffectEvent for imperative callbacks that read latest values
 
-import { createNativeMpv, type NativeMpv, type MpvListener } from "@jellyfuse/native-mpv";
+import {
+  createNativeMpv,
+  type MpvExternalSubtitle,
+  type MpvListener,
+  type NativeMpv,
+} from "@jellyfuse/native-mpv";
 import type { ResolvedStream } from "@jellyfuse/models";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 
@@ -41,6 +46,7 @@ export interface UseMpvPlayerReturn extends MpvPlayerState {
 export function useMpvPlayer(
   resolved: ResolvedStream | null,
   startPositionSeconds?: number,
+  externalSubtitles?: MpvExternalSubtitle[],
 ): UseMpvPlayerReturn {
   const mpvRef = useRef<NativeMpv | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -104,6 +110,9 @@ export function useMpvPlayer(
   // cause an infinite load loop.
 
   const streamUrl = resolved?.streamUrl;
+  // Stable-by-content signature so a new array reference per render
+  // doesn't retrigger the load effect. Subtitles are identified by URI.
+  const externalSubsKey = externalSubtitles?.map((s) => s.uri).join("|") ?? "";
 
   useEffect(() => {
     if (!streamUrl || !mpvRef.current) return;
@@ -113,13 +122,14 @@ export function useMpvPlayer(
     try {
       mpvRef.current.load(streamUrl, {
         startPositionSeconds,
+        externalSubtitles,
       });
     } catch (e) {
       console.error("[player] load failed:", e);
       onError(e instanceof Error ? e.message : String(e));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [streamUrl, startPositionSeconds]); // onError is stable via useEffectEvent
+  }, [streamUrl, startPositionSeconds, externalSubsKey]); // onError is stable via useEffectEvent
 
   // ── Imperative controls ───────────────────────────────────────────
 

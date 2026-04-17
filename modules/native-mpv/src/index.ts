@@ -3,6 +3,7 @@ import type { NativeMpv as NativeMpvSpec } from "./NativeMpv.nitro";
 
 export type {
   MpvAudioTrack,
+  MpvExternalSubtitle,
   MpvListener,
   MpvLoadOptions,
   MpvPlaybackState,

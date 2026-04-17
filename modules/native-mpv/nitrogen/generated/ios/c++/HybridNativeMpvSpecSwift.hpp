@@ -14,6 +14,8 @@ namespace NativeMpv { class HybridNativeMpvSpec_cxx; }
 
 // Forward declaration of `MpvLoadOptions` to properly resolve imports.
 namespace margelo::nitro::nativempv { struct MpvLoadOptions; }
+// Forward declaration of `MpvExternalSubtitle` to properly resolve imports.
+namespace margelo::nitro::nativempv { struct MpvExternalSubtitle; }
 // Forward declaration of `MpvListener` to properly resolve imports.
 namespace margelo::nitro::nativempv { struct MpvListener; }
 // Forward declaration of `MpvPlaybackState` to properly resolve imports.
@@ -26,11 +28,12 @@ namespace margelo::nitro::nativempv { struct MpvSubtitleTrack; }
 #include <string>
 #include "MpvLoadOptions.hpp"
 #include <optional>
+#include "MpvExternalSubtitle.hpp"
+#include <vector>
 #include "MpvListener.hpp"
 #include <functional>
 #include "MpvPlaybackState.hpp"
 #include "MpvAudioTrack.hpp"
-#include <vector>
 #include "MpvSubtitleTrack.hpp"
 
 #include "NativeMpv-Swift-Cxx-Umbrella.hpp"
