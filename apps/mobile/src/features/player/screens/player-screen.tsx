@@ -101,13 +101,15 @@ export function PlayerScreen({ jellyfinId }: Props) {
   const isBuffering = (!hasLocal && playbackInfoQuery.isPending) || player.isBuffering;
 
   if ((!hasLocal && playbackInfoQuery.isError) || player.error) {
-    // `mpv.not_implemented` is the sentinel the Android stub throws
-    // until Phase C lands libmpv. Show a friendlier copy for that
-    // specific code — anything else is a real playback failure.
+    // `mpv.not_implemented` is the sentinel the Android native
+    // module throws when the build is stubs-only (no vendored
+    // libmpv.so — see modules/native-mpv/scripts/fetch-libmpv-android.sh).
+    // Production builds always link libmpv; this message is a
+    // dev-build safety net.
     const isUnsupported = player.error === "mpv.not_implemented";
     const title = isUnsupported ? "Playback Unavailable" : "Playback Error";
     const body = isUnsupported
-      ? "Video playback isn't supported on Android yet. It's on the way."
+      ? "This build was compiled without libmpv. Rebuild after running fetch-libmpv-android.sh."
       : (player.error ??
         (playbackInfoQuery.error instanceof Error
           ? playbackInfoQuery.error.message
