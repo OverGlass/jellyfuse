@@ -12,15 +12,24 @@ import { queryKeys } from "@jellyfuse/query-keys";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { apiFetchAuthenticated } from "@/services/api/client";
 import { useAuth } from "@/services/auth/state";
+import { useLocalSettings } from "@/services/settings/use-local-settings";
 
 /**
  * Fetches PlaybackInfo for an item via React Query. NOT persisted
  * (excluded in should-dehydrate.ts) since playback info is volatile.
+ *
+ * Honours the per-user `maxStreamingBitrateMbps` cap from local
+ * settings — the Settings screen invalidates this query on change so
+ * new caps flow through immediately without a refetch-loop.
  */
 export function usePlaybackInfo(jellyfinId: string | undefined): UseQueryResult<PlaybackInfo> {
   const { serverUrl, activeUser } = useAuth();
   const userId = activeUser?.userId;
   const token = activeUser?.token;
+  const { maxStreamingBitrateMbps } = useLocalSettings();
+  const maxBitrate = maxStreamingBitrateMbps
+    ? Math.round(maxStreamingBitrateMbps * 1_000_000)
+    : undefined;
 
   return useQuery({
     queryKey: queryKeys.playbackInfo(userId ?? "", jellyfinId ?? ""),
@@ -29,7 +38,13 @@ export function usePlaybackInfo(jellyfinId: string | undefined): UseQueryResult<
         throw new Error("usePlaybackInfo called without full auth context");
       }
       return fetchPlaybackInfo(
-        { baseUrl: serverUrl, userId, token, itemId: jellyfinId },
+        {
+          baseUrl: serverUrl,
+          userId,
+          token,
+          itemId: jellyfinId,
+          ...(maxBitrate !== undefined ? { maxBitrate } : {}),
+        },
         apiFetchAuthenticated,
         signal,
       );

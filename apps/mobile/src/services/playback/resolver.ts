@@ -19,7 +19,19 @@ import { ticksToSeconds } from "@jellyfuse/models";
 // ──────────────────────────────────────────────────────────────────────────────
 
 export interface ResolverSettings {
+  /**
+   * 3-letter ISO 639 language code for preferred audio track. Empty
+   * string falls back to the stream's `isDefault` flag, then the first
+   * stream. Matches Jellyfin's `UserConfiguration.AudioLanguagePreference`
+   * shape (nullable string — we normalise to "" for the empty case).
+   */
   preferredAudioLanguage: string;
+  /**
+   * 3-letter ISO 639 language code for preferred subtitle track. Only
+   * used when `subtitleMode === "Smart"` (foreign-audio detection).
+   * Matches Jellyfin's `UserConfiguration.SubtitleLanguagePreference`.
+   */
+  preferredSubtitleLanguage: string;
   subtitleMode: SubtitleMode;
 }
 
@@ -43,9 +55,15 @@ export function resolvePlayback(input: ResolvePlaybackInput): ResolvedStream {
     playbackInfo.audioStreams,
     settings.preferredAudioLanguage,
   );
+  const pickedAudio =
+    audioStreamIndex !== undefined
+      ? playbackInfo.audioStreams.find((s) => s.index === audioStreamIndex)
+      : undefined;
   const { index: subtitleStreamIndex, deliveryUrl: subtitleDeliveryUrl } = pickSubtitleTrack(
     playbackInfo.subtitles,
     settings.subtitleMode,
+    pickedAudio?.language,
+    settings.preferredSubtitleLanguage,
   );
 
   return {
@@ -107,14 +125,28 @@ interface SubtitlePick {
 }
 
 /**
- * Pick a subtitle track based on SubtitleMode:
+ * Pick a subtitle track based on Jellyfin's `SubtitlePlaybackMode`:
  *
- * - **Off**: no subtitles.
+ * - **None**: no subtitles.
  * - **OnlyForced**: pick first forced track (prefer default among forced).
- * - **Always**: pick first track (prefer default).
+ * - **Default** / **Always**: pick default track, else first track.
+ * - **Smart**: pick a subtitle only when the picked audio language does
+ *   not match `preferredSubtitleLanguage` (foreign-audio detection).
+ *   Prefers a subtitle track matching `preferredSubtitleLanguage`,
+ *   falling back to default/first like `Default`.
+ *
+ * `pickedAudioLanguage` is the language of the audio track already
+ * selected by `pickAudioStream`; `preferredSubtitleLanguage` is the
+ * user's server-stored preference. Both are 3-letter ISO 639 codes
+ * (or `""` / `undefined` when unknown).
  */
-export function pickSubtitleTrack(tracks: SubtitleTrack[], mode: SubtitleMode): SubtitlePick {
-  if (mode === "Off" || tracks.length === 0) {
+export function pickSubtitleTrack(
+  tracks: SubtitleTrack[],
+  mode: SubtitleMode,
+  pickedAudioLanguage: string | undefined,
+  preferredSubtitleLanguage: string,
+): SubtitlePick {
+  if (mode === "None" || tracks.length === 0) {
     return { index: undefined, deliveryUrl: undefined };
   }
 
@@ -127,7 +159,25 @@ export function pickSubtitleTrack(tracks: SubtitleTrack[], mode: SubtitleMode): 
     return { index: pick.index, deliveryUrl: pick.deliveryUrl };
   }
 
-  // Always
+  // Smart — only pick when the audio language differs from the user's
+  // preferred subtitle language. Falls through to "Default" logic once
+  // we decide a subtitle is warranted.
+  if (mode === "Smart") {
+    const audioLang = (pickedAudioLanguage ?? "").toLowerCase();
+    const subLang = preferredSubtitleLanguage.toLowerCase();
+    if (!subLang || audioLang === subLang) {
+      return { index: undefined, deliveryUrl: undefined };
+    }
+    const langMatches = tracks.filter(
+      (t) => t.language !== undefined && t.language.toLowerCase() === subLang,
+    );
+    if (langMatches.length > 0) {
+      const pick = langMatches.find((t) => t.isDefault) ?? langMatches[0];
+      return { index: pick.index, deliveryUrl: pick.deliveryUrl };
+    }
+  }
+
+  // Default / Always
   const pick = tracks.find((t) => t.isDefault) ?? tracks[0];
   return { index: pick.index, deliveryUrl: pick.deliveryUrl };
 }

@@ -47,6 +47,14 @@ export const STALE_TIMES = {
 
   /** Search — 30 s (Rust: 30 s). */
   search: 30 * 1000,
+
+  /**
+   * Per-user configuration persisted on the Jellyfin server. Rarely
+   * changes (user must actively toggle in Settings); refetching more
+   * often than once an hour is wasteful. Invalidated explicitly on
+   * every successful `updateUserConfiguration` call.
+   */
+  userConfiguration: 60 * 60 * 1000,
 } as const;
 
 export type StaleTimeKey = keyof typeof STALE_TIMES;
@@ -105,6 +113,11 @@ export const queryKeys = {
   localDownloads: (userId: string) => ["local-downloads", userId] as const,
   localDownload: (userId: string, jellyfinId: string, mediaSourceId: string) =>
     ["local-downloads", userId, jellyfinId, mediaSourceId] as const,
+
+  // User configuration — server-persisted preferences (audio language,
+  // subtitle mode, autoplay, etc.). Scoped by userId like every other
+  // per-user query so `queryClient.clear()` on switch is safe.
+  userConfiguration: (userId: string) => ["user-configuration", userId] as const,
 
   // Transient slot for the `MediaItem` pending in the quality-picker
   // formSheet screen. Written by `useItemDownload` before navigating;

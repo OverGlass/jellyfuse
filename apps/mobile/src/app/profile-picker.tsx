@@ -53,6 +53,21 @@ export default function ProfilePickerScreen() {
     router.back();
   }
 
+  async function performRemove(user: AuthenticatedUser) {
+    await removeUser(user.userId);
+    // After the mutation resolves the auth cache is already reseated
+    // with the post-remove shape. If this was the last account — or
+    // just removed the currently active one with no remaining users —
+    // the picker has nothing to pick, so route back through the root
+    // decision tree. `replace("/")` dismisses the modal and lands on
+    // `/(auth)/sign-in` when the list is empty, or the picker again
+    // when another user became active.
+    const stillHasUsers = users.some((u) => u.userId !== user.userId);
+    if (!stillHasUsers) {
+      router.replace("/");
+    }
+  }
+
   function handleRemove(user: AuthenticatedUser) {
     Alert.alert(
       `Remove ${user.displayName}?`,
@@ -63,7 +78,7 @@ export default function ProfilePickerScreen() {
           text: "Remove",
           style: "destructive",
           onPress: () => {
-            void removeUser(user.userId);
+            void performRemove(user);
           },
         },
       ],

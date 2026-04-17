@@ -28,6 +28,7 @@ import { buildDownloadOptions } from "@/services/downloads/enqueue";
 import { downloadSidecars } from "@/services/downloads/sidecar-download";
 import { useDownloaderActions } from "@/services/downloads/use-local-downloads";
 import { resolvePlayback } from "@/services/playback/resolver";
+import { useResolverSettings } from "@/services/settings/use-resolver-settings";
 import {
   type DownloadQuality,
   QualityPicker,
@@ -39,6 +40,7 @@ export default function DownloadQualityRoute() {
   const { serverUrl, activeUser } = useAuth();
   const actions = useDownloaderActions();
   const downloader = useDownloader();
+  const resolverSettings = useResolverSettings();
 
   const pendingItem = queryClient.getQueryData<MediaItem>(queryKeys.pendingDownload(itemId ?? ""));
   const durationSeconds = (pendingItem?.runtimeMinutes ?? 0) * 60;
@@ -73,7 +75,7 @@ export default function DownloadQualityRoute() {
         );
         const resolved = resolvePlayback({
           playbackInfo,
-          settings: { preferredAudioLanguage: "eng", subtitleMode: "OnlyForced" },
+          settings: resolverSettings,
         });
         const authHeader = buildAuthHeader(authCtx);
         const options = buildDownloadOptions(
@@ -101,7 +103,7 @@ export default function DownloadQualityRoute() {
         Alert.alert("Download failed", e instanceof Error ? e.message : "Unknown error");
       }
     },
-    [itemId, serverUrl, activeUser, queryClient, actions, downloader],
+    [itemId, serverUrl, activeUser, queryClient, actions, downloader, resolverSettings],
   );
 
   return (

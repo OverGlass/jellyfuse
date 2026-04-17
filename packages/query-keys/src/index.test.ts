@@ -40,6 +40,9 @@ describe("@jellyfuse/query-keys", () => {
     it("downloadProgress = 10 s", () => {
       expect(STALE_TIMES.downloadProgress).toBe(10 * 1000);
     });
+    it("userConfiguration = 1 hour", () => {
+      expect(STALE_TIMES.userConfiguration).toBe(60 * 60 * 1000);
+    });
   });
 
   describe("keys are scoped by userId", () => {
@@ -76,6 +79,13 @@ describe("@jellyfuse/query-keys", () => {
       expect(queryKeys.movieDetail("user-a", "jf-1")).toContain("user-a");
       expect(queryKeys.seriesDetail("user-a", "jf-1")).toContain("user-a");
       expect(queryKeys.tmdbDetail("user-a", 603, "movie")).toContain("user-a");
+    });
+
+    it("userConfiguration is scoped by userId", () => {
+      expect(queryKeys.userConfiguration("user-a")).toEqual(["user-configuration", "user-a"]);
+      expect(queryKeys.userConfiguration("user-a")).not.toEqual(
+        queryKeys.userConfiguration("user-b"),
+      );
     });
   });
 });

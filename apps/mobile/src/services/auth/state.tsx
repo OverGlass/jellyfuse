@@ -1,5 +1,5 @@
 import { authenticateByName, jellyseerrLogin, type AuthenticatedUser } from "@jellyfuse/api";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, useContext, type ReactNode } from "react";
 import NitroCookies from "react-native-nitro-cookies";
 import { apiFetch } from "@/services/api/client";
@@ -100,6 +100,20 @@ async function loadPersistedAuth(): Promise<PersistedAuth> {
 }
 
 const JELLYSEERR_LAST_ERROR_KEY = ["auth", "jellyseerrLastError"] as const;
+
+/**
+ * Drop every cached query except the `auth` namespace. Used on user
+ * switch / remove / sign-out so per-user data (shelves, detail,
+ * downloads progress) doesn't leak across profiles. `queryClient.clear()`
+ * would also evict PERSISTED_AUTH_KEY and trigger an immediate
+ * loadPersistedAuth re-fetch before setQueryData could seed the new
+ * shape — using a predicate keeps auth intact and avoids the race.
+ */
+function clearQueryCacheExceptAuth(queryClient: QueryClient): void {
+  queryClient.removeQueries({
+    predicate: (query) => query.queryKey[0] !== "auth",
+  });
+}
 
 const AuthContext = createContext<AuthState | null>(null);
 
@@ -289,23 +303,46 @@ function useAuthInternal(): AuthState {
       return { ...current, activeUserId: userId };
     },
     onSuccess: (data) => {
+      // Every cached query key is scoped by userId, but shelves,
+      // detail data, downloads progress etc. were fetched as the
+      // previous user. Purge everything except the auth namespace so
+      // the router stays authenticated through the switch — using a
+      // predicate rather than `clear()` avoids re-triggering the
+      // PERSISTED_AUTH_KEY queryFn between removal and reseeding.
+      clearQueryCacheExceptAuth(queryClient);
       queryClient.setQueryData(PERSISTED_AUTH_KEY, data);
+      // Drop the previous user's auth-context entry explicitly — the
+      // predicate keeps `['auth', ...]`, which includes context keys.
+      queryClient.removeQueries({ queryKey: ["auth", "context"] });
     },
   });
 
   const removeUserMutation = useMutation({
-    mutationFn: async (userId: string): Promise<PersistedAuth> => {
+    mutationFn: async (
+      userId: string,
+    ): Promise<{ persisted: PersistedAuth; activeChanged: boolean }> => {
       const current =
         queryClient.getQueryData<PersistedAuth>(PERSISTED_AUTH_KEY) ?? EMPTY_PERSISTED_AUTH;
+      const previousActiveId = current.activeUserId;
       const { users, nextActiveUserId } = await removeUserById(secureUserStorage, userId);
+      const activeChanged = nextActiveUserId !== previousActiveId;
+      if (activeChanged) {
+        clearAllScrollStates();
+      }
       return {
-        ...current,
-        users,
-        activeUserId: nextActiveUserId,
+        persisted: { ...current, users, activeUserId: nextActiveUserId },
+        activeChanged,
       };
     },
-    onSuccess: (data) => {
-      queryClient.setQueryData(PERSISTED_AUTH_KEY, data);
+    onSuccess: ({ persisted, activeChanged }) => {
+      // Removing the active user (incl. the last one) flips the
+      // active pointer — purge per-user query data so the next user
+      // (or the sign-in screen, if the list is now empty) starts clean.
+      if (activeChanged) {
+        clearQueryCacheExceptAuth(queryClient);
+        queryClient.removeQueries({ queryKey: ["auth", "context"] });
+      }
+      queryClient.setQueryData(PERSISTED_AUTH_KEY, persisted);
     },
   });
 
@@ -334,10 +371,6 @@ function useAuthInternal(): AuthState {
       await secureUserStorage.saveUsers([]);
       await secureUserStorage.saveActiveUserId(undefined);
 
-      // Evict every auth-context entry so the next signed-in user
-      // gets a fresh fetchQuery build rather than a stale cached one.
-      queryClient.removeQueries({ queryKey: ["auth", "context"] });
-      queryClient.setQueryData(JELLYSEERR_LAST_ERROR_KEY, null);
       // Drop every saved scroll offset so a fresh sign-in doesn't
       // inherit the previous account's nav positions.
       clearAllScrollStates();
@@ -349,7 +382,14 @@ function useAuthInternal(): AuthState {
       };
     },
     onSuccess: (data) => {
+      // Wipe everything — shelves, detail, downloads — but keep the
+      // auth namespace so the router can read the new shape. Then
+      // evict stale auth-context entries and reset the jellyseerr
+      // error slot for the next sign-in.
+      clearQueryCacheExceptAuth(queryClient);
+      queryClient.removeQueries({ queryKey: ["auth", "context"] });
       queryClient.setQueryData(PERSISTED_AUTH_KEY, data);
+      queryClient.setQueryData(JELLYSEERR_LAST_ERROR_KEY, null);
     },
   });
 
