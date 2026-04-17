@@ -200,9 +200,6 @@ export function SeriesDetailScreen({ itemId }: Props) {
             onPlay={() => {
               if (playTargetHref) router.push(playTargetHref);
             }}
-            onDownload={() => {
-              console.warn(`download series ${itemId}`);
-            }}
           />
           {series.overview ? <Text style={styles.overview}>{series.overview}</Text> : null}
         </View>

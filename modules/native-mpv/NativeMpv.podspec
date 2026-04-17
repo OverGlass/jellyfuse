@@ -74,7 +74,7 @@ Pod::Spec.new do |s|
     # LIBRARY_SEARCH_PATHS + OTHER_LDFLAGS for MPVKit are set via
     # s.xcconfig below (not pod_target_xcconfig) so they propagate
     # to the consuming app target where the actual linking happens.
-    "GCC_PREPROCESSOR_DEFINITIONS" => "$(inherited) FOLLY_NO_CONFIG FOLLY_CFG_NO_COROUTINES",
+    "GCC_PREPROCESSOR_DEFINITIONS" => "$(inherited) FOLLY_NO_CONFIG FOLLY_CFG_NO_COROUTINES GLES_SILENCE_DEPRECATION=1",
     "OTHER_CPLUSPLUSFLAGS"         => "$(inherited) -DFOLLY_NO_CONFIG -DFOLLY_MOBILE=1 -DFOLLY_USE_LIBCPP=1",
   }
 

@@ -18,7 +18,7 @@ public extension NativeDownloadRecord {
   /**
    * Create a new instance of `NativeDownloadRecord`.
    */
-  init(id: String, itemId: String, mediaSourceId: String, playSessionId: String, title: String, seriesTitle: String?, seasonNumber: Double?, episodeNumber: Double?, imageUrl: String?, streamUrl: String, destRelativePath: String, bytesDownloaded: Double, bytesTotal: Double, state: NativeDownloadState, metadata: NativeDownloadMetadata, addedAtMs: Double) {
+  init(id: String, itemId: String, mediaSourceId: String, playSessionId: String, title: String, seriesTitle: String?, seasonNumber: Double?, episodeNumber: Double?, imageUrl: String?, streamUrl: String, destRelativePath: String, bytesDownloaded: Double, bytesTotal: Double, state: NativeDownloadState, metadata: NativeDownloadMetadata, wasOriginal: Bool, trickplayTileCount: Double, subtitleSidecars: [NativeSubtitleSidecar], addedAtMs: Double) {
     self.init(std.string(id), std.string(itemId), std.string(mediaSourceId), std.string(playSessionId), std.string(title), { () -> bridge.std__optional_std__string_ in
       if let __unwrappedValue = seriesTitle {
         return bridge.create_std__optional_std__string_(std.string(__unwrappedValue))
@@ -43,7 +43,13 @@ public extension NativeDownloadRecord {
       } else {
         return .init()
       }
-    }(), std.string(streamUrl), std.string(destRelativePath), bytesDownloaded, bytesTotal, state, metadata, addedAtMs)
+    }(), std.string(streamUrl), std.string(destRelativePath), bytesDownloaded, bytesTotal, state, metadata, wasOriginal, trickplayTileCount, { () -> bridge.std__vector_NativeSubtitleSidecar_ in
+      var __vector = bridge.create_std__vector_NativeSubtitleSidecar_(subtitleSidecars.count)
+      for __item in subtitleSidecars {
+        __vector.push_back(__item)
+      }
+      return __vector
+    }(), addedAtMs)
   }
 
   @inline(__always)
@@ -147,6 +153,21 @@ public extension NativeDownloadRecord {
   @inline(__always)
   var metadata: NativeDownloadMetadata {
     return self.__metadata
+  }
+  
+  @inline(__always)
+  var wasOriginal: Bool {
+    return self.__wasOriginal
+  }
+  
+  @inline(__always)
+  var trickplayTileCount: Double {
+    return self.__trickplayTileCount
+  }
+  
+  @inline(__always)
+  var subtitleSidecars: [NativeSubtitleSidecar] {
+    return self.__subtitleSidecars.map({ __item in __item })
   }
   
   @inline(__always)

@@ -10,7 +10,9 @@ export type {
   NativeDownloadRecord,
   NativeDownloadState,
   NativeIntroSkipperSegments,
+  NativeSidecarAttachment,
   NativeSkipSegment,
+  NativeSubtitleSidecar,
   NativeTrickplayInfo,
 } from "./Downloader.nitro";
 

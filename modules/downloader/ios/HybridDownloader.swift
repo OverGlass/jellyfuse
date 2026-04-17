@@ -55,6 +55,16 @@ private struct StoredMetadata: Codable {
   let introSkipperSegments: StoredIntroSkipperSegments?
 }
 
+private struct StoredSubtitleSidecar: Codable {
+  let index: Double
+  let language: String?
+  let displayTitle: String
+  let isForced: Bool
+  let isDefault: Bool
+  let format: String
+  let relativePath: String
+}
+
 private struct StoredManifest: Codable {
   let id: String
   let itemId: String
@@ -75,6 +85,83 @@ private struct StoredManifest: Codable {
   var resumeDataBase64: String?
   var downloadUrl: String
   var headers: [String: String]
+  // Phase-5 fidelity fields — optional so legacy manifests (written before
+  // these existed) keep decoding. Defaults populated by the decoder init.
+  var wasOriginal: Bool
+  var trickplayTileCount: Double
+  var subtitleSidecars: [StoredSubtitleSidecar]
+
+  enum CodingKeys: String, CodingKey {
+    case id, itemId, mediaSourceId, playSessionId, title, seriesTitle
+    case seasonNumber, episodeNumber, imageUrl, streamUrl, destRelativePath
+    case bytesDownloaded, bytesTotal, state, metadata, addedAtMs
+    case resumeDataBase64, downloadUrl, headers
+    case wasOriginal, trickplayTileCount, subtitleSidecars
+  }
+
+  init(
+    id: String, itemId: String, mediaSourceId: String, playSessionId: String,
+    title: String, seriesTitle: String?, seasonNumber: Double?, episodeNumber: Double?,
+    imageUrl: String?, streamUrl: String, destRelativePath: String,
+    bytesDownloaded: Double, bytesTotal: Double, state: String,
+    metadata: StoredMetadata, addedAtMs: Double,
+    resumeDataBase64: String?, downloadUrl: String, headers: [String: String],
+    wasOriginal: Bool, trickplayTileCount: Double,
+    subtitleSidecars: [StoredSubtitleSidecar]
+  ) {
+    self.id = id
+    self.itemId = itemId
+    self.mediaSourceId = mediaSourceId
+    self.playSessionId = playSessionId
+    self.title = title
+    self.seriesTitle = seriesTitle
+    self.seasonNumber = seasonNumber
+    self.episodeNumber = episodeNumber
+    self.imageUrl = imageUrl
+    self.streamUrl = streamUrl
+    self.destRelativePath = destRelativePath
+    self.bytesDownloaded = bytesDownloaded
+    self.bytesTotal = bytesTotal
+    self.state = state
+    self.metadata = metadata
+    self.addedAtMs = addedAtMs
+    self.resumeDataBase64 = resumeDataBase64
+    self.downloadUrl = downloadUrl
+    self.headers = headers
+    self.wasOriginal = wasOriginal
+    self.trickplayTileCount = trickplayTileCount
+    self.subtitleSidecars = subtitleSidecars
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    id = try c.decode(String.self, forKey: .id)
+    itemId = try c.decode(String.self, forKey: .itemId)
+    mediaSourceId = try c.decode(String.self, forKey: .mediaSourceId)
+    playSessionId = try c.decode(String.self, forKey: .playSessionId)
+    title = try c.decode(String.self, forKey: .title)
+    seriesTitle = try c.decodeIfPresent(String.self, forKey: .seriesTitle)
+    seasonNumber = try c.decodeIfPresent(Double.self, forKey: .seasonNumber)
+    episodeNumber = try c.decodeIfPresent(Double.self, forKey: .episodeNumber)
+    imageUrl = try c.decodeIfPresent(String.self, forKey: .imageUrl)
+    streamUrl = try c.decode(String.self, forKey: .streamUrl)
+    destRelativePath = try c.decode(String.self, forKey: .destRelativePath)
+    bytesDownloaded = try c.decode(Double.self, forKey: .bytesDownloaded)
+    bytesTotal = try c.decode(Double.self, forKey: .bytesTotal)
+    state = try c.decode(String.self, forKey: .state)
+    metadata = try c.decode(StoredMetadata.self, forKey: .metadata)
+    addedAtMs = try c.decode(Double.self, forKey: .addedAtMs)
+    resumeDataBase64 = try c.decodeIfPresent(String.self, forKey: .resumeDataBase64)
+    downloadUrl = try c.decode(String.self, forKey: .downloadUrl)
+    headers = try c.decode([String: String].self, forKey: .headers)
+    // Legacy-manifest defaults: pre-fidelity downloads assumed Original
+    // because that was the only path; new downloads set this explicitly.
+    wasOriginal = try c.decodeIfPresent(Bool.self, forKey: .wasOriginal) ?? true
+    trickplayTileCount =
+      try c.decodeIfPresent(Double.self, forKey: .trickplayTileCount) ?? 0
+    subtitleSidecars =
+      try c.decodeIfPresent([StoredSubtitleSidecar].self, forKey: .subtitleSidecars) ?? []
+  }
 }
 
 // MARK: - URLSession delegate
@@ -313,6 +400,17 @@ public final class HybridDownloader: HybridDownloaderSpec {
     case "done": state = .done
     default: state = .failed
     }
+    let sidecars = m.subtitleSidecars.map {
+      NativeSubtitleSidecar(
+        index: $0.index,
+        language: $0.language,
+        displayTitle: $0.displayTitle,
+        isForced: $0.isForced,
+        isDefault: $0.isDefault,
+        format: $0.format,
+        relativePath: $0.relativePath
+      )
+    }
     return NativeDownloadRecord(
       id: m.id,
       itemId: m.itemId,
@@ -329,6 +427,9 @@ public final class HybridDownloader: HybridDownloaderSpec {
       bytesTotal: m.bytesTotal,
       state: state,
       metadata: metadata,
+      wasOriginal: m.wasOriginal,
+      trickplayTileCount: m.trickplayTileCount,
+      subtitleSidecars: sidecars,
       addedAtMs: m.addedAtMs
     )
   }
@@ -370,22 +471,36 @@ public final class HybridDownloader: HybridDownloaderSpec {
       streamUrl: options.streamUrl,
       destRelativePath: options.destRelativePath,
       bytesDownloaded: 0,
-      bytesTotal: 0,
+      bytesTotal: options.estimatedBytes,
       state: "queued",
       metadata: metadata,
       addedAtMs: Double(Date().timeIntervalSince1970 * 1000),
       resumeDataBase64: nil,
       downloadUrl: options.url,
-      headers: options.headers
+      headers: options.headers,
+      wasOriginal: options.wasOriginal,
+      trickplayTileCount: 0,
+      subtitleSidecars: []
     )
   }
 
   // MARK: - URLSession event handlers (called from delegate)
 
   func handleProgress(id: String, downloaded: Double, total: Double) {
-    updateManifestProgress(id, downloaded: downloaded, total: total)
+    // When `total` is 0 the server didn't send Content-Length (transcoded
+    // streams). Fall back to the client-side estimate stored on the
+    // manifest so the progress bar still animates instead of sitting at 0.
+    let effectiveTotal: Double
+    if total > 0 {
+      effectiveTotal = total
+    } else if let m = readManifest(id: id), m.bytesTotal > 0 {
+      effectiveTotal = m.bytesTotal
+    } else {
+      effectiveTotal = 0
+    }
+    updateManifestProgress(id, downloaded: downloaded, total: effectiveTotal)
     let subs = queue.sync { progressSubs }
-    for s in subs { s.callback(id, downloaded, total) }
+    for s in subs { s.callback(id, downloaded, effectiveTotal) }
   }
 
   func handleCompleted(id: String, tempUrl: URL) {
@@ -414,14 +529,14 @@ public final class HybridDownloader: HybridDownloaderSpec {
     }
     manifest.state = "done"
     writeManifest(manifest)
-    queue.sync { activeTasks.removeValue(forKey: id) }
+    _ = queue.sync { activeTasks.removeValue(forKey: id) }
     fireStateChange(id: id, state: .done)
   }
 
   func handleFailed(id: String, error: String) {
     NSLog("[Downloader] download failed %@: %@", id, error)
     updateManifestState(id, "failed")
-    queue.sync { activeTasks.removeValue(forKey: id) }
+    _ = queue.sync { activeTasks.removeValue(forKey: id) }
     fireStateChange(id: id, state: .failed)
   }
 
@@ -474,7 +589,7 @@ public final class HybridDownloader: HybridDownloaderSpec {
         manifest.resumeDataBase64 = data.base64EncodedString()
       }
       self.writeManifest(manifest)
-      self.queue.sync { self.activeTasks.removeValue(forKey: id) }
+      _ = self.queue.sync { self.activeTasks.removeValue(forKey: id) }
       self.fireStateChange(id: id, state: .paused)
     })
   }
@@ -559,6 +674,23 @@ public final class HybridDownloader: HybridDownloaderSpec {
 
   public func list() throws -> [NativeDownloadRecord] {
     return allManifests().map { toNativeRecord($0) }
+  }
+
+  public func attachSidecars(id: String, attachment: NativeSidecarAttachment) throws {
+    guard var manifest = readManifest(id: id) else { return }
+    manifest.trickplayTileCount = attachment.trickplayTileCount
+    manifest.subtitleSidecars = attachment.subtitleSidecars.map {
+      StoredSubtitleSidecar(
+        index: $0.index,
+        language: $0.language,
+        displayTitle: $0.displayTitle,
+        isForced: $0.isForced,
+        isDefault: $0.isDefault,
+        format: $0.format,
+        relativePath: $0.relativePath
+      )
+    }
+    writeManifest(manifest)
   }
 
   // MARK: - Listener registration

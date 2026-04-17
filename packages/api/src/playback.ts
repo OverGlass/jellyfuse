@@ -420,6 +420,33 @@ export function buildDownloadUrl(args: { baseUrl: string; itemId: string; token:
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
+// Transcoded download URL — `/Videos/{id}/stream.mp4?Static=false&...`
+//
+// For quality-capped downloads: the server transcodes on the fly to H.264/AAC
+// inside an MP4 container and streams it as a single file with a real
+// Content-Length. `Static=false` enables transcoding; the MaxStreamingBitrate
+// cap drives the video bitrate ceiling. Audio track selection is delegated
+// to the server's profile for now; explicit AudioStreamIndex is a follow-up.
+// ──────────────────────────────────────────────────────────────────────────────
+export function buildTranscodedDownloadUrl(args: {
+  baseUrl: string;
+  itemId: string;
+  mediaSourceId: string;
+  token: string;
+  maxBitrate: number;
+}): string {
+  return buildUrl(args.baseUrl, `/Videos/${args.itemId}/stream.mp4`, {
+    api_key: args.token,
+    Static: "false",
+    Container: "mp4",
+    VideoCodec: "h264",
+    AudioCodec: "aac",
+    MaxStreamingBitrate: String(args.maxBitrate),
+    MediaSourceId: args.mediaSourceId,
+  });
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ──────────────────────────────────────────────────────────────────────────────
 

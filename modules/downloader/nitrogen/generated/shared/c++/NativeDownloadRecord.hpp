@@ -32,11 +32,15 @@
 namespace margelo::nitro::downloader { enum class NativeDownloadState; }
 // Forward declaration of `NativeDownloadMetadata` to properly resolve imports.
 namespace margelo::nitro::downloader { struct NativeDownloadMetadata; }
+// Forward declaration of `NativeSubtitleSidecar` to properly resolve imports.
+namespace margelo::nitro::downloader { struct NativeSubtitleSidecar; }
 
 #include <string>
 #include <optional>
 #include "NativeDownloadState.hpp"
 #include "NativeDownloadMetadata.hpp"
+#include "NativeSubtitleSidecar.hpp"
+#include <vector>
 
 namespace margelo::nitro::downloader {
 
@@ -60,11 +64,14 @@ namespace margelo::nitro::downloader {
     double bytesTotal     SWIFT_PRIVATE;
     NativeDownloadState state     SWIFT_PRIVATE;
     NativeDownloadMetadata metadata     SWIFT_PRIVATE;
+    bool wasOriginal     SWIFT_PRIVATE;
+    double trickplayTileCount     SWIFT_PRIVATE;
+    std::vector<NativeSubtitleSidecar> subtitleSidecars     SWIFT_PRIVATE;
     double addedAtMs     SWIFT_PRIVATE;
 
   public:
     NativeDownloadRecord() = default;
-    explicit NativeDownloadRecord(std::string id, std::string itemId, std::string mediaSourceId, std::string playSessionId, std::string title, std::optional<std::string> seriesTitle, std::optional<double> seasonNumber, std::optional<double> episodeNumber, std::optional<std::string> imageUrl, std::string streamUrl, std::string destRelativePath, double bytesDownloaded, double bytesTotal, NativeDownloadState state, NativeDownloadMetadata metadata, double addedAtMs): id(id), itemId(itemId), mediaSourceId(mediaSourceId), playSessionId(playSessionId), title(title), seriesTitle(seriesTitle), seasonNumber(seasonNumber), episodeNumber(episodeNumber), imageUrl(imageUrl), streamUrl(streamUrl), destRelativePath(destRelativePath), bytesDownloaded(bytesDownloaded), bytesTotal(bytesTotal), state(state), metadata(metadata), addedAtMs(addedAtMs) {}
+    explicit NativeDownloadRecord(std::string id, std::string itemId, std::string mediaSourceId, std::string playSessionId, std::string title, std::optional<std::string> seriesTitle, std::optional<double> seasonNumber, std::optional<double> episodeNumber, std::optional<std::string> imageUrl, std::string streamUrl, std::string destRelativePath, double bytesDownloaded, double bytesTotal, NativeDownloadState state, NativeDownloadMetadata metadata, bool wasOriginal, double trickplayTileCount, std::vector<NativeSubtitleSidecar> subtitleSidecars, double addedAtMs): id(id), itemId(itemId), mediaSourceId(mediaSourceId), playSessionId(playSessionId), title(title), seriesTitle(seriesTitle), seasonNumber(seasonNumber), episodeNumber(episodeNumber), imageUrl(imageUrl), streamUrl(streamUrl), destRelativePath(destRelativePath), bytesDownloaded(bytesDownloaded), bytesTotal(bytesTotal), state(state), metadata(metadata), wasOriginal(wasOriginal), trickplayTileCount(trickplayTileCount), subtitleSidecars(subtitleSidecars), addedAtMs(addedAtMs) {}
 
   public:
     friend bool operator==(const NativeDownloadRecord& lhs, const NativeDownloadRecord& rhs) = default;
@@ -95,6 +102,9 @@ namespace margelo::nitro {
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "bytesTotal"))),
         JSIConverter<margelo::nitro::downloader::NativeDownloadState>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "state"))),
         JSIConverter<margelo::nitro::downloader::NativeDownloadMetadata>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "metadata"))),
+        JSIConverter<bool>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "wasOriginal"))),
+        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "trickplayTileCount"))),
+        JSIConverter<std::vector<margelo::nitro::downloader::NativeSubtitleSidecar>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "subtitleSidecars"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "addedAtMs")))
       );
     }
@@ -115,6 +125,9 @@ namespace margelo::nitro {
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "bytesTotal"), JSIConverter<double>::toJSI(runtime, arg.bytesTotal));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "state"), JSIConverter<margelo::nitro::downloader::NativeDownloadState>::toJSI(runtime, arg.state));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "metadata"), JSIConverter<margelo::nitro::downloader::NativeDownloadMetadata>::toJSI(runtime, arg.metadata));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "wasOriginal"), JSIConverter<bool>::toJSI(runtime, arg.wasOriginal));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "trickplayTileCount"), JSIConverter<double>::toJSI(runtime, arg.trickplayTileCount));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "subtitleSidecars"), JSIConverter<std::vector<margelo::nitro::downloader::NativeSubtitleSidecar>>::toJSI(runtime, arg.subtitleSidecars));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "addedAtMs"), JSIConverter<double>::toJSI(runtime, arg.addedAtMs));
       return obj;
     }
@@ -141,6 +154,9 @@ namespace margelo::nitro {
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "bytesTotal")))) return false;
       if (!JSIConverter<margelo::nitro::downloader::NativeDownloadState>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "state")))) return false;
       if (!JSIConverter<margelo::nitro::downloader::NativeDownloadMetadata>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "metadata")))) return false;
+      if (!JSIConverter<bool>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "wasOriginal")))) return false;
+      if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "trickplayTileCount")))) return false;
+      if (!JSIConverter<std::vector<margelo::nitro::downloader::NativeSubtitleSidecar>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "subtitleSidecars")))) return false;
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "addedAtMs")))) return false;
       return true;
     }

@@ -17,6 +17,8 @@
 namespace margelo::nitro::downloader { struct DownloadOptions; }
 // Forward declaration of `NativeDownloadRecord` to properly resolve imports.
 namespace margelo::nitro::downloader { struct NativeDownloadRecord; }
+// Forward declaration of `NativeSidecarAttachment` to properly resolve imports.
+namespace margelo::nitro::downloader { struct NativeSidecarAttachment; }
 // Forward declaration of `DownloaderListener` to properly resolve imports.
 namespace margelo::nitro::downloader { struct DownloaderListener; }
 // Forward declaration of `NativeDownloadState` to properly resolve imports.
@@ -26,6 +28,7 @@ namespace margelo::nitro::downloader { enum class NativeDownloadState; }
 #include "DownloadOptions.hpp"
 #include "NativeDownloadRecord.hpp"
 #include <vector>
+#include "NativeSidecarAttachment.hpp"
 #include "DownloaderListener.hpp"
 #include <functional>
 #include "NativeDownloadState.hpp"
@@ -69,6 +72,7 @@ namespace margelo::nitro::downloader {
       virtual void rebaseAllPaths(const std::string& newDocumentDirectory) = 0;
       virtual void clearAll() = 0;
       virtual std::vector<NativeDownloadRecord> list() = 0;
+      virtual void attachSidecars(const std::string& id, const NativeSidecarAttachment& attachment) = 0;
       virtual DownloaderListener addProgressListener(const std::function<void(const std::string& /* id */, double /* bytesDownloaded */, double /* bytesTotal */)>& onProgress) = 0;
       virtual DownloaderListener addStateChangeListener(const std::function<void(const std::string& /* id */, NativeDownloadState /* state */)>& onStateChange) = 0;
 

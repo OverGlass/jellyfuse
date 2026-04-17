@@ -24,6 +24,8 @@ namespace margelo::nitro::downloader { enum class NativeDownloadState; }
 namespace margelo::nitro::downloader { struct NativeIntroSkipperSegments; }
 // Forward declaration of `NativeSkipSegment` to properly resolve imports.
 namespace margelo::nitro::downloader { struct NativeSkipSegment; }
+// Forward declaration of `NativeSubtitleSidecar` to properly resolve imports.
+namespace margelo::nitro::downloader { struct NativeSubtitleSidecar; }
 // Forward declaration of `NativeTrickplayInfo` to properly resolve imports.
 namespace margelo::nitro::downloader { struct NativeTrickplayInfo; }
 
@@ -40,6 +42,7 @@ namespace Downloader { class HybridDownloaderSpec_cxx; }
 #include "NativeDownloadState.hpp"
 #include "NativeIntroSkipperSegments.hpp"
 #include "NativeSkipSegment.hpp"
+#include "NativeSubtitleSidecar.hpp"
 #include "NativeTrickplayInfo.hpp"
 #include <NitroModules/Result.hpp>
 #include <exception>
@@ -165,6 +168,17 @@ namespace margelo::nitro::downloader::bridge::swift {
   }
   inline NativeIntroSkipperSegments get_std__optional_NativeIntroSkipperSegments_(const std::optional<NativeIntroSkipperSegments>& optional) noexcept {
     return optional.value();
+  }
+  
+  // pragma MARK: std::vector<NativeSubtitleSidecar>
+  /**
+   * Specialized version of `std::vector<NativeSubtitleSidecar>`.
+   */
+  using std__vector_NativeSubtitleSidecar_ = std::vector<NativeSubtitleSidecar>;
+  inline std::vector<NativeSubtitleSidecar> create_std__vector_NativeSubtitleSidecar_(size_t size) noexcept {
+    std::vector<NativeSubtitleSidecar> vector;
+    vector.reserve(size);
+    return vector;
   }
   
   // pragma MARK: std::vector<NativeDownloadRecord>

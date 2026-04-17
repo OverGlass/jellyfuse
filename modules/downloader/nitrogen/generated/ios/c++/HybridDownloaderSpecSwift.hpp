@@ -28,6 +28,10 @@ namespace margelo::nitro::downloader { struct NativeSkipSegment; }
 namespace margelo::nitro::downloader { struct NativeDownloadRecord; }
 // Forward declaration of `NativeDownloadState` to properly resolve imports.
 namespace margelo::nitro::downloader { enum class NativeDownloadState; }
+// Forward declaration of `NativeSubtitleSidecar` to properly resolve imports.
+namespace margelo::nitro::downloader { struct NativeSubtitleSidecar; }
+// Forward declaration of `NativeSidecarAttachment` to properly resolve imports.
+namespace margelo::nitro::downloader { struct NativeSidecarAttachment; }
 // Forward declaration of `DownloaderListener` to properly resolve imports.
 namespace margelo::nitro::downloader { struct DownloaderListener; }
 
@@ -43,6 +47,8 @@ namespace margelo::nitro::downloader { struct DownloaderListener; }
 #include "NativeSkipSegment.hpp"
 #include "NativeDownloadRecord.hpp"
 #include "NativeDownloadState.hpp"
+#include "NativeSubtitleSidecar.hpp"
+#include "NativeSidecarAttachment.hpp"
 #include "DownloaderListener.hpp"
 #include <functional>
 
@@ -147,6 +153,12 @@ namespace margelo::nitro::downloader {
       }
       auto __value = std::move(__result.value());
       return __value;
+    }
+    inline void attachSidecars(const std::string& id, const NativeSidecarAttachment& attachment) override {
+      auto __result = _swiftPart.attachSidecars(id, std::forward<decltype(attachment)>(attachment));
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
     }
     inline DownloaderListener addProgressListener(const std::function<void(const std::string& /* id */, double /* bytesDownloaded */, double /* bytesTotal */)>& onProgress) override {
       auto __result = _swiftPart.addProgressListener(onProgress);

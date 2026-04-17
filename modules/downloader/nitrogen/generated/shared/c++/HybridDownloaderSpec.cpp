@@ -22,6 +22,7 @@ namespace margelo::nitro::downloader {
       prototype.registerHybridMethod("rebaseAllPaths", &HybridDownloaderSpec::rebaseAllPaths);
       prototype.registerHybridMethod("clearAll", &HybridDownloaderSpec::clearAll);
       prototype.registerHybridMethod("list", &HybridDownloaderSpec::list);
+      prototype.registerHybridMethod("attachSidecars", &HybridDownloaderSpec::attachSidecars);
       prototype.registerHybridMethod("addProgressListener", &HybridDownloaderSpec::addProgressListener);
       prototype.registerHybridMethod("addStateChangeListener", &HybridDownloaderSpec::addStateChangeListener);
     });

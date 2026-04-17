@@ -24,8 +24,12 @@ namespace margelo::nitro::downloader { struct NativeDownloadRecord; }
 namespace margelo::nitro::downloader { enum class NativeDownloadState; }
 // Forward declaration of `NativeIntroSkipperSegments` to properly resolve imports.
 namespace margelo::nitro::downloader { struct NativeIntroSkipperSegments; }
+// Forward declaration of `NativeSidecarAttachment` to properly resolve imports.
+namespace margelo::nitro::downloader { struct NativeSidecarAttachment; }
 // Forward declaration of `NativeSkipSegment` to properly resolve imports.
 namespace margelo::nitro::downloader { struct NativeSkipSegment; }
+// Forward declaration of `NativeSubtitleSidecar` to properly resolve imports.
+namespace margelo::nitro::downloader { struct NativeSubtitleSidecar; }
 // Forward declaration of `NativeTrickplayInfo` to properly resolve imports.
 namespace margelo::nitro::downloader { struct NativeTrickplayInfo; }
 
@@ -38,7 +42,9 @@ namespace margelo::nitro::downloader { struct NativeTrickplayInfo; }
 #include "NativeDownloadRecord.hpp"
 #include "NativeDownloadState.hpp"
 #include "NativeIntroSkipperSegments.hpp"
+#include "NativeSidecarAttachment.hpp"
 #include "NativeSkipSegment.hpp"
+#include "NativeSubtitleSidecar.hpp"
 #include "NativeTrickplayInfo.hpp"
 #include <NitroModules/Result.hpp>
 #include <exception>

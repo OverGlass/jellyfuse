@@ -18,7 +18,7 @@ public extension DownloadOptions {
   /**
    * Create a new instance of `DownloadOptions`.
    */
-  init(url: String, itemId: String, mediaSourceId: String, playSessionId: String, destRelativePath: String, headers: Dictionary<String, String>, title: String, seriesTitle: String?, seasonNumber: Double?, episodeNumber: Double?, imageUrl: String?, streamUrl: String, metadata: NativeDownloadMetadata) {
+  init(url: String, itemId: String, mediaSourceId: String, playSessionId: String, destRelativePath: String, headers: Dictionary<String, String>, title: String, seriesTitle: String?, seasonNumber: Double?, episodeNumber: Double?, imageUrl: String?, streamUrl: String, estimatedBytes: Double, wasOriginal: Bool, metadata: NativeDownloadMetadata) {
     self.init(std.string(url), std.string(itemId), std.string(mediaSourceId), std.string(playSessionId), std.string(destRelativePath), { () -> bridge.std__unordered_map_std__string__std__string_ in
       var __map = bridge.create_std__unordered_map_std__string__std__string_(headers.count)
       for (__k, __v) in headers {
@@ -49,7 +49,7 @@ public extension DownloadOptions {
       } else {
         return .init()
       }
-    }(), std.string(streamUrl), metadata)
+    }(), std.string(streamUrl), estimatedBytes, wasOriginal, metadata)
   }
 
   @inline(__always)
@@ -146,6 +146,16 @@ public extension DownloadOptions {
   @inline(__always)
   var streamUrl: String {
     return String(self.__streamUrl)
+  }
+  
+  @inline(__always)
+  var estimatedBytes: Double {
+    return self.__estimatedBytes
+  }
+  
+  @inline(__always)
+  var wasOriginal: Bool {
+    return self.__wasOriginal
   }
   
   @inline(__always)

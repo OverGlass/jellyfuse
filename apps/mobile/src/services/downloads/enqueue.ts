@@ -21,7 +21,7 @@ import type {
   ResolvedStream,
   TrickplayInfo,
 } from "@jellyfuse/models";
-import { buildDownloadUrl } from "@jellyfuse/api";
+import { buildDownloadUrl, buildTranscodedDownloadUrl } from "@jellyfuse/api";
 import { queryKeys } from "@jellyfuse/query-keys";
 
 /**
@@ -40,6 +40,7 @@ export function buildDownloadOptions(
   authHeader: string,
   queryClient: QueryClient,
   download: { baseUrl: string; token: string },
+  options?: { maxBitrate?: number },
 ): DownloadOptions {
   const jellyfinId =
     item.id.kind === "jellyfin" || item.id.kind === "both" ? item.id.jellyfinId : "";
@@ -60,15 +61,35 @@ export function buildDownloadOptions(
   // predictable path lets rebaseAllPaths work without knowing the ext.
   const destRelativePath = `downloads/${jellyfinId}-${resolved.mediaSourceId}/media`;
 
-  // Canonical `/Items/{id}/Download` endpoint — sends a real
-  // `Content-Length` (so progress works) and a playable media file with
-  // `Content-Disposition: attachment`. Sidesteps the HLS m3u8 path that
-  // PlaybackInfo would pick when the server decides to transcode.
-  const downloadUrl = buildDownloadUrl({
-    baseUrl: download.baseUrl,
-    itemId: jellyfinId,
-    token: download.token,
-  });
+  // Original quality → canonical `/Items/{id}/Download` (raw source file,
+  // all tracks embedded). Non-Original qualities → `/Videos/{id}/stream.mp4`
+  // with `Static=false` + MaxStreamingBitrate so the server transcodes on
+  // the fly and streams a single MP4 file. Both paths send a real
+  // `Content-Length` so progress reporting works end-to-end.
+  const downloadUrl = options?.maxBitrate
+    ? buildTranscodedDownloadUrl({
+        baseUrl: download.baseUrl,
+        itemId: jellyfinId,
+        mediaSourceId: resolved.mediaSourceId,
+        token: download.token,
+        maxBitrate: options.maxBitrate,
+      })
+    : buildDownloadUrl({
+        baseUrl: download.baseUrl,
+        itemId: jellyfinId,
+        token: download.token,
+      });
+
+  // Transcoded streams arrive chunked with no `Content-Length`, so
+  // `URLSession` reports `totalBytesExpectedToWrite = -1` and the
+  // progress bar never moves. We estimate client-side from the chosen
+  // bitrate cap × duration (÷ 8 to convert bits → bytes) and hand that
+  // to the downloader as a seed value. Original downloads leave this at
+  // 0 — the real Content-Length arrives with the response headers.
+  const estimatedBytes =
+    options?.maxBitrate && resolved.durationSeconds > 0
+      ? Math.round((options.maxBitrate * resolved.durationSeconds) / 8)
+      : 0;
 
   return {
     url: downloadUrl,
@@ -85,6 +106,8 @@ export function buildDownloadOptions(
     episodeNumber: item.episodeNumber,
     imageUrl: item.posterUrl,
     streamUrl: downloadUrl,
+    estimatedBytes,
+    wasOriginal: !options?.maxBitrate,
     metadata: {
       durationSeconds: resolved.durationSeconds,
       chapters: resolved.chapters.map((c) => ({

@@ -8,6 +8,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { resolvePlayback } from "@/services/playback/resolver";
 import { resolveLocalStream } from "@/services/downloads/local-stream";
 import { useDownloadForItem } from "@/services/downloads/use-local-downloads";
+import { useConnectionStatus } from "@/services/connection/monitor";
 import { useMovieDetail } from "@/services/query";
 import { ControlsOverlay } from "../components/controls-overlay";
 import { SkipSegmentPill } from "../components/skip-segment-pill";
@@ -30,12 +31,18 @@ export function PlayerScreen({ jellyfinId }: Props) {
 
   const { serverUrl } = useAuth();
   const detail = useMovieDetail(jellyfinId);
-  // Local-first: if a completed download exists, skip the server
-  // playback-info round trip entirely and play from the on-disk file.
+  // Local-first policy:
+  //   - Original download → always use local (source file, full fidelity,
+  //     all tracks, zero server bandwidth).
+  //   - Transcoded download → only use local when the server is
+  //     unreachable. While online, prefer the server stream so the user
+  //     can pick any audio/sub track and get fresh quality.
   // Intro-skipper + trickplay + chapters + duration are all captured
-  // at enqueue time and carried on the record.
+  // at enqueue time and carried on the record either way.
   const localRecord = useDownloadForItem(jellyfinId);
-  const hasLocal = localRecord?.state === "done";
+  const connection = useConnectionStatus();
+  const hasLocal =
+    localRecord?.state === "done" && (localRecord.wasOriginal || connection === "offline");
   const playbackInfoQuery = usePlaybackInfo(hasLocal ? undefined : jellyfinId);
   const introSkipperQuery = useIntroSkipperSegments(hasLocal ? undefined : jellyfinId);
   const trickplayQuery = useTrickplayInfo(hasLocal ? undefined : jellyfinId);

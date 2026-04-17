@@ -55,11 +55,13 @@ namespace margelo::nitro::downloader {
     std::optional<double> episodeNumber     SWIFT_PRIVATE;
     std::optional<std::string> imageUrl     SWIFT_PRIVATE;
     std::string streamUrl     SWIFT_PRIVATE;
+    double estimatedBytes     SWIFT_PRIVATE;
+    bool wasOriginal     SWIFT_PRIVATE;
     NativeDownloadMetadata metadata     SWIFT_PRIVATE;
 
   public:
     DownloadOptions() = default;
-    explicit DownloadOptions(std::string url, std::string itemId, std::string mediaSourceId, std::string playSessionId, std::string destRelativePath, std::unordered_map<std::string, std::string> headers, std::string title, std::optional<std::string> seriesTitle, std::optional<double> seasonNumber, std::optional<double> episodeNumber, std::optional<std::string> imageUrl, std::string streamUrl, NativeDownloadMetadata metadata): url(url), itemId(itemId), mediaSourceId(mediaSourceId), playSessionId(playSessionId), destRelativePath(destRelativePath), headers(headers), title(title), seriesTitle(seriesTitle), seasonNumber(seasonNumber), episodeNumber(episodeNumber), imageUrl(imageUrl), streamUrl(streamUrl), metadata(metadata) {}
+    explicit DownloadOptions(std::string url, std::string itemId, std::string mediaSourceId, std::string playSessionId, std::string destRelativePath, std::unordered_map<std::string, std::string> headers, std::string title, std::optional<std::string> seriesTitle, std::optional<double> seasonNumber, std::optional<double> episodeNumber, std::optional<std::string> imageUrl, std::string streamUrl, double estimatedBytes, bool wasOriginal, NativeDownloadMetadata metadata): url(url), itemId(itemId), mediaSourceId(mediaSourceId), playSessionId(playSessionId), destRelativePath(destRelativePath), headers(headers), title(title), seriesTitle(seriesTitle), seasonNumber(seasonNumber), episodeNumber(episodeNumber), imageUrl(imageUrl), streamUrl(streamUrl), estimatedBytes(estimatedBytes), wasOriginal(wasOriginal), metadata(metadata) {}
 
   public:
     friend bool operator==(const DownloadOptions& lhs, const DownloadOptions& rhs) = default;
@@ -87,6 +89,8 @@ namespace margelo::nitro {
         JSIConverter<std::optional<double>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "episodeNumber"))),
         JSIConverter<std::optional<std::string>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "imageUrl"))),
         JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "streamUrl"))),
+        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "estimatedBytes"))),
+        JSIConverter<bool>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "wasOriginal"))),
         JSIConverter<margelo::nitro::downloader::NativeDownloadMetadata>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "metadata")))
       );
     }
@@ -104,6 +108,8 @@ namespace margelo::nitro {
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "episodeNumber"), JSIConverter<std::optional<double>>::toJSI(runtime, arg.episodeNumber));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "imageUrl"), JSIConverter<std::optional<std::string>>::toJSI(runtime, arg.imageUrl));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "streamUrl"), JSIConverter<std::string>::toJSI(runtime, arg.streamUrl));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "estimatedBytes"), JSIConverter<double>::toJSI(runtime, arg.estimatedBytes));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "wasOriginal"), JSIConverter<bool>::toJSI(runtime, arg.wasOriginal));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "metadata"), JSIConverter<margelo::nitro::downloader::NativeDownloadMetadata>::toJSI(runtime, arg.metadata));
       return obj;
     }
@@ -127,6 +133,8 @@ namespace margelo::nitro {
       if (!JSIConverter<std::optional<double>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "episodeNumber")))) return false;
       if (!JSIConverter<std::optional<std::string>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "imageUrl")))) return false;
       if (!JSIConverter<std::string>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "streamUrl")))) return false;
+      if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "estimatedBytes")))) return false;
+      if (!JSIConverter<bool>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "wasOriginal")))) return false;
       if (!JSIConverter<margelo::nitro::downloader::NativeDownloadMetadata>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "metadata")))) return false;
       return true;
     }
