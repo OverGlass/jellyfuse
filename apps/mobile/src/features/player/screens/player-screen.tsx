@@ -6,6 +6,7 @@ import { router } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { resolvePlayback } from "@/services/playback/resolver";
+import { useResolverSettings } from "@/services/settings/use-resolver-settings";
 import { localTrickplayData, resolveLocalStream } from "@/services/downloads/local-stream";
 import { useDownloadForItem } from "@/services/downloads/use-local-downloads";
 import { useConnectionStatus } from "@/services/connection/monitor";
@@ -30,6 +31,7 @@ export function PlayerScreen({ jellyfinId }: Props) {
   useKeepAwake();
 
   const { serverUrl } = useAuth();
+  const resolverSettings = useResolverSettings();
   const detail = useMovieDetail(jellyfinId);
   // Local-first policy:
   //   - Original download → always use local (source file, full fidelity,
@@ -54,7 +56,7 @@ export function PlayerScreen({ jellyfinId }: Props) {
       : playbackInfoQuery.data
         ? resolvePlayback({
             playbackInfo: playbackInfoQuery.data,
-            settings: { preferredAudioLanguage: "eng", subtitleMode: "Off" },
+            settings: resolverSettings,
             introSkipperSegments: introSkipperQuery.data ?? undefined,
           })
         : null;

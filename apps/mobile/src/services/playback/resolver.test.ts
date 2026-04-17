@@ -107,28 +107,33 @@ describe("pickAudioStream", () => {
 // ──────────────────────────────────────────────────────────────────────────────
 
 describe("pickSubtitleTrack", () => {
-  it("returns no subtitle when mode is Off", () => {
-    const result = pickSubtitleTrack(basePlaybackInfo.subtitles, "Off");
+  it("returns no subtitle when mode is None", () => {
+    const result = pickSubtitleTrack(basePlaybackInfo.subtitles, "None", "eng", "eng");
     expect(result.index).toBeUndefined();
     expect(result.deliveryUrl).toBeUndefined();
   });
 
   it("picks forced track when mode is OnlyForced", () => {
-    const result = pickSubtitleTrack(basePlaybackInfo.subtitles, "OnlyForced");
+    const result = pickSubtitleTrack(basePlaybackInfo.subtitles, "OnlyForced", "eng", "eng");
     expect(result.index).toBe(6); // English (Forced)
     expect(result.deliveryUrl).toBeUndefined(); // embedded pgs
   });
 
   it("returns no subtitle when OnlyForced but none are forced", () => {
     const tracks = [makeSub({ index: 3, isForced: false }), makeSub({ index: 4, isForced: false })];
-    const result = pickSubtitleTrack(tracks, "OnlyForced");
+    const result = pickSubtitleTrack(tracks, "OnlyForced", "eng", "eng");
     expect(result.index).toBeUndefined();
   });
 
   it("picks default track when mode is Always", () => {
-    const result = pickSubtitleTrack(basePlaybackInfo.subtitles, "Always");
+    const result = pickSubtitleTrack(basePlaybackInfo.subtitles, "Always", "eng", "eng");
     expect(result.index).toBe(4); // English (default)
     expect(result.deliveryUrl).toBe("https://jf.test/sub/4");
+  });
+
+  it("picks default track when mode is Default", () => {
+    const result = pickSubtitleTrack(basePlaybackInfo.subtitles, "Default", "eng", "eng");
+    expect(result.index).toBe(4);
   });
 
   it("picks first track when Always and no default", () => {
@@ -136,12 +141,12 @@ describe("pickSubtitleTrack", () => {
       makeSub({ index: 10, language: "spa" }),
       makeSub({ index: 11, language: "ita" }),
     ];
-    const result = pickSubtitleTrack(tracks, "Always");
+    const result = pickSubtitleTrack(tracks, "Always", "eng", "eng");
     expect(result.index).toBe(10);
   });
 
   it("returns no subtitle when Always but no tracks", () => {
-    const result = pickSubtitleTrack([], "Always");
+    const result = pickSubtitleTrack([], "Always", "eng", "eng");
     expect(result.index).toBeUndefined();
   });
 
@@ -150,8 +155,34 @@ describe("pickSubtitleTrack", () => {
       makeSub({ index: 10, isForced: true, isDefault: false }),
       makeSub({ index: 11, isForced: true, isDefault: true }),
     ];
-    const result = pickSubtitleTrack(tracks, "OnlyForced");
+    const result = pickSubtitleTrack(tracks, "OnlyForced", "eng", "eng");
     expect(result.index).toBe(11);
+  });
+
+  it("Smart picks language-matched subtitle when audio differs", () => {
+    // Audio is Japanese, user prefers English subs → should pick the
+    // English sub track (default = index 4).
+    const result = pickSubtitleTrack(basePlaybackInfo.subtitles, "Smart", "jpn", "eng");
+    expect(result.index).toBe(4);
+  });
+
+  it("Smart returns none when audio already matches preferred subtitle language", () => {
+    // Audio is English, user prefers English subs → no foreign audio
+    // detected, so no subtitle.
+    const result = pickSubtitleTrack(basePlaybackInfo.subtitles, "Smart", "eng", "eng");
+    expect(result.index).toBeUndefined();
+  });
+
+  it("Smart falls back to default when no language match", () => {
+    // Audio is Japanese, preferred sub is Spanish (not in tracks) — still
+    // picks something since audio is foreign.
+    const result = pickSubtitleTrack(basePlaybackInfo.subtitles, "Smart", "jpn", "spa");
+    expect(result.index).toBe(4); // default English
+  });
+
+  it("Smart returns none when no preferred subtitle language set", () => {
+    const result = pickSubtitleTrack(basePlaybackInfo.subtitles, "Smart", "jpn", "");
+    expect(result.index).toBeUndefined();
   });
 });
 
@@ -163,7 +194,11 @@ describe("resolvePlayback", () => {
   it("resolves DirectPlay with correct tracks", () => {
     const result = resolvePlayback({
       playbackInfo: basePlaybackInfo,
-      settings: { preferredAudioLanguage: "eng", subtitleMode: "Always" },
+      settings: {
+        preferredAudioLanguage: "eng",
+        preferredSubtitleLanguage: "eng",
+        subtitleMode: "Always",
+      },
     });
 
     expect(result.playMethod).toBe("DirectPlay");
@@ -175,7 +210,7 @@ describe("resolvePlayback", () => {
     expect(result.chapters).toHaveLength(2);
   });
 
-  it("resolves Transcode with subtitle mode Off", () => {
+  it("resolves Transcode with subtitle mode None", () => {
     const info: PlaybackInfo = {
       ...basePlaybackInfo,
       method: "Transcode",
@@ -184,7 +219,11 @@ describe("resolvePlayback", () => {
 
     const result = resolvePlayback({
       playbackInfo: info,
-      settings: { preferredAudioLanguage: "eng", subtitleMode: "Off" },
+      settings: {
+        preferredAudioLanguage: "eng",
+        preferredSubtitleLanguage: "eng",
+        subtitleMode: "None",
+      },
     });
 
     expect(result.playMethod).toBe("Transcode");
@@ -195,7 +234,11 @@ describe("resolvePlayback", () => {
   it("selects French audio when preferred", () => {
     const result = resolvePlayback({
       playbackInfo: basePlaybackInfo,
-      settings: { preferredAudioLanguage: "fra", subtitleMode: "Off" },
+      settings: {
+        preferredAudioLanguage: "fra",
+        preferredSubtitleLanguage: "eng",
+        subtitleMode: "None",
+      },
     });
 
     expect(result.audioStreamIndex).toBe(2); // French
@@ -210,7 +253,11 @@ describe("resolvePlayback", () => {
 
     const result = resolvePlayback({
       playbackInfo: basePlaybackInfo,
-      settings: { preferredAudioLanguage: "eng", subtitleMode: "Off" },
+      settings: {
+        preferredAudioLanguage: "eng",
+        preferredSubtitleLanguage: "eng",
+        subtitleMode: "None",
+      },
       introSkipperSegments: segments,
     });
 
@@ -227,10 +274,29 @@ describe("resolvePlayback", () => {
 
     const result = resolvePlayback({
       playbackInfo: info,
-      settings: { preferredAudioLanguage: "eng", subtitleMode: "Always" },
+      settings: {
+        preferredAudioLanguage: "eng",
+        preferredSubtitleLanguage: "eng",
+        subtitleMode: "Always",
+      },
     });
 
     expect(result.audioStreamIndex).toBeUndefined();
     expect(result.subtitleStreamIndex).toBeUndefined();
+  });
+
+  it("applies Smart subtitle selection via resolver", () => {
+    // Pick Japanese audio, Smart mode, user prefers English subs → picks English.
+    const result = resolvePlayback({
+      playbackInfo: basePlaybackInfo,
+      settings: {
+        preferredAudioLanguage: "jpn",
+        preferredSubtitleLanguage: "eng",
+        subtitleMode: "Smart",
+      },
+    });
+
+    expect(result.audioStreamIndex).toBe(3); // Japanese
+    expect(result.subtitleStreamIndex).toBe(4); // English default
   });
 });

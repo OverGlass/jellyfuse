@@ -317,7 +317,21 @@ function formatRuntime(minutes: number): string {
 
 export type PlayMethod = "DirectPlay" | "DirectStream" | "Transcode";
 
-export type SubtitleMode = "Off" | "OnlyForced" | "Always";
+/**
+ * Subtitle playback mode — 1:1 port of Jellyfin's `SubtitlePlaybackMode`
+ * enum (see `Jellyfin.Database/.../Enums/SubtitlePlaybackMode.cs`). Stored
+ * server-side on `UserConfiguration.SubtitleMode` and persisted via
+ * `POST /Users/Configuration?userId=…`, so we match the exact string
+ * casing Jellyfin emits for trivial JSON round-trip.
+ *
+ * - `Default`  — let the server/player pick the "default" subtitle track.
+ * - `Always`   — always pick a subtitle track (default preferred).
+ * - `OnlyForced` — only pick subtitles when the track is marked forced.
+ * - `None`     — never pick a subtitle track.
+ * - `Smart`    — pick subtitles only when the audio language doesn't
+ *   match the preferred subtitle language (foreign-audio detection).
+ */
+export type SubtitleMode = "Default" | "Always" | "OnlyForced" | "None" | "Smart";
 
 export interface AudioStream {
   /** Jellyfin stream index. */
