@@ -6,7 +6,9 @@
 // `crates/jf-core/src/persistence.rs`.
 
 import type { PendingReport, PendingReportKind, PlayMethod } from "@jellyfuse/models";
+import { queryKeys } from "@jellyfuse/query-keys";
 import { apiFetchAuthenticated } from "@/services/api/client";
+import { queryClient } from "@/services/query";
 import { enqueueReport } from "./pending-store";
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -50,7 +52,7 @@ export async function reportStart(args: ReportStartArgs): Promise<void> {
     IsPaused: false,
   };
 
-  await sendReport(`${trimSlash(args.baseUrl)}/Sessions/Playing`, body, {
+  await sendReport(args.baseUrl, "/Sessions/Playing", body, {
     itemId: args.itemId,
     playSessionId: args.playSessionId,
     mediaSourceId: args.mediaSourceId,
@@ -71,7 +73,7 @@ export async function reportProgress(args: ReportProgressArgs): Promise<void> {
     EventName: "timeupdate",
   };
 
-  await sendReport(`${trimSlash(args.baseUrl)}/Sessions/Playing/Progress`, body, {
+  await sendReport(args.baseUrl, "/Sessions/Playing/Progress", body, {
     itemId: args.itemId,
     playSessionId: args.playSessionId,
     mediaSourceId: args.mediaSourceId,
@@ -93,7 +95,7 @@ export async function reportStopped(args: ReportStoppedArgs): Promise<void> {
     PositionTicks: args.positionTicks,
   };
 
-  await sendReport(`${trimSlash(args.baseUrl)}/Sessions/Playing/Stopped`, body, {
+  await sendReport(args.baseUrl, "/Sessions/Playing/Stopped", body, {
     itemId: args.itemId,
     playSessionId: args.playSessionId,
     mediaSourceId: args.mediaSourceId,
@@ -107,9 +109,9 @@ export async function reportStopped(args: ReportStoppedArgs): Promise<void> {
  * reports after reconnection.
  */
 export async function replayReport(baseUrl: string, report: PendingReport): Promise<void> {
-  const url = `${trimSlash(baseUrl)}/Sessions/Playing${endpointSuffix(report.kind)}`;
+  const path = `/Sessions/Playing${endpointSuffix(report.kind)}`;
   const body = buildBody(report);
-  await sendReport(url, body, report);
+  await sendReport(baseUrl, path, body, report);
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -117,17 +119,27 @@ export async function replayReport(baseUrl: string, report: PendingReport): Prom
 // ──────────────────────────────────────────────────────────────────────────────
 
 async function sendReport(
-  url: string,
+  baseUrl: string,
+  path: string,
   body: Record<string, unknown>,
   pendingFallback: PendingReport,
 ): Promise<void> {
+  // Short-circuit when the connection monitor has already observed
+  // the server as unreachable — skip the fetch timeout and queue
+  // straight away. State is undefined before the first ping, in
+  // which case we optimistically try the network.
+  if (isKnownOffline(baseUrl)) {
+    enqueueReport(pendingFallback);
+    return;
+  }
+
   try {
     const wideFetcher = apiFetchAuthenticated as (
       input: string,
       init: { method: string; headers: Record<string, string>; body: string },
     ) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>;
 
-    const res = await wideFetcher(url, {
+    const res = await wideFetcher(`${trimSlash(baseUrl)}${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -140,6 +152,11 @@ async function sendReport(
     // Network error — enqueue for later
     enqueueReport(pendingFallback);
   }
+}
+
+function isKnownOffline(baseUrl: string): boolean {
+  const state = queryClient.getQueryState(queryKeys.systemInfo(baseUrl));
+  return state?.status === "error";
 }
 
 function endpointSuffix(kind: PendingReportKind): string {

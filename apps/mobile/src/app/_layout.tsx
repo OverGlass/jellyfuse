@@ -6,6 +6,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider } from "@/services/auth/state";
 import { DownloaderProvider } from "@/services/downloads/context";
 import { useLocalDownloadsSync } from "@/services/downloads/use-local-downloads";
+import { useReportDrainer } from "@/services/playback/use-report-drainer";
 import { QueryProvider } from "@/services/query";
 
 /**
@@ -32,6 +33,7 @@ import { QueryProvider } from "@/services/query";
  */
 function AppShell() {
   useLocalDownloadsSync();
+  useReportDrainer();
   return (
     <ThemeProvider value={DarkTheme}>
       <StatusBar style="light" />
