@@ -17,6 +17,15 @@ vi.mock("@/services/api/client", () => ({
   apiFetchAuthenticated: (...args: unknown[]) => mockFetch(...args),
 }));
 
+// Mock queryClient — tests control the system-info query state to
+// exercise the known-offline short-circuit in sendReport.
+const queryStates = new Map<string, { status: "error" | "success" | "pending" }>();
+vi.mock("@/services/query", () => ({
+  queryClient: {
+    getQueryState: (key: readonly unknown[]) => queryStates.get(JSON.stringify(key)),
+  },
+}));
+
 // eslint-disable-next-line import/first
 import { reportStart, reportProgress, reportStopped } from "./reporter";
 // eslint-disable-next-line import/first
@@ -25,6 +34,7 @@ import { peekCount } from "./pending-store";
 afterEach(() => {
   mockStore.clear();
   mockFetch.mockReset();
+  queryStates.clear();
 });
 
 const baseArgs = {
@@ -107,6 +117,28 @@ describe("reportStopped", () => {
     expect(body.ItemId).toBe("item-abc");
     expect(body.PositionTicks).toBe(72_000_000_000);
     expect(body.CanSeek).toBeUndefined(); // stopped doesn't need CanSeek
+  });
+});
+
+describe("known-offline short-circuit", () => {
+  it("skips fetch and enqueues when the connection monitor has errored", async () => {
+    // Connection monitor observed the server as unreachable
+    queryStates.set(JSON.stringify(["system-info", "https://jf.test"]), { status: "error" });
+
+    await reportStart({ ...baseArgs, positionTicks: 0, playMethod: "DirectPlay" });
+
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(peekCount()).toBe(1);
+  });
+
+  it("still tries the network when the ping status is unknown or success", async () => {
+    queryStates.set(JSON.stringify(["system-info", "https://jf.test"]), { status: "success" });
+    mockFetch.mockResolvedValue({ ok: true, status: 204 });
+
+    await reportStart({ ...baseArgs, positionTicks: 0, playMethod: "DirectPlay" });
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(peekCount()).toBe(0);
   });
 });
 
