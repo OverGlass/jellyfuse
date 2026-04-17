@@ -132,6 +132,29 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
             throw mpvError("loadfile failed: \(String(cString: mpv_error_string(rc)))")
         }
 
+        // External subtitles BEFORE selection — each sub-add grows
+        // the track list and mpv assigns the next sequential sid.
+        // Order matters: callers pass these in the same order as
+        // their UI list so position+1 mapping in the picker stays
+        // correct (mirrors `PlayerView::new` in jf-ui-kit).
+        if let externals = options.externalSubtitles {
+            for sub in externals {
+                var args = ["sub-add", sub.uri, "auto"]
+                if let title = sub.title { args.append(title) }
+                if let lang = sub.language {
+                    // `sub-add` accepts optional title then language —
+                    // language slot is 5th even when title is empty.
+                    if args.count == 3 { args.append("") }
+                    args.append(lang)
+                }
+                do {
+                    try runCommand(args)
+                } catch {
+                    NSLog("[NativeMpv] sub-add failed for %@: %@", sub.uri, String(describing: error))
+                }
+            }
+        }
+
         // Track selection AFTER loadfile — matching the Rust pattern.
         // mpv can't select tracks before a file is loaded.
         if let aid = options.audioTrackIndex {

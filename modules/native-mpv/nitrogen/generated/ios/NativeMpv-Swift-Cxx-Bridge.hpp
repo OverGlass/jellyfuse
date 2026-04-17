@@ -14,6 +14,8 @@ namespace margelo::nitro::nativempv { class HybridMpvVideoViewSpec; }
 namespace margelo::nitro::nativempv { class HybridNativeMpvSpec; }
 // Forward declaration of `MpvAudioTrack` to properly resolve imports.
 namespace margelo::nitro::nativempv { struct MpvAudioTrack; }
+// Forward declaration of `MpvExternalSubtitle` to properly resolve imports.
+namespace margelo::nitro::nativempv { struct MpvExternalSubtitle; }
 // Forward declaration of `MpvListener` to properly resolve imports.
 namespace margelo::nitro::nativempv { struct MpvListener; }
 // Forward declaration of `MpvPlaybackState` to properly resolve imports.
@@ -31,6 +33,7 @@ namespace NativeMpv { class HybridNativeMpvSpec_cxx; }
 #include "HybridMpvVideoViewSpec.hpp"
 #include "HybridNativeMpvSpec.hpp"
 #include "MpvAudioTrack.hpp"
+#include "MpvExternalSubtitle.hpp"
 #include "MpvListener.hpp"
 #include "MpvPlaybackState.hpp"
 #include "MpvSubtitleTrack.hpp"
@@ -96,6 +99,32 @@ namespace margelo::nitro::nativempv::bridge::swift {
     return optional.has_value();
   }
   inline std::string get_std__optional_std__string_(const std::optional<std::string>& optional) noexcept {
+    return optional.value();
+  }
+  
+  // pragma MARK: std::vector<MpvExternalSubtitle>
+  /**
+   * Specialized version of `std::vector<MpvExternalSubtitle>`.
+   */
+  using std__vector_MpvExternalSubtitle_ = std::vector<MpvExternalSubtitle>;
+  inline std::vector<MpvExternalSubtitle> create_std__vector_MpvExternalSubtitle_(size_t size) noexcept {
+    std::vector<MpvExternalSubtitle> vector;
+    vector.reserve(size);
+    return vector;
+  }
+  
+  // pragma MARK: std::optional<std::vector<MpvExternalSubtitle>>
+  /**
+   * Specialized version of `std::optional<std::vector<MpvExternalSubtitle>>`.
+   */
+  using std__optional_std__vector_MpvExternalSubtitle__ = std::optional<std::vector<MpvExternalSubtitle>>;
+  inline std::optional<std::vector<MpvExternalSubtitle>> create_std__optional_std__vector_MpvExternalSubtitle__(const std::vector<MpvExternalSubtitle>& value) noexcept {
+    return std::optional<std::vector<MpvExternalSubtitle>>(value);
+  }
+  inline bool has_value_std__optional_std__vector_MpvExternalSubtitle__(const std::optional<std::vector<MpvExternalSubtitle>>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline std::vector<MpvExternalSubtitle> get_std__optional_std__vector_MpvExternalSubtitle__(const std::optional<std::vector<MpvExternalSubtitle>>& optional) noexcept {
     return optional.value();
   }
   
