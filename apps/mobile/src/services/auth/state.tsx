@@ -78,6 +78,15 @@ export interface AuthState {
   switchUser: (userId: string) => Promise<void>;
   removeUser: (userId: string) => Promise<void>;
   signOutAll: () => Promise<void>;
+  /**
+   * Re-authenticate the active user against Jellyseerr. Used by the
+   * Settings "Reconnect" action when a stored cookie has expired —
+   * we still have the Jellyfin token but the cookie jar's connect.sid
+   * is gone or rejected. Throws if Jellyseerr returns a non-2xx; the
+   * caller should surface the error inline. Updates the active user
+   * record's `jellyseerrCookie` on success.
+   */
+  reconnectJellyseerr: (input: { password: string }) => Promise<void>;
 }
 
 async function loadPersistedAuth(): Promise<PersistedAuth> {
@@ -115,52 +124,52 @@ function clearQueryCacheExceptAuth(queryClient: QueryClient): void {
   });
 }
 
-const AuthContext = createContext<AuthState | null>(null);
+/**
+ * Actions only — the slice of `AuthState` whose references are stable
+ * enough to live behind `AuthContext`. State fields (status, users,
+ * activeUser, …) deliberately do **not** go through context: consumers
+ * subscribe to the query cache directly via `useAuth()` so they read
+ * the latest snapshot on mount, without waiting for `AuthProvider` to
+ * re-render and commit a new context value (see bug #85).
+ */
+type AuthActions = Pick<
+  AuthState,
+  | "setServer"
+  | "signInWithCredentials"
+  | "switchUser"
+  | "removeUser"
+  | "signOutAll"
+  | "reconnectJellyseerr"
+>;
+
+const AuthActionsContext = createContext<AuthActions | null>(null);
 
 interface Props {
   children: ReactNode;
 }
 
 /**
- * Wraps the app in the AuthContext. Does no async work itself — the
- * queries + mutations live in `useAuthInternal` which is evaluated
- * inside this component and forwarded through the context.
+ * Provides the auth action callbacks. State is **not** provided here —
+ * consumers pull state straight from the TanStack Query cache via
+ * `useAuth()`, which subscribes an observer per call site. This removes
+ * the render-order race that a state-in-context setup has: after a
+ * mutation writes the cache, every active `useQuery` observer rereads
+ * synchronously on its next render, so a freshly-mounted `IndexRoute`
+ * sees authenticated state immediately instead of whatever the last
+ * `AuthProvider` commit published.
  */
 export function AuthProvider({ children }: Props) {
-  const value = useAuthInternal();
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  const actions = useAuthActionsInternal();
+  return <AuthActionsContext.Provider value={actions}>{children}</AuthActionsContext.Provider>;
 }
 
 /**
- * The real query/mutation plumbing. Separated from `AuthProvider` only
- * to keep the latter trivially `<Provider>{children}</Provider>`.
+ * Mounts every auth mutation once per `AuthProvider` and returns the
+ * stable action surface. Kept separate from the provider so
+ * `AuthProvider` stays a trivial wrapper.
  */
-function useAuthInternal(): AuthState {
+function useAuthActionsInternal(): AuthActions {
   const queryClient = useQueryClient();
-
-  // ------------------------------------------------------------------
-  // Hydration query — reads secure-storage once and caches forever.
-  // ------------------------------------------------------------------
-  const persistedQuery = useQuery({
-    queryKey: PERSISTED_AUTH_KEY,
-    queryFn: loadPersistedAuth,
-    staleTime: Infinity,
-    gcTime: Infinity,
-    retry: 0,
-  });
-
-  const persisted = persistedQuery.data ?? EMPTY_PERSISTED_AUTH;
-  const activeUser = findActiveUser(persisted);
-
-  const jellyseerrLastErrorQuery = useQuery({
-    queryKey: JELLYSEERR_LAST_ERROR_KEY,
-    queryFn: () => null as string | null,
-    staleTime: Infinity,
-    gcTime: Infinity,
-    retry: 0,
-    enabled: false,
-    initialData: null,
-  });
 
   // ------------------------------------------------------------------
   // Mutations — each reads the current persisted cache, mutates
@@ -303,6 +312,16 @@ function useAuthInternal(): AuthState {
       return { ...current, activeUserId: userId };
     },
     onSuccess: (data) => {
+      // Flip auth state **first** so every useAuth observer re-renders
+      // against the new user before we tear down the old user's cached
+      // queries. The reverse order races: observers keyed by the old
+      // userId momentarily see missing cache entries and re-fetch with
+      // credentials that are about to be invalidated.
+      queryClient.setQueryData(PERSISTED_AUTH_KEY, data);
+      // Drop the previous user's auth-context entry explicitly — the
+      // predicate below keeps `['auth', ...]`, which includes context
+      // keys, so we evict it by queryKey directly.
+      queryClient.removeQueries({ queryKey: ["auth", "context"] });
       // Every cached query key is scoped by userId, but shelves,
       // detail data, downloads progress etc. were fetched as the
       // previous user. Purge everything except the auth namespace so
@@ -310,10 +329,6 @@ function useAuthInternal(): AuthState {
       // predicate rather than `clear()` avoids re-triggering the
       // PERSISTED_AUTH_KEY queryFn between removal and reseeding.
       clearQueryCacheExceptAuth(queryClient);
-      queryClient.setQueryData(PERSISTED_AUTH_KEY, data);
-      // Drop the previous user's auth-context entry explicitly — the
-      // predicate keeps `['auth', ...]`, which includes context keys.
-      queryClient.removeQueries({ queryKey: ["auth", "context"] });
     },
   });
 
@@ -335,14 +350,73 @@ function useAuthInternal(): AuthState {
       };
     },
     onSuccess: ({ persisted, activeChanged }) => {
-      // Removing the active user (incl. the last one) flips the
-      // active pointer — purge per-user query data so the next user
-      // (or the sign-in screen, if the list is now empty) starts clean.
-      if (activeChanged) {
-        clearQueryCacheExceptAuth(queryClient);
-        queryClient.removeQueries({ queryKey: ["auth", "context"] });
-      }
+      // Flip auth state first so consumers see the new user list
+      // immediately, then purge old per-user data.
       queryClient.setQueryData(PERSISTED_AUTH_KEY, persisted);
+      if (activeChanged) {
+        queryClient.removeQueries({ queryKey: ["auth", "context"] });
+        clearQueryCacheExceptAuth(queryClient);
+      }
+    },
+  });
+
+  const reconnectJellyseerrMutation = useMutation({
+    mutationFn: async ({ password }: { password: string }): Promise<PersistedAuth> => {
+      const current =
+        queryClient.getQueryData<PersistedAuth>(PERSISTED_AUTH_KEY) ?? EMPTY_PERSISTED_AUTH;
+      const { jellyseerrUrl, activeUserId, users } = current;
+      if (!jellyseerrUrl) {
+        throw new Error("Jellyseerr URL is not configured");
+      }
+      const activeUser = users.find((u) => u.userId === activeUserId);
+      if (!activeUser) {
+        throw new Error("No active user — sign in to Jellyfin first");
+      }
+
+      // Drop the stale cookie before logging in so the native jar
+      // doesn't replay the rejected connect.sid on the auth POST.
+      try {
+        await NitroCookies.clearByName(jellyseerrUrl, "connect.sid");
+      } catch (err: unknown) {
+        console.warn("failed to clear stale jellyseerr cookie before reconnect", err);
+      }
+
+      const session = await jellyseerrLogin(
+        { baseUrl: jellyseerrUrl, username: activeUser.displayName, password },
+        apiFetch,
+      );
+      let cookie = session.cookie ?? undefined;
+      if (!cookie) {
+        // Same Set-Cookie-hidden fallback as signInMutation — read the
+        // freshly-minted connect.sid out of the native jar populated by
+        // Nitro Fetch's URLSession.
+        const jar = NitroCookies.getSync(jellyseerrUrl);
+        cookie = jar["connect.sid"]?.value;
+      }
+      if (!cookie) {
+        throw new Error("connect.sid cookie not found after Jellyseerr login");
+      }
+
+      const updatedUser: AuthenticatedUser = { ...activeUser, jellyseerrCookie: cookie };
+      const nextUsers = users.map((u) => (u.userId === updatedUser.userId ? updatedUser : u));
+      await secureUserStorage.saveUsers(nextUsers);
+
+      return { ...current, users: nextUsers };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(PERSISTED_AUTH_KEY, data);
+      queryClient.setQueryData(JELLYSEERR_LAST_ERROR_KEY, null);
+      // Retry every query currently in error — Jellyseerr-backed reads
+      // (requests list, download progress, blended search) likely failed
+      // with the rejected cookie. Predicate-invalidation keeps the
+      // refetch surgical: untouched success-state queries don't churn.
+      queryClient.invalidateQueries({
+        predicate: (q) => q.state.status === "error",
+      });
+    },
+    onError: (err: unknown) => {
+      const message = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+      queryClient.setQueryData(JELLYSEERR_LAST_ERROR_KEY, message);
     },
   });
 
@@ -382,17 +456,68 @@ function useAuthInternal(): AuthState {
       };
     },
     onSuccess: (data) => {
-      // Wipe everything — shelves, detail, downloads — but keep the
-      // auth namespace so the router can read the new shape. Then
-      // evict stale auth-context entries and reset the jellyseerr
-      // error slot for the next sign-in.
-      clearQueryCacheExceptAuth(queryClient);
-      queryClient.removeQueries({ queryKey: ["auth", "context"] });
+      // Flip auth state first — every useAuth observer re-renders
+      // against the signed-out shape, routing bounces to the auth
+      // group, THEN we clear the now-unmounted per-user queries.
       queryClient.setQueryData(PERSISTED_AUTH_KEY, data);
       queryClient.setQueryData(JELLYSEERR_LAST_ERROR_KEY, null);
+      queryClient.removeQueries({ queryKey: ["auth", "context"] });
+      clearQueryCacheExceptAuth(queryClient);
     },
   });
 
+  // React Compiler handles memoisation — no manual useMemo per
+  // CLAUDE.md.
+  return {
+    setServer: (args) => setServerMutation.mutateAsync(args).then(() => undefined),
+    signInWithCredentials: (args) => signInMutation.mutateAsync(args).then(() => undefined),
+    switchUser: (userId) => switchUserMutation.mutateAsync(userId).then(() => undefined),
+    removeUser: (userId) => removeUserMutation.mutateAsync(userId).then(() => undefined),
+    signOutAll: () => signOutAllMutation.mutateAsync().then(() => undefined),
+    reconnectJellyseerr: (args) =>
+      reconnectJellyseerrMutation.mutateAsync(args).then(() => undefined),
+  };
+}
+
+/**
+ * Reads the current auth snapshot and returns the full `AuthState`
+ * (state + action callbacks).
+ *
+ * State comes from subscribing directly to the TanStack Query cache —
+ * `useQuery(PERSISTED_AUTH_KEY)` here, in every call site. Each mount
+ * reads the cache snapshot synchronously, so a component that mounts
+ * right after `setQueryData` (e.g. `IndexRoute` after `router.replace`
+ * in the sign-in flow) sees the fresh state without waiting for
+ * `AuthProvider` to re-render and commit a new context value. The
+ * action callbacks — stable references — come through
+ * `AuthActionsContext`.
+ *
+ * This split is what fixes bug #85 (double sign-in): a state-in-context
+ * design raced `AuthProvider`'s commit against the navigator's mount.
+ */
+export function useAuth(): AuthState {
+  const actions = useContext(AuthActionsContext);
+  if (!actions) {
+    throw new Error("useAuth must be used inside <AuthProvider>");
+  }
+
+  const persistedQuery = useQuery({
+    queryKey: PERSISTED_AUTH_KEY,
+    queryFn: loadPersistedAuth,
+    staleTime: Infinity,
+    gcTime: Infinity,
+    retry: 0,
+  });
+  const jellyseerrLastErrorQuery = useQuery({
+    queryKey: JELLYSEERR_LAST_ERROR_KEY,
+    queryFn: () => null as string | null,
+    staleTime: Infinity,
+    gcTime: Infinity,
+    retry: 0,
+  });
+
+  const persisted = persistedQuery.data ?? EMPTY_PERSISTED_AUTH;
+  const activeUser = findActiveUser(persisted);
   const status: AuthStatus = persistedQuery.isPending
     ? "loading"
     : activeUser
@@ -404,10 +529,6 @@ function useAuthInternal(): AuthState {
       ? "connected"
       : "disconnected";
 
-  // React Compiler handles memoisation — no manual useMemo per
-  // CLAUDE.md. The returned shape is stable because its inputs
-  // (persisted, activeUser, mutation refs) are themselves stable
-  // across renders when nothing has changed.
   return {
     status,
     serverUrl: persisted.serverUrl,
@@ -417,18 +538,6 @@ function useAuthInternal(): AuthState {
     jellyseerrUrl: persisted.jellyseerrUrl,
     jellyseerrStatus,
     jellyseerrLastError: jellyseerrLastErrorQuery.data ?? undefined,
-    setServer: (args) => setServerMutation.mutateAsync(args).then(() => undefined),
-    signInWithCredentials: (args) => signInMutation.mutateAsync(args).then(() => undefined),
-    switchUser: (userId) => switchUserMutation.mutateAsync(userId).then(() => undefined),
-    removeUser: (userId) => removeUserMutation.mutateAsync(userId).then(() => undefined),
-    signOutAll: () => signOutAllMutation.mutateAsync().then(() => undefined),
+    ...actions,
   };
-}
-
-export function useAuth(): AuthState {
-  const ctx = useContext(AuthContext);
-  if (!ctx) {
-    throw new Error("useAuth must be used inside <AuthProvider>");
-  }
-  return ctx;
 }
