@@ -95,11 +95,16 @@ EOF
 
   # Sanity-check the expected layout — fail loud if the tarball is
   # missing something the JNI layer will try to link against.
+  # libmpv links dynamically against ffmpeg (libav*, libsw*); all must
+  # be present in jniLibs so System.loadLibrary's dlopen chain resolves.
   for ABI in arm64-v8a x86_64; do
-    if [[ ! -f "${CACHE_ROOT}/${ABI}/libmpv.so" ]]; then
-      echo "error: ${CACHE_ROOT}/${ABI}/libmpv.so missing after extract" >&2
-      exit 1
-    fi
+    for SO in libmpv.so libavcodec.so libavformat.so libavutil.so \
+              libavfilter.so libavdevice.so libswresample.so libswscale.so; do
+      if [[ ! -f "${CACHE_ROOT}/${ABI}/${SO}" ]]; then
+        echo "error: ${CACHE_ROOT}/${ABI}/${SO} missing after extract" >&2
+        exit 1
+      fi
+    done
   done
   for H in client.h render.h render_gl.h; do
     if [[ ! -f "${CACHE_ROOT}/include/mpv/${H}" ]]; then

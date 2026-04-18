@@ -41,6 +41,7 @@ internal object MpvBridge {
     external fun nativeGetPropertyString(handle: Long, name: String): String?
     external fun nativeObserveProperty(handle: Long, userdata: Long, name: String, format: Int): Int
     external fun nativeErrorString(code: Int): String
+    external fun nativeRequestLogMessages(handle: Long, level: String): Int
 
     // ── Events ────────────────────────────────────────────────────────────
     external fun nativeWaitEvent(handle: Long, timeout: Double): MpvEvent?

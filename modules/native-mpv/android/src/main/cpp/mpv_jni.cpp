@@ -37,6 +37,26 @@ namespace {
 
 #ifdef JELLYFUSE_MPV_LINKED
 
+// mpv's Android gpu-context + mediacodec hwdec both require ffmpeg to
+// hold a JNIEnv* so they can talk to the platform's MediaCodec and
+// Surface classes. Without this, mpv logs "No Java virtual machine has
+// been registered" and vo=gpu-next/gpu bails with "Failed initializing
+// any suitable GPU context!" — matches mpv-android's
+// app/src/main/jni/main.cpp JNI_OnLoad.
+typedef int (*av_jni_set_java_vm_fn)(void* vm, void* log_ctx);
+
+static void registerJavaVmWithFfmpeg(JavaVM* vm) {
+    void* sym = dlsym(RTLD_DEFAULT, "av_jni_set_java_vm");
+    if (sym == nullptr) {
+        LOGE("av_jni_set_java_vm not found — mediacodec/gpu-context will fail");
+        return;
+    }
+    auto fn = reinterpret_cast<av_jni_set_java_vm_fn>(sym);
+    int rc = fn(vm, nullptr);
+    if (rc != 0) LOGE("av_jni_set_java_vm failed: %d", rc);
+    else LOGI("ffmpeg JNI VM registered");
+}
+
 // ── Render surface holder ─────────────────────────────────────────────────
 // One per mpv_handle. Owns the EGLDisplay/Context/Surface triple, the
 // ANativeWindow pulled from the Java Surface, and the mpv_render_context.
@@ -329,6 +349,21 @@ Java_com_margelo_nitro_nativempv_MpvBridge_nativeObserveProperty(JNIEnv* env, jo
 #endif
 }
 
+JNIEXPORT jint JNICALL
+Java_com_margelo_nitro_nativempv_MpvBridge_nativeRequestLogMessages(JNIEnv* env, jobject, jlong handle, jstring level) {
+#ifdef JELLYFUSE_MPV_LINKED
+    auto mpv = reinterpret_cast<mpv_handle*>(handle);
+    if (mpv == nullptr) return -1;
+    const char* l = env->GetStringUTFChars(level, nullptr);
+    int rc = mpv_request_log_messages(mpv, l);
+    env->ReleaseStringUTFChars(level, l);
+    return rc;
+#else
+    (void) env; (void) handle; (void) level;
+    return -1;
+#endif
+}
+
 JNIEXPORT jstring JNICALL
 Java_com_margelo_nitro_nativempv_MpvBridge_nativeErrorString(JNIEnv* env, jobject, jint code) {
 #ifdef JELLYFUSE_MPV_LINKED
@@ -574,6 +609,15 @@ Java_com_margelo_nitro_nativempv_MpvBridge_nativeRenderContextSetUpdateCallback(
     }
 #else
     (void) rsHandle; (void) enabled;
+#endif
+}
+
+// Exposed for cpp-adapter.cpp's JNI_OnLoad to call after fbjni init.
+JNIEXPORT void JNICALL jellyfuseRegisterFfmpegJvm(JavaVM* vm) {
+#ifdef JELLYFUSE_MPV_LINKED
+    registerJavaVmWithFfmpeg(vm);
+#else
+    (void) vm;
 #endif
 }
 

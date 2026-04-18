@@ -262,11 +262,10 @@ class HybridNativeMpv : HybridNativeMpvSpec() {
             return
         }
 
-        // Android-specific defaults. `vo=gpu-next` is the preferred
-        // video output on mpv >= 0.37 and handles HDR tone-mapping.
-        MpvBridge.nativeSetOptionString(mpv, "vo", "gpu-next")
-        MpvBridge.nativeSetOptionString(mpv, "gpu-context", "android")
-        MpvBridge.nativeSetOptionString(mpv, "opengl-es", "yes")
+        // We provide the OpenGL context ourselves via mpv_render_context
+        // (MPV_RENDER_API_TYPE_OPENGL). vo=libmpv tells mpv to render into
+        // our context instead of creating its own gpu-context. Mirrors iOS.
+        MpvBridge.nativeSetOptionString(mpv, "vo", "libmpv")
         MpvBridge.nativeSetOptionString(mpv, "hwdec", "mediacodec-copy")
         // Start muted-of-video until the render context arrives, same
         // as the iOS flow. SurfaceView will flip vid=auto + pause=no.
@@ -283,6 +282,8 @@ class HybridNativeMpv : HybridNativeMpvSpec() {
             MpvBridge.nativeTerminate(mpv)
             return
         }
+
+        MpvBridge.nativeRequestLogMessages(mpv, "info")
 
         // Same observer set as the Swift code.
         MpvBridge.nativeObserveProperty(mpv, 1, "playback-time", MpvFormat.DOUBLE)
@@ -342,11 +343,21 @@ class HybridNativeMpv : HybridNativeMpvSpec() {
     private fun onEvent(event: MpvEvent) {
         when (event.eventId) {
             MpvEventId.SHUTDOWN -> return
+            MpvEventId.LOG_MESSAGE -> {
+                Log.i("MpvLog", event.propertyString?.trimEnd() ?: "")
+            }
             MpvEventId.END_FILE -> {
+                Log.i(TAG, "END_FILE error=${event.errorCode}")
                 fireEnded()
                 fireState(MpvPlaybackState.ENDED)
             }
+            MpvEventId.START_FILE -> Log.i(TAG, "START_FILE")
+            MpvEventId.FILE_LOADED -> Log.i(TAG, "FILE_LOADED")
+            MpvEventId.VIDEO_RECONFIG -> Log.i(TAG, "VIDEO_RECONFIG")
+            MpvEventId.PLAYBACK_RESTART -> Log.i(TAG, "PLAYBACK_RESTART")
+            MpvEventId.IDLE -> Log.v(TAG, "IDLE")
             MpvEventId.PROPERTY_CHANGE -> handlePropertyChange(event)
+            else -> Log.v(TAG, "event ${event.eventId}")
         }
     }
 
