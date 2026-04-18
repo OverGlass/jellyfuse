@@ -74,11 +74,43 @@ final class MpvGLView: UIView {
     override init(frame: CGRect) {
         super.init(frame: frame)
         setupLayer()
+        registerLifecycleObservers()
     }
 
     required init?(coder: NSCoder) {
         super.init(coder: coder)
         setupLayer()
+        registerLifecycleObservers()
+    }
+
+    /// When the app enters background, iOS blocks GPU submissions
+    /// (`kIOGPUCommandBufferCallbackErrorBackgroundExecutionNotPermitted`)
+    /// — a running CADisplayLink floods the log and stalls the system
+    /// MediaPlayer UI. Pausing the link lets mpv continue decoding
+    /// audio while stopping all GL work until we're foreground again.
+    private func registerLifecycleObservers() {
+        let nc = NotificationCenter.default
+        nc.addObserver(
+            self,
+            selector: #selector(handleDidEnterBackground),
+            name: UIApplication.didEnterBackgroundNotification,
+            object: nil
+        )
+        nc.addObserver(
+            self,
+            selector: #selector(handleWillEnterForeground),
+            name: UIApplication.willEnterForegroundNotification,
+            object: nil
+        )
+    }
+
+    @objc private func handleDidEnterBackground() {
+        displayLink?.isPaused = true
+    }
+
+    @objc private func handleWillEnterForeground() {
+        displayLink?.isPaused = false
+        needsRender = true
     }
 
     private func setupLayer() {
@@ -366,6 +398,7 @@ final class MpvGLView: UIView {
     }
 
     deinit {
+        NotificationCenter.default.removeObserver(self)
         tearDown()
     }
 }

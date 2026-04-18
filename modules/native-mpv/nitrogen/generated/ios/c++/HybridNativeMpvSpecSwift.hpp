@@ -24,6 +24,10 @@ namespace margelo::nitro::nativempv { enum class MpvPlaybackState; }
 namespace margelo::nitro::nativempv { struct MpvAudioTrack; }
 // Forward declaration of `MpvSubtitleTrack` to properly resolve imports.
 namespace margelo::nitro::nativempv { struct MpvSubtitleTrack; }
+// Forward declaration of `MpvNowPlayingInfo` to properly resolve imports.
+namespace margelo::nitro::nativempv { struct MpvNowPlayingInfo; }
+// Forward declaration of `MpvRemoteCommand` to properly resolve imports.
+namespace margelo::nitro::nativempv { enum class MpvRemoteCommand; }
 
 #include <string>
 #include "MpvLoadOptions.hpp"
@@ -35,6 +39,10 @@ namespace margelo::nitro::nativempv { struct MpvSubtitleTrack; }
 #include "MpvPlaybackState.hpp"
 #include "MpvAudioTrack.hpp"
 #include "MpvSubtitleTrack.hpp"
+#include <NitroModules/Null.hpp>
+#include "MpvNowPlayingInfo.hpp"
+#include <variant>
+#include "MpvRemoteCommand.hpp"
 
 #include "NativeMpv-Swift-Cxx-Umbrella.hpp"
 
@@ -205,6 +213,20 @@ namespace margelo::nitro::nativempv {
     }
     inline MpvListener addBufferingListener(const std::function<void(bool /* isBuffering */, double /* progress */)>& onBuffering) override {
       auto __result = _swiftPart.addBufferingListener(onBuffering);
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
+    inline void setNowPlayingMetadata(const std::optional<std::variant<nitro::NullType, MpvNowPlayingInfo>>& info) override {
+      auto __result = _swiftPart.setNowPlayingMetadata(info);
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+    }
+    inline MpvListener addRemoteCommandListener(const std::function<void(MpvRemoteCommand /* command */, double /* value */)>& onRemoteCommand) override {
+      auto __result = _swiftPart.addRemoteCommandListener(onRemoteCommand);
       if (__result.hasError()) [[unlikely]] {
         std::rethrow_exception(__result.error());
       }

@@ -33,6 +33,8 @@ namespace margelo::nitro::nativempv {
       prototype.registerHybridMethod("addErrorListener", &HybridNativeMpvSpec::addErrorListener);
       prototype.registerHybridMethod("addTracksListener", &HybridNativeMpvSpec::addTracksListener);
       prototype.registerHybridMethod("addBufferingListener", &HybridNativeMpvSpec::addBufferingListener);
+      prototype.registerHybridMethod("setNowPlayingMetadata", &HybridNativeMpvSpec::setNowPlayingMetadata);
+      prototype.registerHybridMethod("addRemoteCommandListener", &HybridNativeMpvSpec::addRemoteCommandListener);
     });
   }
 

@@ -20,8 +20,12 @@ namespace margelo::nitro::nativempv { struct MpvExternalSubtitle; }
 namespace margelo::nitro::nativempv { struct MpvListener; }
 // Forward declaration of `MpvLoadOptions` to properly resolve imports.
 namespace margelo::nitro::nativempv { struct MpvLoadOptions; }
+// Forward declaration of `MpvNowPlayingInfo` to properly resolve imports.
+namespace margelo::nitro::nativempv { struct MpvNowPlayingInfo; }
 // Forward declaration of `MpvPlaybackState` to properly resolve imports.
 namespace margelo::nitro::nativempv { enum class MpvPlaybackState; }
+// Forward declaration of `MpvRemoteCommand` to properly resolve imports.
+namespace margelo::nitro::nativempv { enum class MpvRemoteCommand; }
 // Forward declaration of `MpvSubtitleTrack` to properly resolve imports.
 namespace margelo::nitro::nativempv { struct MpvSubtitleTrack; }
 
@@ -32,14 +36,18 @@ namespace margelo::nitro::nativempv { struct MpvSubtitleTrack; }
 #include "MpvExternalSubtitle.hpp"
 #include "MpvListener.hpp"
 #include "MpvLoadOptions.hpp"
+#include "MpvNowPlayingInfo.hpp"
 #include "MpvPlaybackState.hpp"
+#include "MpvRemoteCommand.hpp"
 #include "MpvSubtitleTrack.hpp"
+#include <NitroModules/Null.hpp>
 #include <NitroModules/Result.hpp>
 #include <exception>
 #include <functional>
 #include <memory>
 #include <optional>
 #include <string>
+#include <variant>
 #include <vector>
 
 // C++ helpers for Swift

@@ -375,4 +375,51 @@ open class HybridNativeMpvSpec_cxx {
       return bridge.create_Result_MpvListener_(__exceptionPtr)
     }
   }
+  
+  @inline(__always)
+  public final func setNowPlayingMetadata(info: bridge.std__optional_std__variant_nitro__NullType__MpvNowPlayingInfo__) -> bridge.Result_void_ {
+    do {
+      try self.__implementation.setNowPlayingMetadata(info: { () -> Variant_NullType_MpvNowPlayingInfo? in
+        if bridge.has_value_std__optional_std__variant_nitro__NullType__MpvNowPlayingInfo__(info) {
+          let __unwrapped = bridge.get_std__optional_std__variant_nitro__NullType__MpvNowPlayingInfo__(info)
+          return { () -> Variant_NullType_MpvNowPlayingInfo in
+            let __variant = bridge.std__variant_nitro__NullType__MpvNowPlayingInfo_(__unwrapped)
+            switch __variant.index() {
+              case 0:
+                let __actual = __variant.get_0()
+                return .first(NullType.null)
+              case 1:
+                let __actual = __variant.get_1()
+                return .second(__actual)
+              default:
+                fatalError("Variant can never have index \(__variant.index())!")
+            }
+          }()
+        } else {
+          return nil
+        }
+      }())
+      return bridge.create_Result_void_()
+    } catch (let __error) {
+      let __exceptionPtr = __error.toCpp()
+      return bridge.create_Result_void_(__exceptionPtr)
+    }
+  }
+  
+  @inline(__always)
+  public final func addRemoteCommandListener(onRemoteCommand: bridge.Func_void_MpvRemoteCommand_double) -> bridge.Result_MpvListener_ {
+    do {
+      let __result = try self.__implementation.addRemoteCommandListener(onRemoteCommand: { () -> (MpvRemoteCommand, Double) -> Void in
+        let __wrappedFunction = bridge.wrap_Func_void_MpvRemoteCommand_double(onRemoteCommand)
+        return { (__command: MpvRemoteCommand, __value: Double) -> Void in
+          __wrappedFunction.call(__command.rawValue, __value)
+        }
+      }())
+      let __resultCpp = __result
+      return bridge.create_Result_MpvListener_(__resultCpp)
+    } catch (let __error) {
+      let __exceptionPtr = __error.toCpp()
+      return bridge.create_Result_MpvListener_(__exceptionPtr)
+    }
+  }
 }

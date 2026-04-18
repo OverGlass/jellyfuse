@@ -17,7 +17,12 @@
 import AVFoundation
 import Foundation
 import Libmpv
+import MediaPlayer
 import NitroModules
+import os.log
+import UIKit
+
+private let npLog = OSLog(subsystem: "com.jellyfuse.app", category: "NativeMpv")
 
 // MARK: - HybridNativeMpv
 
@@ -81,6 +86,24 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
     private var errorSubs: [Subscription<(String) -> Void>] = []
     private var tracksSubs: [Subscription<([MpvAudioTrack], [MpvSubtitleTrack]) -> Void>] = []
     private var bufferingSubs: [Subscription<(Bool, Double) -> Void>] = []
+    private var remoteSubs: [Subscription<(MpvRemoteCommand, Double) -> Void>] = []
+
+    // Cached now-playing base dict. Elapsed time + rate are merged on
+    // every progress/pause update so the lock-screen scrubber stays in
+    // sync. `nil` means the session hasn't published metadata yet — in
+    // that case we skip the MPNowPlayingInfoCenter writes entirely.
+    private var nowPlayingBase: [String: Any]?
+    private var remoteCommandsRegistered = false
+
+    // Silent AVAudioPlayer "primer" — plays 1 s of silence on loop at
+    // volume 0 whenever mpv is unpaused. libmpv's `ao_audiounit` uses
+    // a raw RemoteIO AudioUnit which iOS doesn't recognize as a media
+    // engine, so our app never qualifies for the Now Playing UI. Having
+    // an AVAudioPlayer alive in the same process is enough to flip that
+    // designation. Volume 0 + sampleRate 8 kHz mono keeps CPU / battery
+    // overhead negligible; it only runs while the user is actively
+    // watching, not 24/7.
+    private var silentPrimer: AVAudioPlayer?
 
     // MARK: Initialization
 
@@ -201,7 +224,9 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
 
     public func setRate(rate: Double) throws {
         let clamped = max(0.25, min(3.0, rate))
+        currentRate = clamped
         try setProperty(name: "speed", value: String(clamped))
+        refreshNowPlaying()
     }
 
     public func setVolume(volume: Double) throws {
@@ -280,15 +305,321 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         }
     }
 
+    public func addRemoteCommandListener(
+        onRemoteCommand: @escaping (MpvRemoteCommand, Double) -> Void
+    ) throws -> MpvListener {
+        let sub = Subscription(onRemoteCommand)
+        remoteSubs.append(sub)
+        registerRemoteCommandsIfNeeded()
+        return makeListener { [weak self] in
+            self?.remoteSubs.removeAll { $0 === sub }
+        }
+    }
+
+    // MARK: Now-Playing + Remote Command Center
+
+    public func setNowPlayingMetadata(info: Variant_NullType_MpvNowPlayingInfo?) throws {
+        // Serialise all now-playing mutations on the main thread to
+        // avoid races with the mpv event thread (which calls
+        // `refreshNowPlaying` from property observers).
+        switch info {
+        case .none, .some(.first):
+            os_log("setNowPlayingMetadata: CLEAR", log: npLog, type: .default)
+            NSLog("[NativeMpv] setNowPlayingMetadata: CLEAR")
+            DispatchQueue.main.async { [weak self] in
+                self?.nowPlayingBase = nil
+                MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+            }
+        case .some(.second(let payload)):
+            let title = payload.title
+            let subtitle = payload.subtitle
+            let artworkUri = payload.artworkUri
+            let duration = payload.durationSeconds
+            let isLive = payload.isLiveStream ?? false
+            os_log("setNowPlayingMetadata: title=%{public}@ subtitle=%{public}@ art=%{public}@ dur=%{public}f",
+                   log: npLog, type: .default,
+                   title, subtitle ?? "-", artworkUri ?? "-", duration ?? -1)
+            NSLog("[NativeMpv] setNowPlayingMetadata: title=%@ sub=%@ dur=%f",
+                  title as NSString,
+                  (subtitle ?? "-") as NSString,
+                  duration ?? -1)
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.registerRemoteCommandsIfNeeded()
+                var base: [String: Any] = [:]
+                base[MPMediaItemPropertyTitle] = title
+                if let subtitle = subtitle, !subtitle.isEmpty {
+                    base[MPMediaItemPropertyArtist] = subtitle
+                }
+                if let duration = duration, duration > 0 {
+                    base[MPMediaItemPropertyPlaybackDuration] = duration
+                }
+                base[MPNowPlayingInfoPropertyIsLiveStream] = isLive
+                base[MPNowPlayingInfoPropertyMediaType] = MPNowPlayingInfoMediaType.video.rawValue
+                self.nowPlayingBase = base
+                self.refreshNowPlayingOnMain()
+                if let uri = artworkUri, let url = URL(string: uri) {
+                    self.loadArtwork(from: url)
+                }
+            }
+        }
+    }
+
+    private func registerRemoteCommandsIfNeeded() {
+        if remoteCommandsRegistered { return }
+        remoteCommandsRegistered = true
+
+        let center = MPRemoteCommandCenter.shared()
+
+        center.playCommand.isEnabled = true
+        center.playCommand.addTarget { [weak self] _ in
+            self?.fireRemoteCommand(.play, 0)
+            return .success
+        }
+        center.pauseCommand.isEnabled = true
+        center.pauseCommand.addTarget { [weak self] _ in
+            self?.fireRemoteCommand(.pause, 0)
+            return .success
+        }
+        center.togglePlayPauseCommand.isEnabled = true
+        center.togglePlayPauseCommand.addTarget { [weak self] _ in
+            self?.fireRemoteCommand(.toggleplaypause, 0)
+            return .success
+        }
+
+        center.skipForwardCommand.isEnabled = true
+        center.skipForwardCommand.preferredIntervals = [15]
+        center.skipForwardCommand.addTarget { [weak self] _ in
+            self?.fireRemoteCommand(.skipforward, 15)
+            return .success
+        }
+        center.skipBackwardCommand.isEnabled = true
+        center.skipBackwardCommand.preferredIntervals = [15]
+        center.skipBackwardCommand.addTarget { [weak self] _ in
+            self?.fireRemoteCommand(.skipbackward, 15)
+            return .success
+        }
+
+        center.changePlaybackPositionCommand.isEnabled = true
+        center.changePlaybackPositionCommand.addTarget { [weak self] event in
+            guard let self = self,
+                  let event = event as? MPChangePlaybackPositionCommandEvent else {
+                return .commandFailed
+            }
+            self.fireRemoteCommand(.changeplaybackposition, event.positionTime)
+            return .success
+        }
+
+        // Episode nav lands later — disable so iOS doesn't render
+        // no-op next/previous buttons on the lock screen.
+        center.nextTrackCommand.isEnabled = false
+        center.previousTrackCommand.isEnabled = false
+    }
+
+    private func fireRemoteCommand(_ cmd: MpvRemoteCommand, _ value: Double) {
+        let snapshot = remoteSubs
+        DispatchQueue.main.async {
+            for s in snapshot { s.callback(cmd, value) }
+        }
+    }
+
+    /// Called from mpv event thread — hops to main and runs the
+    /// serialised refresh there.
+    private func refreshNowPlaying() {
+        DispatchQueue.main.async { [weak self] in
+            self?.refreshNowPlayingOnMain()
+        }
+    }
+
+    /// Main-thread only. Reads `nowPlayingBase` + live playback state
+    /// and writes the merged dict to `MPNowPlayingInfoCenter`.
+    private func refreshNowPlayingOnMain() {
+        dispatchPrecondition(condition: .onQueue(.main))
+        guard var info = nowPlayingBase else { return }
+        info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = currentPosition
+        if currentDuration > 0 {
+            info[MPMediaItemPropertyPlaybackDuration] = currentDuration
+        }
+        info[MPNowPlayingInfoPropertyPlaybackRate] = isPausedNow ? 0.0 : currentRate
+        info[MPNowPlayingInfoPropertyDefaultPlaybackRate] = 1.0
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+        // Note: `MPNowPlayingInfoCenter.playbackState` requires the
+        // private `com.apple.mediaremote.set-playback-state` entitlement
+        // (Music/Podcasts only). Third-party apps communicate state via
+        // `MPNowPlayingInfoPropertyPlaybackRate` in the dict above.
+        let session = AVAudioSession.sharedInstance()
+        os_log("refreshNowPlaying pos=%{public}f dur=%{public}f rate=%{public}f session.cat=%{public}@ session.mode=%{public}@ otherAudio=%{public}d",
+               log: npLog, type: .default,
+               currentPosition, currentDuration,
+               info[MPNowPlayingInfoPropertyPlaybackRate] as? Double ?? -1,
+               session.category.rawValue,
+               session.mode.rawValue,
+               session.isOtherAudioPlaying ? 1 : 0)
+    }
+
+    private func throttledRefreshNowPlaying() {
+        let now = Date().timeIntervalSince1970
+        if now - lastNowPlayingRefreshAt < 1.0 { return }
+        lastNowPlayingRefreshAt = now
+        refreshNowPlaying()
+    }
+
+    /// Applies our desired AVAudioSession configuration — `.playback`
+    /// category, `.moviePlayback` mode, `.longFormVideo` route-sharing
+    /// policy, no options (explicitly non-mixable). Safe to call from
+    /// any thread; hops to main internally so writes are serialised.
+    ///
+    /// Called once at mpv-handle creation AND again whenever libmpv's
+    /// `ao_audiounit` signals an audio reconfig (via the `audio-params`
+    /// property observer) — without the re-apply, mpv's 3-arg
+    /// `setCategory` clobbers our policy every time the AO restarts
+    /// (e.g. route change, audio device change, first audio frame on a
+    /// new file).
+    private func applyAudioSessionConfig() {
+        let work = {
+            let session = AVAudioSession.sharedInstance()
+            if #available(iOS 13.0, *) {
+                try? session.setCategory(
+                    .playback,
+                    mode: .moviePlayback,
+                    policy: .longFormVideo,
+                    options: []
+                )
+            } else {
+                try? session.setCategory(.playback, mode: .moviePlayback)
+            }
+            try? session.setActive(true)
+        }
+        if Thread.isMainThread {
+            work()
+        } else {
+            DispatchQueue.main.async(execute: work)
+        }
+    }
+
+    /// Builds a 1 s silent 8 kHz mono 16-bit PCM WAV and starts playing
+    /// it on loop at volume 0. Must be called on main.
+    private func startSilentPrimerOnMain() {
+        dispatchPrecondition(condition: .onQueue(.main))
+        if silentPrimer != nil { return }
+        let sampleRate: UInt32 = 8000
+        let channels: UInt16 = 1
+        let bitsPerSample: UInt16 = 16
+        let numSamples: UInt32 = sampleRate
+        let dataSize: UInt32 = numSamples * UInt32(bitsPerSample / 8)
+        let byteRate: UInt32 = sampleRate * UInt32(bitsPerSample / 8)
+        let blockAlign: UInt16 = channels * (bitsPerSample / 8)
+
+        var wav = Data(capacity: 44 + Int(dataSize))
+        func appendLE<T: FixedWidthInteger>(_ value: T) {
+            var v = value.littleEndian
+            withUnsafeBytes(of: &v) { wav.append(contentsOf: $0) }
+        }
+        wav.append(contentsOf: [0x52, 0x49, 0x46, 0x46]) // "RIFF"
+        appendLE(UInt32(36 + dataSize))                   // file size - 8
+        wav.append(contentsOf: [0x57, 0x41, 0x56, 0x45]) // "WAVE"
+        wav.append(contentsOf: [0x66, 0x6D, 0x74, 0x20]) // "fmt "
+        appendLE(UInt32(16))                              // fmt chunk size
+        appendLE(UInt16(1))                               // PCM
+        appendLE(channels)
+        appendLE(sampleRate)
+        appendLE(byteRate)
+        appendLE(blockAlign)
+        appendLE(bitsPerSample)
+        wav.append(contentsOf: [0x64, 0x61, 0x74, 0x61]) // "data"
+        appendLE(dataSize)
+        wav.append(Data(count: Int(dataSize)))           // silence
+
+        do {
+            let player = try AVAudioPlayer(data: wav, fileTypeHint: AVFileType.wav.rawValue)
+            player.numberOfLoops = -1
+            player.volume = 0
+            player.prepareToPlay()
+            player.play()
+            silentPrimer = player
+            os_log("silent primer started", log: npLog, type: .default)
+        } catch {
+            NSLog("%{public}@", "[NativeMpv] silent primer failed: \(error)")
+        }
+    }
+
+    private func setSilentPrimerPlaying(_ playing: Bool) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, let primer = self.silentPrimer else { return }
+            if playing {
+                if !primer.isPlaying { primer.play() }
+            } else {
+                if primer.isPlaying { primer.pause() }
+            }
+        }
+    }
+
+    private func loadArtwork(from url: URL) {
+        URLSession.shared.dataTask(with: url) { [weak self] data, _, error in
+            if let error = error {
+                NSLog("%{public}@", "[NativeMpv] artwork fetch failed: \(error)")
+                return
+            }
+            guard let self = self,
+                  let data = data,
+                  let image = UIImage(data: data) else {
+                NSLog("%{public}@", "[NativeMpv] artwork decode failed")
+                return
+            }
+            let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self, var info = self.nowPlayingBase else { return }
+                info[MPMediaItemPropertyArtwork] = artwork
+                self.nowPlayingBase = info
+                self.refreshNowPlayingOnMain()
+            }
+        }.resume()
+    }
+
     // MARK: - Private
 
     private func createMpvHandle() -> OpaquePointer? {
         guard let mpv = mpv_create() else { return nil }
 
         // Audio session: .playback ignores the silent switch and
-        // allows background audio. Standard for media players.
-        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
-        try? AVAudioSession.sharedInstance().setActive(true)
+        // allows background audio. `.longFormVideo` route-sharing
+        // policy (iOS 13+) tells the MediaRemote daemon explicitly
+        // that this session is long-form video — which is the
+        // documented API for apps that don't use AVPlayer to become
+        // a Now Playing candidate.
+        //
+        // NOTE: libmpv's ao_audiounit.m also configures AVAudioSession
+        // when its audio output initializes, using the 3-arg
+        // setCategory(.playback, options:) API. Without the
+        // `audio-exclusive=yes` mpv option, it adds `mixWithOthers` —
+        // which per WWDC22 session 110338 disqualifies us from Now
+        // Playing. `audio-exclusive=yes` below makes mpv omit that
+        // option. The 3-arg call also drops routeSharingPolicy back to
+        // .default, so we re-apply the 4-arg config whenever mpv
+        // signals an audio-params change (see `audio-params` case in
+        // handlePropertyChange).
+        applyAudioSessionConfig()
+
+        // Pre-populate a placeholder now-playing dict + register
+        // remote commands BEFORE audio starts. iOS decides "who is the
+        // now-playing app" at the moment audio begins flowing through
+        // the session — if nowPlayingInfo is empty at that instant
+        // (e.g. because the JS-side title hasn't arrived yet), iOS
+        // picks nobody and doesn't re-evaluate on later writes.
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.startSilentPrimerOnMain()
+            self.registerRemoteCommandsIfNeeded()
+            if self.nowPlayingBase == nil {
+                var base: [String: Any] = [:]
+                base[MPMediaItemPropertyTitle] = "Jellyfuse"
+                base[MPNowPlayingInfoPropertyMediaType] = MPNowPlayingInfoMediaType.video.rawValue
+                base[MPNowPlayingInfoPropertyIsLiveStream] = false
+                self.nowPlayingBase = base
+                self.refreshNowPlayingOnMain()
+                os_log("pre-populated placeholder nowPlayingInfo", log: npLog, type: .default)
+            }
+        }
 
         // Defaults matching the Rust backend:
         // - videotoolbox-copy hwdec fixed the color correctness issue
@@ -303,6 +634,11 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         // after creating the render context.
         _ = mpv_set_option_string(mpv, "pause", "yes")
         _ = mpv_set_option_string(mpv, "audio-device", "auto")
+        // CRITICAL: prevents ao_audiounit from OR'ing
+        // `AVAudioSessionCategoryOptionMixWithOthers` into our session
+        // when audio output starts. A mixable session is explicitly
+        // disqualified from Now Playing by iOS. See note above.
+        _ = mpv_set_option_string(mpv, "audio-exclusive", "yes")
         _ = mpv_set_option_string(mpv, "cache", "yes")
         _ = mpv_set_option_string(mpv, "demuxer-max-bytes", "50MiB")
         _ = mpv_set_option_string(mpv, "demuxer-max-back-bytes", "25MiB")
@@ -320,6 +656,11 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         mpv_observe_property(mpv, 5, "track-list", MPV_FORMAT_NODE)
         mpv_observe_property(mpv, 6, "paused-for-cache", MPV_FORMAT_FLAG)
         mpv_observe_property(mpv, 7, "cache-buffering-state", MPV_FORMAT_DOUBLE)
+        // audio-params fires whenever the AO is (re)configured; we
+        // use it as our signal to re-apply AVAudioSession since
+        // ao_audiounit has just called setCategory(.playback, options:)
+        // which drops routeSharingPolicy back to .default.
+        mpv_observe_property(mpv, 8, "audio-params", MPV_FORMAT_NODE)
 
         // Background thread pumping `mpv_wait_event`. Phase 3b may
         // merge this with the render context's update callback.
@@ -348,6 +689,25 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         errorSubs.removeAll()
         tracksSubs.removeAll()
         bufferingSubs.removeAll()
+        remoteSubs.removeAll()
+        nowPlayingBase = nil
+        DispatchQueue.main.async { [weak self] in
+            MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+            self?.silentPrimer?.stop()
+            self?.silentPrimer = nil
+        }
+        if remoteCommandsRegistered {
+            let center = MPRemoteCommandCenter.shared()
+            center.playCommand.removeTarget(nil)
+            center.pauseCommand.removeTarget(nil)
+            center.togglePlayPauseCommand.removeTarget(nil)
+            center.skipForwardCommand.removeTarget(nil)
+            center.skipBackwardCommand.removeTarget(nil)
+            center.changePlaybackPositionCommand.removeTarget(nil)
+            center.nextTrackCommand.removeTarget(nil)
+            center.previousTrackCommand.removeTarget(nil)
+            remoteCommandsRegistered = false
+        }
         if let mpv = self.mpv {
             mpv_terminate_destroy(mpv)
             self.mpv = nil
@@ -377,6 +737,12 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
     // Cached values so we can fire progress with both pos + dur
     private var currentPosition: Double = 0
     private var currentDuration: Double = 0
+    private var currentRate: Double = 1.0
+    private var isPausedNow: Bool = true
+    // Throttle MPNowPlayingInfoCenter writes to ~1 Hz — libmpv fires
+    // `playback-time` observers much more frequently than the lock
+    // screen UI needs.
+    private var lastNowPlayingRefreshAt: TimeInterval = 0
 
     private func handlePropertyChange(_ event: mpv_event) {
         guard let dataPtr = event.data else { return }
@@ -390,16 +756,21 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
             currentPosition = valPtr.assumingMemoryBound(to: Double.self).pointee
             let snap = progressSubs
             for s in snap { s.callback(currentPosition, currentDuration) }
+            throttledRefreshNowPlaying()
 
         case "duration":
             guard prop.format == MPV_FORMAT_DOUBLE, let valPtr = prop.data else { return }
             currentDuration = valPtr.assumingMemoryBound(to: Double.self).pointee
+            refreshNowPlaying()
 
         case "pause":
             guard prop.format == MPV_FORMAT_FLAG, let valPtr = prop.data else { return }
             let paused = valPtr.assumingMemoryBound(to: Int32.self).pointee != 0
+            isPausedNow = paused
             let state: MpvPlaybackState = paused ? .paused : .playing
             fireState(state)
+            setSilentPrimerPlaying(!paused)
+            refreshNowPlaying()
 
         case "eof-reached":
             guard prop.format == MPV_FORMAT_FLAG, let valPtr = prop.data else { return }
@@ -417,6 +788,15 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
             let progress = valPtr.assumingMemoryBound(to: Double.self).pointee / 100.0
             let snap = bufferingSubs
             for s in snap { s.callback(progress < 1.0, progress) }
+
+        case "audio-params":
+            // ao_audiounit just (re)configured AVAudioSession with its
+            // own 3-arg setCategory, blowing away our .longFormVideo
+            // policy. Re-apply ours so the Now Playing / MediaRemote
+            // pipeline sees us as a long-form-video candidate.
+            applyAudioSessionConfig()
+            os_log("re-applied AVAudioSession after audio-params change",
+                   log: npLog, type: .default)
 
         default:
             break

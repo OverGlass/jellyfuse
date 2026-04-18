@@ -18,8 +18,12 @@ namespace margelo::nitro::nativempv { struct MpvAudioTrack; }
 namespace margelo::nitro::nativempv { struct MpvExternalSubtitle; }
 // Forward declaration of `MpvListener` to properly resolve imports.
 namespace margelo::nitro::nativempv { struct MpvListener; }
+// Forward declaration of `MpvNowPlayingInfo` to properly resolve imports.
+namespace margelo::nitro::nativempv { struct MpvNowPlayingInfo; }
 // Forward declaration of `MpvPlaybackState` to properly resolve imports.
 namespace margelo::nitro::nativempv { enum class MpvPlaybackState; }
+// Forward declaration of `MpvRemoteCommand` to properly resolve imports.
+namespace margelo::nitro::nativempv { enum class MpvRemoteCommand; }
 // Forward declaration of `MpvSubtitleTrack` to properly resolve imports.
 namespace margelo::nitro::nativempv { struct MpvSubtitleTrack; }
 
@@ -35,14 +39,18 @@ namespace NativeMpv { class HybridNativeMpvSpec_cxx; }
 #include "MpvAudioTrack.hpp"
 #include "MpvExternalSubtitle.hpp"
 #include "MpvListener.hpp"
+#include "MpvNowPlayingInfo.hpp"
 #include "MpvPlaybackState.hpp"
+#include "MpvRemoteCommand.hpp"
 #include "MpvSubtitleTrack.hpp"
+#include <NitroModules/Null.hpp>
 #include <NitroModules/Result.hpp>
 #include <exception>
 #include <functional>
 #include <memory>
 #include <optional>
 #include <string>
+#include <variant>
 #include <vector>
 
 /**
@@ -280,6 +288,87 @@ namespace margelo::nitro::nativempv::bridge::swift {
   Func_void_bool_double create_Func_void_bool_double(void* NON_NULL swiftClosureWrapper) noexcept;
   inline Func_void_bool_double_Wrapper wrap_Func_void_bool_double(Func_void_bool_double value) noexcept {
     return Func_void_bool_double_Wrapper(std::move(value));
+  }
+  
+  // pragma MARK: std::optional<bool>
+  /**
+   * Specialized version of `std::optional<bool>`.
+   */
+  using std__optional_bool_ = std::optional<bool>;
+  inline std::optional<bool> create_std__optional_bool_(const bool& value) noexcept {
+    return std::optional<bool>(value);
+  }
+  inline bool has_value_std__optional_bool_(const std::optional<bool>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline bool get_std__optional_bool_(const std::optional<bool>& optional) noexcept {
+    return optional.value();
+  }
+  
+  // pragma MARK: std::variant<nitro::NullType, MpvNowPlayingInfo>
+  /**
+   * Wrapper struct for `std::variant<nitro::NullType, MpvNowPlayingInfo>`.
+   * std::variant cannot be used in Swift because of a Swift bug.
+   * Not even specializing it works. So we create a wrapper struct.
+   */
+  struct std__variant_nitro__NullType__MpvNowPlayingInfo_ final {
+    std::variant<nitro::NullType, MpvNowPlayingInfo> variant;
+    std__variant_nitro__NullType__MpvNowPlayingInfo_(std::variant<nitro::NullType, MpvNowPlayingInfo> variant): variant(variant) { }
+    operator std::variant<nitro::NullType, MpvNowPlayingInfo>() const noexcept {
+      return variant;
+    }
+    inline size_t index() const noexcept {
+      return variant.index();
+    }
+    inline nitro::NullType get_0() const noexcept {
+      return std::get<0>(variant);
+    }
+    inline MpvNowPlayingInfo get_1() const noexcept {
+      return std::get<1>(variant);
+    }
+  };
+  inline std__variant_nitro__NullType__MpvNowPlayingInfo_ create_std__variant_nitro__NullType__MpvNowPlayingInfo_(nitro::NullType value) noexcept {
+    return std__variant_nitro__NullType__MpvNowPlayingInfo_(value);
+  }
+  inline std__variant_nitro__NullType__MpvNowPlayingInfo_ create_std__variant_nitro__NullType__MpvNowPlayingInfo_(const MpvNowPlayingInfo& value) noexcept {
+    return std__variant_nitro__NullType__MpvNowPlayingInfo_(value);
+  }
+  
+  // pragma MARK: std::optional<std::variant<nitro::NullType, MpvNowPlayingInfo>>
+  /**
+   * Specialized version of `std::optional<std::variant<nitro::NullType, MpvNowPlayingInfo>>`.
+   */
+  using std__optional_std__variant_nitro__NullType__MpvNowPlayingInfo__ = std::optional<std::variant<nitro::NullType, MpvNowPlayingInfo>>;
+  inline std::optional<std::variant<nitro::NullType, MpvNowPlayingInfo>> create_std__optional_std__variant_nitro__NullType__MpvNowPlayingInfo__(const std::variant<nitro::NullType, MpvNowPlayingInfo>& value) noexcept {
+    return std::optional<std::variant<nitro::NullType, MpvNowPlayingInfo>>(value);
+  }
+  inline bool has_value_std__optional_std__variant_nitro__NullType__MpvNowPlayingInfo__(const std::optional<std::variant<nitro::NullType, MpvNowPlayingInfo>>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline std::variant<nitro::NullType, MpvNowPlayingInfo> get_std__optional_std__variant_nitro__NullType__MpvNowPlayingInfo__(const std::optional<std::variant<nitro::NullType, MpvNowPlayingInfo>>& optional) noexcept {
+    return optional.value();
+  }
+  
+  // pragma MARK: std::function<void(MpvRemoteCommand /* command */, double /* value */)>
+  /**
+   * Specialized version of `std::function<void(MpvRemoteCommand, double)>`.
+   */
+  using Func_void_MpvRemoteCommand_double = std::function<void(MpvRemoteCommand /* command */, double /* value */)>;
+  /**
+   * Wrapper class for a `std::function<void(MpvRemoteCommand / * command * /, double / * value * /)>`, this can be used from Swift.
+   */
+  class Func_void_MpvRemoteCommand_double_Wrapper final {
+  public:
+    explicit Func_void_MpvRemoteCommand_double_Wrapper(std::function<void(MpvRemoteCommand /* command */, double /* value */)>&& func): _function(std::make_unique<std::function<void(MpvRemoteCommand /* command */, double /* value */)>>(std::move(func))) {}
+    inline void call(int command, double value) const noexcept {
+      _function->operator()(static_cast<MpvRemoteCommand>(command), value);
+    }
+  private:
+    std::unique_ptr<std::function<void(MpvRemoteCommand /* command */, double /* value */)>> _function;
+  } SWIFT_NONCOPYABLE;
+  Func_void_MpvRemoteCommand_double create_Func_void_MpvRemoteCommand_double(void* NON_NULL swiftClosureWrapper) noexcept;
+  inline Func_void_MpvRemoteCommand_double_Wrapper wrap_Func_void_MpvRemoteCommand_double(Func_void_MpvRemoteCommand_double value) noexcept {
+    return Func_void_MpvRemoteCommand_double_Wrapper(std::move(value));
   }
   
   // pragma MARK: std::shared_ptr<HybridNativeMpvSpec>

@@ -115,6 +115,40 @@ export interface MpvSubtitleTrack {
   isDefault: boolean;
 }
 
+/**
+ * Now-playing metadata shown on the iOS lock screen / Control Center
+ * and (on Android) in the media-style notification. Pushed once per
+ * session via `setNowPlayingMetadata`; elapsed time + playback rate
+ * are kept in sync automatically from the existing progress + pause
+ * property observers. Pass `null` to clear (on stop / release).
+ */
+export interface MpvNowPlayingInfo {
+  title: string;
+  /** Shown under the title — "SeriesName · S01E02" or artist. */
+  subtitle?: string;
+  /** Absolute URL — "https://..." or "file://...". Downloaded + cached natively. */
+  artworkUri?: string;
+  /** Full duration in seconds. Omit for live streams. */
+  durationSeconds?: number;
+  /** Live-stream flag — hides scrubber, disables seek commands. */
+  isLiveStream?: boolean;
+}
+
+/**
+ * Remote-control commands dispatched from the lock screen /
+ * Control Center / AirPods. The optional `value` carries the
+ * scrub target (in seconds) for `changePlaybackPosition`.
+ */
+export type MpvRemoteCommand =
+  | "play"
+  | "pause"
+  | "togglePlayPause"
+  | "skipForward"
+  | "skipBackward"
+  | "changePlaybackPosition"
+  | "nextTrack"
+  | "previousTrack";
+
 // ──────────────────────────────────────────────────────────────────────────────
 // HybridObject
 // ──────────────────────────────────────────────────────────────────────────────
@@ -195,4 +229,26 @@ export interface NativeMpv extends HybridObject<{ ios: "swift" }> {
 
   /** Buffering / seek spinner. `progress` is 0–1 if mpv reports it, else 0. */
   addBufferingListener(onBuffering: (isBuffering: boolean, progress: number) => void): MpvListener;
+
+  // ── lock-screen / Control Center integration ────────────────────────────
+  /**
+   * Publish now-playing metadata to `MPNowPlayingInfoCenter` (iOS) or
+   * the MediaSession (Android, TBD). Pass `null` to clear — should be
+   * called on session teardown so the lock screen doesn't show stale
+   * info. Elapsed time + playback rate are auto-synced from the
+   * internal progress + pause observers.
+   */
+  setNowPlayingMetadata(info: MpvNowPlayingInfo | null): void;
+
+  /**
+   * Subscribe to remote-control events (lock screen buttons, AirPods
+   * double-tap, Control Center scrubber). JS is responsible for
+   * mapping the command to `play()` / `pause()` / `seek(...)` — the
+   * native side only dispatches, it does not mutate playback
+   * automatically. This keeps the business logic (skip-intro, next
+   * episode queue, etc.) in one place.
+   */
+  addRemoteCommandListener(
+    onRemoteCommand: (command: MpvRemoteCommand, value: number) => void,
+  ): MpvListener;
 }
