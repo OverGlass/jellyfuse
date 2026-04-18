@@ -79,6 +79,14 @@ namespace margelo::nitro::nativempv::bridge::swift {
     };
   }
   
+  // pragma MARK: std::function<void(MpvRemoteCommand /* command */, double /* value */)>
+  Func_void_MpvRemoteCommand_double create_Func_void_MpvRemoteCommand_double(void* NON_NULL swiftClosureWrapper) noexcept {
+    auto swiftClosure = NativeMpv::Func_void_MpvRemoteCommand_double::fromUnsafe(swiftClosureWrapper);
+    return [swiftClosure = std::move(swiftClosure)](MpvRemoteCommand command, double value) mutable -> void {
+      swiftClosure.call(static_cast<int>(command), value);
+    };
+  }
+  
   // pragma MARK: std::shared_ptr<HybridNativeMpvSpec>
   std::shared_ptr<HybridNativeMpvSpec> create_std__shared_ptr_HybridNativeMpvSpec_(void* NON_NULL swiftUnsafePointer) noexcept {
     NativeMpv::HybridNativeMpvSpec_cxx swiftPart = NativeMpv::HybridNativeMpvSpec_cxx::fromUnsafe(swiftUnsafePointer);

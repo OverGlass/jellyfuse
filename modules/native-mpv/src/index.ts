@@ -6,7 +6,9 @@ export type {
   MpvExternalSubtitle,
   MpvListener,
   MpvLoadOptions,
+  MpvNowPlayingInfo,
   MpvPlaybackState,
+  MpvRemoteCommand,
   MpvSubtitleTrack,
   NativeMpv,
 } from "./NativeMpv.nitro";

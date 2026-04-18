@@ -15,6 +15,7 @@ import { ControlsOverlay } from "../components/controls-overlay";
 import { SkipSegmentPill } from "../components/skip-segment-pill";
 import { TrackPicker } from "../components/track-picker";
 import { useMpvPlayer } from "../hooks/use-mpv-player";
+import { useNowPlaying } from "../hooks/use-now-playing";
 import {
   useIntroSkipperSegments,
   usePlaybackInfo,
@@ -90,6 +91,27 @@ export function PlayerScreen({ jellyfinId }: Props) {
     mpvRef: player.mpv,
     resolved,
     baseUrl: serverUrl,
+  });
+
+  // Lock-screen / Control Center metadata + remote-control wiring.
+  // Episode subtitle format mirrors the Rust UI: "Series · S01E02".
+  const subtitle = detail.data?.seriesName
+    ? detail.data.seasonNumber && detail.data.episodeNumber
+      ? `${detail.data.seriesName} · S${String(detail.data.seasonNumber).padStart(2, "0")}E${String(detail.data.episodeNumber).padStart(2, "0")}`
+      : detail.data.seriesName
+    : undefined;
+  useNowPlaying({
+    mpv: player.mpv,
+    title: detail.data?.title,
+    subtitle,
+    artworkUri: detail.data?.posterUrl,
+    durationSeconds: player.duration > 0 ? player.duration : undefined,
+    isPlaying: player.isPlaying,
+    position: player.position,
+    duration: player.duration,
+    onPlay: player.play,
+    onPause: player.pause,
+    onSeek: player.seek,
   });
 
   const [trackPickerOpen, setTrackPickerOpen] = useState(false);

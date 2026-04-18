@@ -26,6 +26,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     appleTeamId: "39TMVBW2CY",
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
+      UIBackgroundModes: ["audio"],
     },
   },
   android: {
