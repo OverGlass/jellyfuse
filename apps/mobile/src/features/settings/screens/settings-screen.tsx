@@ -25,7 +25,8 @@
 import { useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Animated from "react-native-reanimated";
+import Animated, { useAnimatedScrollHandler } from "react-native-reanimated";
+import { scheduleOnRN } from "react-native-worklets";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   colors,
@@ -41,6 +42,7 @@ import { router } from "expo-router";
 import { ScreenHeader } from "@/features/common/components/screen-header";
 import { StatusBarScrim } from "@/features/common/components/status-bar-scrim";
 import { useFloatingHeaderScroll } from "@/features/common/hooks/use-floating-header-scroll";
+import { useRestoredScroll } from "@/features/common/hooks/use-restored-scroll";
 import { PILL_TAB_CLEARANCE } from "@/features/common/components/pill-tab-bar";
 import { useAuth } from "@/services/auth/state";
 import {
@@ -49,6 +51,7 @@ import {
 } from "@/services/query/hooks/use-user-configuration";
 import { useLocalSettings, useUpdateLocalSettings } from "@/services/settings/use-local-settings";
 import { useScreenGutters } from "@/services/responsive";
+import { JellyseerrReconnectModal } from "../components/jellyseerr-reconnect-modal";
 import { SettingsPickerModal } from "../components/settings-picker-modal";
 import { SettingsRow } from "../components/settings-row";
 import { SettingsSection } from "../components/settings-section";
@@ -58,22 +61,43 @@ import { STREAMING_BITRATE_OPTIONS, labelForBitrate } from "../data/bitrate-opti
 
 const AnimatedScrollView = Animated.createAnimatedComponent(ScrollView);
 
-type PickerKind = "audioLang" | "subtitleLang" | "subtitleMode" | "bitrate" | null;
+type PickerKind =
+  | "audioLang"
+  | "subtitleLang"
+  | "subtitleMode"
+  | "bitrate"
+  | "jellyseerrReconnect"
+  | null;
 
 export function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const gutters = useScreenGutters();
   const queryClient = useQueryClient();
-  const { activeUser, serverUrl, serverVersion, jellyseerrUrl, jellyseerrStatus, signOutAll } =
-    useAuth();
+  const {
+    activeUser,
+    serverUrl,
+    serverVersion,
+    jellyseerrUrl,
+    jellyseerrStatus,
+    jellyseerrLastError,
+    signOutAll,
+    reconnectJellyseerr,
+  } = useAuth();
   const { config } = useUserConfigurationOrDefault();
   const updateConfig = useUpdateUserConfiguration();
   const local = useLocalSettings();
   const updateLocal = useUpdateLocalSettings();
   const [picker, setPicker] = useState<PickerKind>(null);
 
-  const { headerHeight, onHeaderHeightChange, scrollHandler, backdropStyle } =
-    useFloatingHeaderScroll();
+  const { headerHeight, onHeaderHeightChange, scrollY, backdropStyle } = useFloatingHeaderScroll();
+  const scrollRestore = useRestoredScroll("/settings");
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      "worklet";
+      scrollY.value = event.contentOffset.y;
+      scheduleOnRN(scrollRestore.setOffset, event.contentOffset.y);
+    },
+  });
 
   const pillBottom = insets.bottom > 0 ? insets.bottom - 8 : 8;
   const listPaddingBottom = pillBottom + PILL_TAB_CLEARANCE + spacing.xl;
@@ -100,9 +124,13 @@ export function SettingsScreen() {
         text: "Sign out",
         style: "destructive",
         onPress: () => {
-          // Navigate first — the signOutAll mutation wipes query data,
-          // which would tear this screen mid-frame otherwise.
-          router.replace("/");
+          // Run the mutation first — its onSuccess flips
+          // PERSISTED_AUTH_KEY to the signed-out shape, which triggers
+          // every useAuth observer (incl. the (app) layout guard) to
+          // redirect through the root. Firing router.replace("/")
+          // before the mutation would mount IndexRoute while still
+          // authenticated, bouncing back to (app) before the state
+          // flipped.
           void signOutAll();
         },
       },
@@ -119,6 +147,10 @@ export function SettingsScreen() {
           text: "Change server",
           style: "destructive",
           onPress: () => {
+            // (auth) has no auth-based redirect, so we can navigate
+            // straight to the server screen and fire sign-out in the
+            // background. It runs while the server screen is mounted,
+            // which is fine — it doesn't read per-user data.
             router.replace("/(auth)/server");
             void signOutAll();
           },
@@ -130,6 +162,8 @@ export function SettingsScreen() {
   return (
     <View style={styles.container}>
       <AnimatedScrollView
+        ref={scrollRestore.ref}
+        onContentSizeChange={scrollRestore.onContentSizeChange}
         contentContainerStyle={{
           paddingTop: headerHeight + spacing.md,
           paddingBottom: listPaddingBottom,
@@ -264,18 +298,25 @@ export function SettingsScreen() {
         </SettingsSection>
 
         {jellyseerrUrl ? (
-          <SettingsSection title="Requests">
+          <SettingsSection
+            title="Requests"
+            footer={
+              jellyseerrStatus === "disconnected"
+                ? (jellyseerrLastError ??
+                  "Your Jellyseerr session expired. Reconnect with your Jellyfin password.")
+                : undefined
+            }
+          >
             <SettingsRow
               label="Jellyseerr"
               sublabel={jellyseerrUrl}
-              value={
-                jellyseerrStatus === "connected"
-                  ? "Connected"
-                  : jellyseerrStatus === "disconnected"
-                    ? "Disconnected"
-                    : "Not configured"
+              value={jellyseerrStatus === "connected" ? "Connected" : "Disconnected"}
+              showChevron={jellyseerrStatus === "disconnected"}
+              onPress={
+                jellyseerrStatus === "disconnected"
+                  ? () => setPicker("jellyseerrReconnect")
+                  : undefined
               }
-              showChevron={false}
               hasDivider={false}
             />
           </SettingsSection>
@@ -340,6 +381,16 @@ export function SettingsScreen() {
         onSelect={handleSelectBitrate}
         onClose={() => setPicker(null)}
       />
+      {jellyseerrUrl && activeUser ? (
+        <JellyseerrReconnectModal
+          visible={picker === "jellyseerrReconnect"}
+          username={activeUser.displayName}
+          baseUrl={jellyseerrUrl}
+          initialError={jellyseerrLastError}
+          onSubmit={(password) => reconnectJellyseerr({ password })}
+          onClose={() => setPicker(null)}
+        />
+      ) : null}
     </View>
   );
 }
