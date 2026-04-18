@@ -316,6 +316,13 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         }
     }
 
+    /// Exposed to `MpvGLView` so its PiP playback delegate can report
+    /// current timing without a second property round-trip to mpv.
+    var pipPosition: Double { currentPosition }
+    var pipDuration: Double { currentDuration }
+    var pipIsPaused: Bool { isPausedNow }
+    var pipRate: Double { currentRate }
+
     // MARK: Now-Playing + Remote Command Center
 
     public func setNowPlayingMetadata(info: Variant_NullType_MpvNowPlayingInfo?) throws {
