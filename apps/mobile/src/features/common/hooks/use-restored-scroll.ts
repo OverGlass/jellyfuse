@@ -4,16 +4,15 @@ import type { NativeScrollEvent, NativeSyntheticEvent } from "react-native";
 import { readScrollState, writeScrollState } from "@/services/nav-state/store";
 
 /**
- * Minimal shape of a scrollable we can restore — FlashList and
- * Animated.ScrollView both expose a `scrollToOffset` method on
- * their refs, which is all the hook needs. Declaring a narrow
- * interface avoids pulling the full FlashList generic type plumbing
- * into this file and lets future callers pass any scroller with the
- * same method.
+ * Minimal shape of a scrollable we can restore. FlashList exposes
+ * `scrollToOffset({ offset, animated })`; React Native's ScrollView
+ * (and `Animated.ScrollView`) exposes `scrollTo({ y, animated })`.
+ * The hook accepts either and dispatches to whichever method is
+ * present at restore time so the same hook works for every scroller.
  */
-interface Scrollable {
-  scrollToOffset: (args: { offset: number; animated: boolean }) => void;
-}
+type Scrollable =
+  | { scrollToOffset: (args: { offset: number; animated: boolean }) => void }
+  | { scrollTo: (args: { y: number; animated: boolean }) => void };
 
 /**
  * Hook that preserves a scroll offset across back-nav. Mirrors
@@ -101,7 +100,11 @@ export function useRestoredScroll(routeKey: string): RestoredScroll {
     if (!list) return;
     // First layout is now stable — scroll to the saved offset
     // without animating so the user doesn't see a flash.
-    list.scrollToOffset({ offset: saved.offset, animated: false });
+    if ("scrollToOffset" in list) {
+      list.scrollToOffset({ offset: saved.offset, animated: false });
+    } else {
+      list.scrollTo({ y: saved.offset, animated: false });
+    }
     restoredRef.current = true;
   }, [routeKey]);
 

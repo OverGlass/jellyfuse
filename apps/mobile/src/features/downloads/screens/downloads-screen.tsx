@@ -18,12 +18,14 @@ import type { DownloadRecord } from "@jellyfuse/models";
 import { FlashList } from "@shopify/flash-list";
 import { router } from "expo-router";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
-import Animated from "react-native-reanimated";
+import Animated, { useAnimatedScrollHandler } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { scheduleOnRN } from "react-native-worklets";
 import { NerdIcon } from "@/features/common/components/nerd-icon";
 import { ScreenHeader } from "@/features/common/components/screen-header";
 import { StatusBarScrim } from "@/features/common/components/status-bar-scrim";
 import { useFloatingHeaderScroll } from "@/features/common/hooks/use-floating-header-scroll";
+import { useRestoredScroll } from "@/features/common/hooks/use-restored-scroll";
 import { DownloadRow, type DownloadRowCallbacks } from "../components/download-row";
 import { useDownloaderActions, useLocalDownloads } from "@/services/downloads/use-local-downloads";
 import { PILL_TAB_CLEARANCE } from "@/features/common/components/pill-tab-bar";
@@ -60,8 +62,15 @@ export function DownloadsScreen() {
   const insets = useSafeAreaInsets();
 
   const sections = buildSections(records);
-  const { headerHeight, onHeaderHeightChange, scrollHandler, backdropStyle } =
-    useFloatingHeaderScroll();
+  const { headerHeight, onHeaderHeightChange, scrollY, backdropStyle } = useFloatingHeaderScroll();
+  const scrollRestore = useRestoredScroll("/downloads");
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      "worklet";
+      scrollY.value = event.contentOffset.y;
+      scheduleOnRN(scrollRestore.setOffset, event.contentOffset.y);
+    },
+  });
 
   const callbacks: DownloadRowCallbacks = {
     onPause: (id) => actions.pause(id),
@@ -118,6 +127,8 @@ export function DownloadsScreen() {
         </View>
       ) : (
         <AnimatedFlashList
+          ref={scrollRestore.ref}
+          onContentSizeChange={scrollRestore.onContentSizeChange}
           data={sections}
           keyExtractor={(item) =>
             item.type === "header" ? `header-${item.label}` : `row-${item.record.id}`
