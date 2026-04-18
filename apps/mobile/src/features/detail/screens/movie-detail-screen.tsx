@@ -3,7 +3,9 @@ import { router } from "expo-router";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import Animated, { useAnimatedScrollHandler, useSharedValue } from "react-native-reanimated";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { scheduleOnRN } from "react-native-worklets";
 import { BackButton } from "@/features/common/components/back-button";
+import { useRestoredScroll } from "@/features/common/hooks/use-restored-scroll";
 import { StatusBarScrim } from "@/features/common/components/status-bar-scrim";
 import { DetailActionRow } from "@/features/detail/components/detail-action-row";
 import { DetailHero } from "@/features/detail/components/detail-hero";
@@ -41,8 +43,13 @@ export function MovieDetailScreen({ itemId }: Props) {
   const gutters = useScreenGutters();
   const insets = useSafeAreaInsets();
   const scrollY = useSharedValue(0);
-  const scrollHandler = useAnimatedScrollHandler((event) => {
-    scrollY.value = event.contentOffset.y;
+  const scrollRestore = useRestoredScroll(`/detail/movie/${itemId}`);
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      "worklet";
+      scrollY.value = event.contentOffset.y;
+      scheduleOnRN(scrollRestore.setOffset, event.contentOffset.y);
+    },
   });
 
   function handleDownloadPress() {
@@ -79,6 +86,8 @@ export function MovieDetailScreen({ itemId }: Props) {
   return (
     <SafeAreaView style={styles.safe} edges={[]}>
       <Animated.ScrollView
+        ref={scrollRestore.ref}
+        onContentSizeChange={scrollRestore.onContentSizeChange}
         contentContainerStyle={[
           styles.scroll,
           { paddingBottom: insets.bottom + layout.screenPaddingBottom },

@@ -3,11 +3,13 @@ import { colors, fontSize, fontWeight, spacing } from "@jellyfuse/theme";
 import { FlashList } from "@shopify/flash-list";
 import { router } from "expo-router";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
-import Animated from "react-native-reanimated";
+import Animated, { useAnimatedScrollHandler } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { scheduleOnRN } from "react-native-worklets";
 import { ScreenHeader } from "@/features/common/components/screen-header";
 import { StatusBarScrim } from "@/features/common/components/status-bar-scrim";
 import { useFloatingHeaderScroll } from "@/features/common/hooks/use-floating-header-scroll";
+import { useRestoredScroll } from "@/features/common/hooks/use-restored-scroll";
 import { RequestRow } from "@/features/requests/components/request-row";
 import { useAuth } from "@/services/auth/state";
 import { useDownloadProgressMap, useJellyseerrRequests } from "@/services/query/hooks/use-requests";
@@ -44,8 +46,15 @@ export function RequestsScreen() {
   const requestsQuery = useJellyseerrRequests();
   const requests = requestsQuery.data ?? [];
   const { map: progressMap } = useDownloadProgressMap(requests);
-  const { headerHeight, onHeaderHeightChange, scrollHandler, backdropStyle } =
-    useFloatingHeaderScroll();
+  const { headerHeight, onHeaderHeightChange, scrollY, backdropStyle } = useFloatingHeaderScroll();
+  const scrollRestore = useRestoredScroll("/requests");
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      "worklet";
+      scrollY.value = event.contentOffset.y;
+      scheduleOnRN(scrollRestore.setOffset, event.contentOffset.y);
+    },
+  });
 
   if (jellyseerrStatus !== "connected") {
     return (
@@ -74,6 +83,8 @@ export function RequestsScreen() {
   return (
     <View style={styles.root}>
       <AnimatedFlashList
+        ref={scrollRestore.ref}
+        onContentSizeChange={scrollRestore.onContentSizeChange}
         data={requests}
         keyExtractor={(request) => `request-${request.id}`}
         contentContainerStyle={{
