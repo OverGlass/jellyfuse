@@ -177,13 +177,13 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
     var mpvHandle: OpaquePointer? { return mpv }
 
     /// Registered render views — must detach before mpv handle is destroyed.
-    private var attachedViews: [MpvGLView] = []
+    private var attachedViews: [MpvVideoView] = []
 
-    func registerView(_ view: MpvGLView) {
+    func registerView(_ view: MpvVideoView) {
         attachedViews.append(view)
     }
 
-    func unregisterView(_ view: MpvGLView) {
+    func unregisterView(_ view: MpvVideoView) {
         attachedViews.removeAll { $0 === view }
     }
 
@@ -535,7 +535,7 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         }
     }
 
-    /// Exposed to `MpvGLView` so its PiP playback delegate can report
+    /// Exposed to `MpvVideoView` so its PiP playback delegate can report
     /// current timing without a second property round-trip to mpv.
     var pipPosition: Double { currentPosition }
     var pipDuration: Double { currentDuration }
@@ -888,14 +888,14 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         //   the CPU readback + re-upload in a color-correct path.
         //   The true zero-copy win needs the Metal backend (`vo=gpu`
         //   / `gpu-next` + CAMetalLayer), not a hwdec flag change.
-        // - vid=no until MpvGLView.attach() plugs in the render context;
+        // - vid=no until the VideoSource plugs in a render context;
         //   otherwise libmpv tries to open a window on its own.
         _ = mpv_set_option_string(mpv, "hwdec", "videotoolbox-copy")
         _ = mpv_set_option_string(mpv, "vo", "libmpv")
         _ = mpv_set_option_string(mpv, "vid", "no")
         // Start paused — prevents mpv from freezing when vo=libmpv
-        // has no render context yet. MpvGLView.attach() unpauses
-        // after creating the render context.
+        // has no render context yet. MpvRenderContextSource.attach()
+        // unpauses after creating the render context.
         _ = mpv_set_option_string(mpv, "pause", "yes")
         _ = mpv_set_option_string(mpv, "audio-device", "auto")
         // CRITICAL: prevents ao_audiounit from OR'ing
