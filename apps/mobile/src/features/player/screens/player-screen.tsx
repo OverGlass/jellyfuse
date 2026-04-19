@@ -158,6 +158,7 @@ export function PlayerScreen({ jellyfinId }: Props) {
       {/* Intro/recap/credits skip pill */}
       <SkipSegmentPill
         positionShared={player.positionShared}
+        durationShared={player.durationShared}
         segments={resolved?.introSkipperSegments}
         onSkip={player.seek}
       />

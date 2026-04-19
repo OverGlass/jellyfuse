@@ -18,6 +18,8 @@ import { scheduleOnRN } from "react-native-worklets";
 interface Props {
   /** UI-thread position mirror — watched via useAnimatedReaction. */
   positionShared: SharedValue<number>;
+  /** UI-thread duration mirror — used to gate the pill until mpv has loaded. */
+  durationShared: SharedValue<number>;
   segments: IntroSkipperSegments | undefined;
   onSkip: (toSeconds: number) => void;
 }
@@ -27,12 +29,17 @@ interface ActiveSegment {
   end: number;
 }
 
-export function SkipSegmentPill({ positionShared, segments, onSkip }: Props) {
+export function SkipSegmentPill({ positionShared, durationShared, segments, onSkip }: Props) {
   const insets = useSafeAreaInsets();
   const [active, setActive] = useState<ActiveSegment | null>(null);
 
   useAnimatedReaction(
     () => {
+      // Wait for mpv's first real progress tick. Before that,
+      // positionShared is the initial 0 — which falsely matches any
+      // intro that starts at 0, flashing the pill until the real
+      // resume position arrives.
+      if (durationShared.value <= 0) return null;
       const pos = positionShared.value;
       if (!segments) return null;
       if (
