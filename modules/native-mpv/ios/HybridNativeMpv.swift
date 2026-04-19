@@ -136,6 +136,14 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
     // go through this sidecar and render via a JS overlay layer.
     private var bitmapSubCtx: OpaquePointer?
     private let bitmapSubQueue = DispatchQueue(label: "com.jellyfuse.bitmapsub", qos: .utility)
+    // Cached stream URL so seeks can restart the worker at a new
+    // position. Set by `load()`; nil between sessions.
+    private var currentStreamUrl: String?
+    // Gate for bitmap-sub event emission. Flipped on/off by the
+    // `current-tracks/sub/codec` observer so text-track selections
+    // (or `disableSubtitles`) hide the PGS overlay immediately. Starts
+    // false — first codec observation sets the correct state.
+    private var bitmapSubVisible: Bool = false
 
     // Cached now-playing base dict. Elapsed time + rate are merged on
     // every progress/pause update so the lock-screen scrubber stays in
@@ -207,6 +215,7 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         // packets through a sidecar avformat context and let a JS
         // overlay render them. The worker is a no-op if the file has
         // no bitmap sub streams.
+        currentStreamUrl = streamUrl
         startBitmapSubWorker(url: streamUrl, startSeconds: options.startPositionSeconds ?? 0)
 
         // External subtitles BEFORE selection — each sub-add grows
@@ -264,6 +273,11 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         // the playback-time observer catches up.
         currentPosition = positionSeconds
         syncViewPlaybackState()
+        // Reposition the sidecar PGS/VobSub decoder too; without it the
+        // worker keeps emitting captions from the pre-seek position
+        // until av_read_frame naturally catches up (can be tens of
+        // seconds between sparse sub packets).
+        restartBitmapSubWorker(at: positionSeconds)
     }
 
     // MARK: Tracks / rate / volume (protocol)
@@ -810,6 +824,11 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         // Current subtitle caption (stripped of ASS tags). Fires on
         // every sub-boundary transition — no polling.
         mpv_observe_property(mpv, 9, "sub-text", MPV_FORMAT_STRING)
+        // Subtitle track selection — used as the trigger to query
+        // `current-tracks/sub/codec` and gate the bitmap-sub overlay
+        // visibility so switching to a text track (or disabling subs)
+        // hides PGS immediately.
+        mpv_observe_property(mpv, 10, "sid", MPV_FORMAT_STRING)
 
         // Background thread pumping `mpv_wait_event`. Phase 3b may
         // merge this with the render context's update callback.
@@ -843,6 +862,8 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         subTextSubs.removeAll()
         bitmapSubSubs.removeAll()
         bitmapSubClearSubs.removeAll()
+        currentStreamUrl = nil
+        bitmapSubVisible = false
         nowPlayingBase = nil
         DispatchQueue.main.async { [weak self] in
             MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
@@ -989,8 +1010,42 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
                 for s in snap { s.callback(text) }
             }
 
+        case "sid":
+            // Active subtitle track changed (or disabled via `sid=no`).
+            // Query the current codec lazily — it reflects the new
+            // selection at the moment of this observer fire.
+            let codec = (try? getProperty(name: "current-tracks/sub/codec")) ?? ""
+            updateBitmapSubVisibility(codec: codec)
+
         default:
             break
+        }
+    }
+
+    /// Maps an mpv codec identifier to whether the bitmap-sub overlay
+    /// should render. Flips the gate used by `runBitmapSubLoop` and
+    /// emits a clear on the falling edge so any currently-visible PGS
+    /// caption disappears the moment the user picks a text track or
+    /// disables subs.
+    ///
+    /// `bitmapSubVisible` is written + read exclusively on main to
+    /// avoid a data race with the loop's main-queue emissions (this
+    /// function is called from the mpv event thread).
+    private func updateBitmapSubVisibility(codec: String) {
+        let isBitmap: Bool
+        switch codec {
+        case "hdmv_pgs_subtitle", "dvd_subtitle", "dvb_subtitle":
+            isBitmap = true
+        default:
+            isBitmap = false
+        }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            let wasVisible = self.bitmapSubVisible
+            self.bitmapSubVisible = isBitmap
+            if wasVisible && !isBitmap {
+                for s in self.bitmapSubClearSubs { s.callback() }
+            }
         }
     }
 
@@ -1110,6 +1165,22 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         }
     }
 
+    /// Tear the current worker down and start a fresh one positioned at
+    /// `seconds`. The serial `bitmapSubQueue` guarantees the old worker
+    /// finishes its close path before the new `open` runs. We also fire
+    /// a clear event synchronously so the overlay hides immediately
+    /// during the seek transition — otherwise the stale caption from
+    /// before the seek would linger until the new worker emitted its
+    /// first event.
+    private func restartBitmapSubWorker(at seconds: Double) {
+        guard let url = currentStreamUrl else { return }
+        let snap = bitmapSubClearSubs
+        DispatchQueue.main.async {
+            for s in snap { s.callback() }
+        }
+        startBitmapSubWorker(url: url, startSeconds: max(0, seconds))
+    }
+
     private func runBitmapSubLoop(ctx: OpaquePointer) {
         var pts: Double = 0
         var dur: Double = 0
@@ -1131,7 +1202,7 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
             }
             if numRects == 0 {
                 DispatchQueue.main.async { [weak self] in
-                    guard let self else { return }
+                    guard let self, self.bitmapSubVisible else { return }
                     for s in self.bitmapSubClearSubs { s.callback() }
                 }
             } else if let rgbaPtr = rgba, w > 0, h > 0 {
@@ -1155,7 +1226,7 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
                         imageUri: dataUri,
                     )
                     DispatchQueue.main.async { [weak self] in
-                        guard let self else { return }
+                        guard let self, self.bitmapSubVisible else { return }
                         for s in self.bitmapSubSubs { s.callback(event) }
                     }
                 }
