@@ -85,6 +85,17 @@ export interface MpvLoadOptions {
    * `crates/jf-ui-kit/src/views/player/mod.rs::PlayerView::new`.
    */
   externalSubtitles?: MpvExternalSubtitle[];
+  /**
+   * Phase 2a harness (see docs/native-video-pipeline-phase-2.md): when
+   * true, the native module spawns a parallel libavformat reader on the
+   * same stream URL, logs the video codec / bit depth / dimensions /
+   * color info / HDR metadata, and tears down. mpv still renders video
+   * as normal — the harness is passive, used to validate the
+   * introspection layer before the VideoToolbox decode path in Commit B.
+   *
+   * Dev-only. Never set from production code paths. Ignored on Android.
+   */
+  debug_enableNativeVideoHarness?: boolean;
 }
 
 export type MpvPlaybackState = "idle" | "loading" | "playing" | "paused" | "ended" | "error";

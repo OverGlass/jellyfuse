@@ -78,6 +78,68 @@ export function buildDeviceProfile(maxBitrate?: number) {
       { Format: "pgs", Method: "Embed" },
       { Format: "dvbsub", Method: "Embed" },
     ],
+    // Declare codec capabilities explicitly. Without these, Jellyfin
+    // applies its own conservative defaults — notably a VideoBitDepth<=8
+    // / VideoRangeType=SDR gate on HEVC — that forces 4K HDR / 10-bit
+    // files to transcode even though mpv can direct-play them.
+    CodecProfiles: [
+      {
+        Type: "Video",
+        Codec: "hevc",
+        Conditions: [
+          { Condition: "LessThanEqual", Property: "VideoBitDepth", Value: "10", IsRequired: false },
+          { Condition: "LessThanEqual", Property: "VideoLevel", Value: "183", IsRequired: false },
+          {
+            Condition: "EqualsAny",
+            Property: "VideoRangeType",
+            // DOVIWithEL = profile 7 dual-layer. mpv plays the base
+            // layer as HDR10 (EL stripped), so we advertise support.
+            Value: "SDR|HDR10|HLG|DOVI|DOVIWithHDR10|DOVIWithHLG|DOVIWithSDR|DOVIWithEL|HDR10Plus",
+            IsRequired: false,
+          },
+        ],
+      },
+      {
+        Type: "Video",
+        Codec: "h264",
+        Conditions: [
+          { Condition: "LessThanEqual", Property: "VideoBitDepth", Value: "10", IsRequired: false },
+          { Condition: "LessThanEqual", Property: "VideoLevel", Value: "52", IsRequired: false },
+          {
+            Condition: "EqualsAny",
+            Property: "VideoRangeType",
+            Value: "SDR|HDR10|HLG",
+            IsRequired: false,
+          },
+        ],
+      },
+      {
+        Type: "Video",
+        Codec: "av1",
+        Conditions: [
+          { Condition: "LessThanEqual", Property: "VideoBitDepth", Value: "10", IsRequired: false },
+          {
+            Condition: "EqualsAny",
+            Property: "VideoRangeType",
+            Value: "SDR|HDR10|HLG|DOVI|DOVIWithHDR10|DOVIWithHLG|DOVIWithSDR|DOVIWithEL|HDR10Plus",
+            IsRequired: false,
+          },
+        ],
+      },
+      {
+        Type: "Video",
+        Codec: "vp9",
+        Conditions: [
+          { Condition: "LessThanEqual", Property: "VideoBitDepth", Value: "10", IsRequired: false },
+          {
+            Condition: "EqualsAny",
+            Property: "VideoRangeType",
+            Value: "SDR|HDR10|HLG",
+            IsRequired: false,
+          },
+        ],
+      },
+    ],
   };
 }
 
@@ -136,6 +198,37 @@ export async function fetchPlaybackInfo(
   }
 
   const playbackJson = (await playbackRes.json()) as Record<string, unknown>;
+
+  // Dev diagnostic: surface the server's transcode reasons so we can
+  // tell which CodecProfile condition forced a transcode (bit depth,
+  // range type, bitrate, container, subtitle burn-in, etc.).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if (typeof (globalThis as any).__DEV__ !== "undefined" && (globalThis as any).__DEV__) {
+    const sources = Array.isArray(playbackJson["MediaSources"])
+      ? (playbackJson["MediaSources"] as Record<string, unknown>[])
+      : [];
+    const errorCode = playbackJson["ErrorCode"];
+    for (const src of sources) {
+      const reasons = Array.isArray(src["TranscodeReasons"])
+        ? (src["TranscodeReasons"] as unknown[])
+        : [];
+      const video = Array.isArray(src["MediaStreams"])
+        ? (src["MediaStreams"] as Record<string, unknown>[]).find((s) => s["Type"] === "Video")
+        : undefined;
+      console.log(
+        `[PlaybackInfo] source="${String(src["Name"] ?? "?")}" ` +
+          `container=${String(src["Container"] ?? "?")} ` +
+          `SupportsDirectPlay=${src["SupportsDirectPlay"]} ` +
+          `SupportsDirectStream=${src["SupportsDirectStream"]} ` +
+          `SupportsTranscoding=${src["SupportsTranscoding"]} ` +
+          `reasons=[${reasons.join(",")}] ` +
+          `errorCode=${errorCode ?? "(none)"} ` +
+          `video=${video ? `${video["Codec"]} ${video["Width"]}x${video["Height"]} ${video["BitDepth"]}bit ${video["VideoRangeType"] ?? video["VideoRange"]} profile=${video["Profile"]} level=${video["Level"]}` : "(none)"} ` +
+          `bitrate=${src["Bitrate"]} size=${src["Size"]}`,
+      );
+    }
+  }
+
   const info = parsePlaybackInfo(args.itemId, args.baseUrl, playbackJson, args.token);
 
   // Merge chapters from item details if available

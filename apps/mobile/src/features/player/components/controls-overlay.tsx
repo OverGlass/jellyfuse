@@ -5,7 +5,7 @@
 
 import { NerdIcon } from "@/features/common/components/nerd-icon";
 import type { TrickplayData } from "@jellyfuse/api";
-import type { AudioStream, Chapter, SubtitleTrack } from "@jellyfuse/models";
+import type { AudioStream, Chapter, PlayMethod, SubtitleTrack } from "@jellyfuse/models";
 import { colors, fontSize, opacity, radius, spacing, withAlpha } from "@jellyfuse/theme";
 import { Activity, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View, useWindowDimensions } from "react-native";
@@ -31,6 +31,7 @@ interface Props {
   trickplay?: TrickplayData;
   audioStreams?: AudioStream[];
   subtitleTracks?: SubtitleTrack[];
+  playMethod?: PlayMethod;
   onPlayPause: () => void;
   onSeek: (seconds: number) => void;
   onSkipForward: () => void;
@@ -49,6 +50,7 @@ export function ControlsOverlay({
   durationShared,
   chapters,
   trickplay,
+  playMethod,
   onPlayPause,
   onSeek,
   onSkipForward,
@@ -173,9 +175,29 @@ export function ControlsOverlay({
                   {subtitle}
                 </Text>
               ) : null}
-              <Text style={styles.title} numberOfLines={1}>
-                {title}
-              </Text>
+              <View style={styles.titleRow}>
+                <Text style={styles.title} numberOfLines={1}>
+                  {title}
+                </Text>
+                {playMethod ? (
+                  <View
+                    style={[
+                      styles.playMethodBadge,
+                      playMethod === "Transcode"
+                        ? styles.playMethodBadgeTranscode
+                        : styles.playMethodBadgeDirect,
+                    ]}
+                  >
+                    <Text style={styles.playMethodBadgeText}>
+                      {playMethod === "DirectPlay"
+                        ? "DIRECT"
+                        : playMethod === "DirectStream"
+                          ? "REMUX"
+                          : "TRANSCODE"}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
             </View>
             {onOpenTrackPicker ? (
               <Pressable
@@ -260,14 +282,37 @@ const styles = StyleSheet.create({
   titleBlock: {
     flex: 1,
   },
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+  },
   title: {
     color: colors.textPrimary,
     fontSize: fontSize.bodyLarge,
     fontWeight: "600",
+    flexShrink: 1,
   },
   subtitle: {
     color: colors.textSecondary,
     fontSize: fontSize.caption,
+  },
+  playMethodBadge: {
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 2,
+    borderRadius: radius.sm,
+  },
+  playMethodBadgeDirect: {
+    backgroundColor: withAlpha(colors.success, opacity.alpha45),
+  },
+  playMethodBadgeTranscode: {
+    backgroundColor: withAlpha(colors.warning, opacity.alpha45),
+  },
+  playMethodBadgeText: {
+    color: colors.textPrimary,
+    fontSize: fontSize.caption,
+    fontWeight: "700",
+    letterSpacing: 0.5,
   },
   centerRow: {
     flexDirection: "row",

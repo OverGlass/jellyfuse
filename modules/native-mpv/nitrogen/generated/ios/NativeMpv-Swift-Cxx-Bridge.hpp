@@ -139,6 +139,21 @@ namespace margelo::nitro::nativempv::bridge::swift {
     return optional.value();
   }
   
+  // pragma MARK: std::optional<bool>
+  /**
+   * Specialized version of `std::optional<bool>`.
+   */
+  using std__optional_bool_ = std::optional<bool>;
+  inline std::optional<bool> create_std__optional_bool_(const bool& value) noexcept {
+    return std::optional<bool>(value);
+  }
+  inline bool has_value_std__optional_bool_(const std::optional<bool>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline bool get_std__optional_bool_(const std::optional<bool>& optional) noexcept {
+    return optional.value();
+  }
+  
   // pragma MARK: std::function<void()>
   /**
    * Specialized version of `std::function<void()>`.
@@ -313,21 +328,6 @@ namespace margelo::nitro::nativempv::bridge::swift {
   Func_void_MpvBitmapSubtitle create_Func_void_MpvBitmapSubtitle(void* NON_NULL swiftClosureWrapper) noexcept;
   inline Func_void_MpvBitmapSubtitle_Wrapper wrap_Func_void_MpvBitmapSubtitle(Func_void_MpvBitmapSubtitle value) noexcept {
     return Func_void_MpvBitmapSubtitle_Wrapper(std::move(value));
-  }
-  
-  // pragma MARK: std::optional<bool>
-  /**
-   * Specialized version of `std::optional<bool>`.
-   */
-  using std__optional_bool_ = std::optional<bool>;
-  inline std::optional<bool> create_std__optional_bool_(const bool& value) noexcept {
-    return std::optional<bool>(value);
-  }
-  inline bool has_value_std__optional_bool_(const std::optional<bool>& optional) noexcept {
-    return optional.has_value();
-  }
-  inline bool get_std__optional_bool_(const std::optional<bool>& optional) noexcept {
-    return optional.value();
   }
   
   // pragma MARK: std::variant<nitro::NullType, MpvNowPlayingInfo>

@@ -156,6 +156,7 @@ export function useMpvPlayer(
       mpvRef.current.load(streamUrl, {
         startPositionSeconds,
         externalSubtitles,
+        debug_enableNativeVideoHarness: false,
       });
     } catch (e) {
       console.error("[player] load failed:", e);

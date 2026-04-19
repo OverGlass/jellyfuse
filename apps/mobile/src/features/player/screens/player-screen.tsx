@@ -187,6 +187,7 @@ export function PlayerScreen({ jellyfinId }: Props) {
         positionShared={player.positionShared}
         durationShared={player.durationShared}
         chapters={resolved?.chapters}
+        playMethod={resolved?.playMethod}
         trickplay={
           hasLocal && localRecord
             ? localTrickplayData(localRecord)

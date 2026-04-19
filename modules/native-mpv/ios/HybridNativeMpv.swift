@@ -74,6 +74,59 @@ private func jf_bitmap_sub_close(_ ctx: OpaquePointer?)
 @_silgen_name("jf_bitmap_sub_free_rgba")
 private func jf_bitmap_sub_free_rgba(_ rgba: UnsafeMutablePointer<UInt8>?)
 
+// Phase 2a video-sidecar entry points (see
+// docs/native-video-pipeline-phase-2.md). Same opaque-handle pattern as
+// the bitmap-sub shim; decode_next/seek are Commit B placeholders.
+@_silgen_name("jf_video_open")
+private func jf_video_open(
+    _ url: UnsafePointer<CChar>?,
+    _ startSeconds: Double,
+    _ userAgent: UnsafePointer<CChar>?,
+) -> OpaquePointer?
+
+@_silgen_name("jf_video_close")
+private func jf_video_close(_ ctx: OpaquePointer?)
+
+@_silgen_name("jf_video_cancel")
+private func jf_video_cancel(_ ctx: OpaquePointer?)
+
+@_silgen_name("jf_video_codec_id")
+private func jf_video_codec_id(_ ctx: OpaquePointer?) -> Int32
+
+@_silgen_name("jf_video_bits_per_sample")
+private func jf_video_bits_per_sample(_ ctx: OpaquePointer?) -> Int32
+
+@_silgen_name("jf_video_dimensions")
+private func jf_video_dimensions(
+    _ ctx: OpaquePointer?,
+    _ outWidth: UnsafeMutablePointer<Int32>,
+    _ outHeight: UnsafeMutablePointer<Int32>,
+)
+
+@_silgen_name("jf_video_color_info")
+private func jf_video_color_info(
+    _ ctx: OpaquePointer?,
+    _ outPrimaries: UnsafeMutablePointer<Int32>,
+    _ outTransfer: UnsafeMutablePointer<Int32>,
+    _ outMatrix: UnsafeMutablePointer<Int32>,
+    _ outRange: UnsafeMutablePointer<Int32>,
+)
+
+@_silgen_name("jf_video_hdr_mastering")
+private func jf_video_hdr_mastering(
+    _ ctx: OpaquePointer?,
+    _ mastering: UnsafeMutablePointer<UInt32>,
+) -> Int32
+
+@_silgen_name("jf_video_hdr_cll")
+private func jf_video_hdr_cll(
+    _ ctx: OpaquePointer?,
+    _ cll: UnsafeMutablePointer<UInt16>,
+) -> Int32
+
+@_silgen_name("jf_video_dolby_vision_profile")
+private func jf_video_dolby_vision_profile(_ ctx: OpaquePointer?) -> Int32
+
 // MARK: - HybridNativeMpv
 
 /// `NativeMpv` hybrid object — one instance per player session.
@@ -276,6 +329,16 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         }
         if let sid = options.subtitleTrackIndex {
             mpv_set_property_string(mpv, "sid", String(Int(sid)))
+        }
+
+        // Phase 2a harness (see docs/native-video-pipeline-phase-2.md).
+        // Dev-only: spawn a parallel libavformat open on the same URL,
+        // log introspection, tear down. mpv keeps rendering normally;
+        // the harness is passive.
+        if options.debug_enableNativeVideoHarness == true {
+            startNativeVideoHarness(url: streamUrl,
+                                     startSeconds: options.startPositionSeconds ?? 0,
+                                     userAgent: options.userAgent)
         }
     }
 
@@ -1187,6 +1250,63 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         let uiImage = UIImage(cgImage: cgImage)
         guard let png = uiImage.pngData() else { return nil }
         return "data:image/png;base64,\(png.base64EncodedString())"
+    }
+
+    // ─── Phase 2a harness (docs/native-video-pipeline-phase-2.md) ────
+    // Opens a parallel libavformat context on the stream URL, logs the
+    // video codec / dimensions / bit depth / color tags / HDR metadata,
+    // and tears down. Strictly passive — mpv keeps rendering. Runs on
+    // a one-shot background queue so the blocking HTTP open doesn't
+    // block load(). Intentionally standalone from the bitmap-sub
+    // worker: the two sidecars use independent streams and neither
+    // should stall on the other.
+    private func startNativeVideoHarness(url: String,
+                                          startSeconds: Double,
+                                          userAgent: String?) {
+        NSLog("[VideoHarness] invoked — url-len=%d start=%.2f ua=%@",
+              url.count, startSeconds, userAgent ?? "(none)")
+        DispatchQueue.global(qos: .utility).async {
+            NSLog("[VideoHarness] worker started, calling jf_video_open")
+            let ctx: OpaquePointer? = url.withCString { urlPtr in
+                if let ua = userAgent {
+                    return ua.withCString { uaPtr in
+                        jf_video_open(urlPtr, startSeconds, uaPtr)
+                    }
+                }
+                return jf_video_open(urlPtr, startSeconds, nil)
+            }
+            guard let ctx else {
+                NSLog("[VideoHarness] open FAILED")
+                return
+            }
+            defer { jf_video_close(ctx) }
+
+            let codecId = jf_video_codec_id(ctx)
+            let bits = jf_video_bits_per_sample(ctx)
+            var w: Int32 = 0; var h: Int32 = 0
+            jf_video_dimensions(ctx, &w, &h)
+            var pri: Int32 = 0; var trc: Int32 = 0; var mat: Int32 = 0; var rng: Int32 = 0
+            jf_video_color_info(ctx, &pri, &trc, &mat, &rng)
+            var mastering = [UInt32](repeating: 0, count: 10)
+            let hasMastering = mastering.withUnsafeMutableBufferPointer { buf in
+                jf_video_hdr_mastering(ctx, buf.baseAddress!)
+            }
+            var cll = [UInt16](repeating: 0, count: 2)
+            let hasCll = cll.withUnsafeMutableBufferPointer { buf in
+                jf_video_hdr_cll(ctx, buf.baseAddress!)
+            }
+            let dv = jf_video_dolby_vision_profile(ctx)
+
+            NSLog("""
+                [VideoHarness] open OK codec=%d %dx%d bits=%d \
+                color pri=%d trc=%d mat=%d range=%d \
+                mastering=%d cll=%d (max=%d fall=%d) dv=%d
+                """,
+                  codecId, w, h, bits,
+                  pri, trc, mat, rng,
+                  hasMastering, hasCll, Int(cll[0]), Int(cll[1]),
+                  dv)
+        }
     }
 
     private func startBitmapSubWorker(

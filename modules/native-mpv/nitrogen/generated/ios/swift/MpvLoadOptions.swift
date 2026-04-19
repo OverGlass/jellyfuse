@@ -18,7 +18,7 @@ public extension MpvLoadOptions {
   /**
    * Create a new instance of `MpvLoadOptions`.
    */
-  init(startPositionSeconds: Double?, audioTrackIndex: Double?, subtitleTrackIndex: Double?, playbackRate: Double?, volume: Double?, userAgent: String?, externalSubtitles: [MpvExternalSubtitle]?) {
+  init(startPositionSeconds: Double?, audioTrackIndex: Double?, subtitleTrackIndex: Double?, playbackRate: Double?, volume: Double?, userAgent: String?, externalSubtitles: [MpvExternalSubtitle]?, debug_enableNativeVideoHarness: Bool?) {
     self.init({ () -> bridge.std__optional_double_ in
       if let __unwrappedValue = startPositionSeconds {
         return bridge.create_std__optional_double_(__unwrappedValue)
@@ -64,6 +64,12 @@ public extension MpvLoadOptions {
           }
           return __vector
         }())
+      } else {
+        return .init()
+      }
+    }(), { () -> bridge.std__optional_bool_ in
+      if let __unwrappedValue = debug_enableNativeVideoHarness {
+        return bridge.create_std__optional_bool_(__unwrappedValue)
       } else {
         return .init()
       }
@@ -148,6 +154,18 @@ public extension MpvLoadOptions {
       if bridge.has_value_std__optional_std__vector_MpvExternalSubtitle__(self.__externalSubtitles) {
         let __unwrapped = bridge.get_std__optional_std__vector_MpvExternalSubtitle__(self.__externalSubtitles)
         return __unwrapped.map({ __item in __item })
+      } else {
+        return nil
+      }
+    }()
+  }
+  
+  @inline(__always)
+  var debug_enableNativeVideoHarness: Bool? {
+    return { () -> Bool? in
+      if bridge.has_value_std__optional_bool_(self.__debug_enableNativeVideoHarness) {
+        let __unwrapped = bridge.get_std__optional_bool_(self.__debug_enableNativeVideoHarness)
+        return __unwrapped
       } else {
         return nil
       }

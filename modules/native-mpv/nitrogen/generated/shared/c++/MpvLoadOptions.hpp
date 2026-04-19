@@ -50,10 +50,11 @@ namespace margelo::nitro::nativempv {
     std::optional<double> volume     SWIFT_PRIVATE;
     std::optional<std::string> userAgent     SWIFT_PRIVATE;
     std::optional<std::vector<MpvExternalSubtitle>> externalSubtitles     SWIFT_PRIVATE;
+    std::optional<bool> debug_enableNativeVideoHarness     SWIFT_PRIVATE;
 
   public:
     MpvLoadOptions() = default;
-    explicit MpvLoadOptions(std::optional<double> startPositionSeconds, std::optional<double> audioTrackIndex, std::optional<double> subtitleTrackIndex, std::optional<double> playbackRate, std::optional<double> volume, std::optional<std::string> userAgent, std::optional<std::vector<MpvExternalSubtitle>> externalSubtitles): startPositionSeconds(startPositionSeconds), audioTrackIndex(audioTrackIndex), subtitleTrackIndex(subtitleTrackIndex), playbackRate(playbackRate), volume(volume), userAgent(userAgent), externalSubtitles(externalSubtitles) {}
+    explicit MpvLoadOptions(std::optional<double> startPositionSeconds, std::optional<double> audioTrackIndex, std::optional<double> subtitleTrackIndex, std::optional<double> playbackRate, std::optional<double> volume, std::optional<std::string> userAgent, std::optional<std::vector<MpvExternalSubtitle>> externalSubtitles, std::optional<bool> debug_enableNativeVideoHarness): startPositionSeconds(startPositionSeconds), audioTrackIndex(audioTrackIndex), subtitleTrackIndex(subtitleTrackIndex), playbackRate(playbackRate), volume(volume), userAgent(userAgent), externalSubtitles(externalSubtitles), debug_enableNativeVideoHarness(debug_enableNativeVideoHarness) {}
 
   public:
     friend bool operator==(const MpvLoadOptions& lhs, const MpvLoadOptions& rhs) = default;
@@ -75,7 +76,8 @@ namespace margelo::nitro {
         JSIConverter<std::optional<double>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "playbackRate"))),
         JSIConverter<std::optional<double>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "volume"))),
         JSIConverter<std::optional<std::string>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "userAgent"))),
-        JSIConverter<std::optional<std::vector<margelo::nitro::nativempv::MpvExternalSubtitle>>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "externalSubtitles")))
+        JSIConverter<std::optional<std::vector<margelo::nitro::nativempv::MpvExternalSubtitle>>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "externalSubtitles"))),
+        JSIConverter<std::optional<bool>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "debug_enableNativeVideoHarness")))
       );
     }
     static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::nativempv::MpvLoadOptions& arg) {
@@ -87,6 +89,7 @@ namespace margelo::nitro {
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "volume"), JSIConverter<std::optional<double>>::toJSI(runtime, arg.volume));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "userAgent"), JSIConverter<std::optional<std::string>>::toJSI(runtime, arg.userAgent));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "externalSubtitles"), JSIConverter<std::optional<std::vector<margelo::nitro::nativempv::MpvExternalSubtitle>>>::toJSI(runtime, arg.externalSubtitles));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "debug_enableNativeVideoHarness"), JSIConverter<std::optional<bool>>::toJSI(runtime, arg.debug_enableNativeVideoHarness));
       return obj;
     }
     static inline bool canConvert(jsi::Runtime& runtime, const jsi::Value& value) {
@@ -104,6 +107,7 @@ namespace margelo::nitro {
       if (!JSIConverter<std::optional<double>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "volume")))) return false;
       if (!JSIConverter<std::optional<std::string>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "userAgent")))) return false;
       if (!JSIConverter<std::optional<std::vector<margelo::nitro::nativempv::MpvExternalSubtitle>>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "externalSubtitles")))) return false;
+      if (!JSIConverter<std::optional<bool>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "debug_enableNativeVideoHarness")))) return false;
       return true;
     }
   };
