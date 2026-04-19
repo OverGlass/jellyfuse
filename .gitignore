@@ -68,3 +68,6 @@ coverage/
 
 # codedb MCP snapshot
 codedb.snapshot
+
+# Claude Code local state (worktrees, session data, etc.)
+.claude/
