@@ -164,8 +164,10 @@ export function PlayerScreen({ jellyfinId }: Props) {
 
       {/* Bitmap subtitle overlay — Phase 3 of the migration. Renders
           PGS / VobSub / DVB events from the sidecar ffmpeg decoder
-          when the selected sub track is a bitmap codec. */}
-      <BitmapSubtitleOverlay event={player.bitmapSubtitle} />
+          when the selected sub track is a bitmap codec. Subscribes
+          directly to the mpv listeners so caption changes only
+          re-render this overlay, not the whole player tree. */}
+      <BitmapSubtitleOverlay mpv={player.mpv} />
 
       {/* Intro/recap/credits skip pill */}
       <SkipSegmentPill

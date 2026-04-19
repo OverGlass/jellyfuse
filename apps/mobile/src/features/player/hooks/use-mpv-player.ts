@@ -10,7 +10,6 @@
 
 import {
   createNativeMpv,
-  type MpvBitmapSubtitle,
   type MpvExternalSubtitle,
   type MpvListener,
   type NativeMpv,
@@ -39,15 +38,6 @@ export interface MpvPlayerState {
    * `docs/native-video-pipeline.md`).
    */
   subtitleText: string;
-  /**
-   * Latest bitmap subtitle event (PGS / VobSub / DVB) — `null` when
-   * there's no active caption or the current track is text. Drives
-   * `BitmapSubtitleOverlay` (Phase 3 of the native video pipeline
-   * migration, see `docs/native-video-pipeline.md`). The sidecar
-   * ffmpeg decoder emits one show + one clear event per dialogue
-   * line; clears map to `null` here.
-   */
-  bitmapSubtitle: MpvBitmapSubtitle | null;
 }
 
 export interface UseMpvPlayerReturn extends MpvPlayerState {
@@ -82,7 +72,6 @@ export function useMpvPlayer(
   const [duration, setDuration] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [subtitleText, setSubtitleText] = useState("");
-  const [bitmapSubtitle, setBitmapSubtitle] = useState<MpvBitmapSubtitle | null>(null);
   const positionShared = useSharedValue(0);
   const durationShared = useSharedValue(0);
   const durationRef = useRef(0);
@@ -127,14 +116,6 @@ export function useMpvPlayer(
     setSubtitleText(text);
   });
 
-  const onBitmapSubtitle = useEffectEvent((event: MpvBitmapSubtitle) => {
-    setBitmapSubtitle(event);
-  });
-
-  const onBitmapSubtitleClear = useEffectEvent(() => {
-    setBitmapSubtitle(null);
-  });
-
   // ── Sync mpv lifecycle with React ─────────────────────────────────
 
   useEffect(() => {
@@ -148,8 +129,6 @@ export function useMpvPlayer(
       mpv.addErrorListener(onError),
       mpv.addBufferingListener(onBuffering),
       mpv.addSubtitleTextListener(onSubtitleText),
-      mpv.addBitmapSubtitleListener(onBitmapSubtitle),
-      mpv.addBitmapSubtitleClearListener(onBitmapSubtitleClear),
     ];
 
     return () => {
@@ -237,7 +216,6 @@ export function useMpvPlayer(
     durationShared,
     error,
     subtitleText,
-    bitmapSubtitle,
     play,
     pause,
     seek,

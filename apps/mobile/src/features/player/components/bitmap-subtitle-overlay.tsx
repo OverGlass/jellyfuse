@@ -4,6 +4,11 @@
 // by `subtitle-overlay.tsx`; this one consumes the `imageUri` data URI
 // coming off `addBitmapSubtitleListener`.
 //
+// Subscribes to the mpv listeners directly so caption changes re-render
+// ONLY this component — routing the event through `useMpvPlayer` state
+// would re-render the whole player screen (controls, overlay, picker,
+// etc.) on every PGS transition.
+//
 // Positioning: rects ship in source-video coordinates (e.g. 1920×1080
 // for Titanic's PGS). We compute the letterboxed video rect inside the
 // container and map the sub rect into on-screen space. Default source
@@ -11,23 +16,34 @@
 // 3840×2160 PGS and the player screen should pass the actual dims from
 // mpv's `width` / `height` once the first frame lands.
 
-import type { MpvBitmapSubtitle } from "@jellyfuse/native-mpv";
-import { useState } from "react";
+import type { MpvBitmapSubtitle, NativeMpv } from "@jellyfuse/native-mpv";
+import { useEffect, useState } from "react";
 import { Image, StyleSheet, View } from "react-native";
 
 interface Props {
-  /** Latest event from `addBitmapSubtitleListener`, or `null` to hide. */
-  event: MpvBitmapSubtitle | null;
+  /** Active mpv player instance; `null` before attach or after teardown. */
+  mpv: NativeMpv | null;
   /** Source video width in pixels. Defaults to 1920 (HD Blu-ray PGS). */
   sourceWidth?: number;
   /** Source video height in pixels. Defaults to 1080. */
   sourceHeight?: number;
 }
 
-export function BitmapSubtitleOverlay({ event, sourceWidth = 1920, sourceHeight = 1080 }: Props) {
+export function BitmapSubtitleOverlay({ mpv, sourceWidth = 1920, sourceHeight = 1080 }: Props) {
+  const [event, setEvent] = useState<MpvBitmapSubtitle | null>(null);
   const [containerSize, setContainerSize] = useState<{ width: number; height: number } | null>(
     null,
   );
+
+  useEffect(() => {
+    if (!mpv) return;
+    const show = mpv.addBitmapSubtitleListener(setEvent);
+    const clear = mpv.addBitmapSubtitleClearListener(() => setEvent(null));
+    return () => {
+      show.remove();
+      clear.remove();
+    };
+  }, [mpv]);
 
   if (!event || !containerSize) {
     // Keep the container mounted even when idle so onLayout fires once
