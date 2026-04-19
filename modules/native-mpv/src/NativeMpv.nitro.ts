@@ -137,9 +137,12 @@ export interface MpvNowPlayingInfo {
 /**
  * One bitmap subtitle event (PGS / VobSub / DVB). Emitted by the
  * sidecar ffmpeg decoder — see docs/native-video-pipeline.md Phase 3.
- * `pixels` is a tightly packed RGBA8888 buffer of size `width *
- * height * 4`; byte order matches Skia's kRGBA_8888 layout so the JS
- * overlay can feed it straight into an `SkImage`.
+ *
+ * `imageUri` is a `data:image/png;base64,...` data URI the JS overlay
+ * feeds directly into an `<Image>` — no pixel-pushing libs needed. PGS
+ * rects are tiny (a few hundred bytes per PNG after compression) and
+ * only fire every 2–3 s during dialogue, so the base64 expansion + JSI
+ * crossing is negligible.
  *
  * `x` / `y` / `width` / `height` are in the source video's coordinate
  * system (1920×1080 for PGS, 720×480 for DVD, etc.). The overlay scales
@@ -155,7 +158,7 @@ export interface MpvBitmapSubtitle {
   y: number;
   width: number;
   height: number;
-  pixels: ArrayBuffer;
+  imageUri: string;
 }
 
 /**

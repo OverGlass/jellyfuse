@@ -43,7 +43,6 @@ namespace margelo::nitro::nativempv { struct MpvSubtitleTrack; }
 #include "MpvPlaybackState.hpp"
 #include "MpvRemoteCommand.hpp"
 #include "MpvSubtitleTrack.hpp"
-#include <NitroModules/ArrayBuffer.hpp>
 #include <NitroModules/Null.hpp>
 #include <NitroModules/Result.hpp>
 #include <exception>

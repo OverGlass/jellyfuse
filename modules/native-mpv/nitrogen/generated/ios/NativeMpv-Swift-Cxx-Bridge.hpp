@@ -8,8 +8,6 @@
 #pragma once
 
 // Forward declarations of C++ defined types
-// Forward declaration of `ArrayBufferHolder` to properly resolve imports.
-namespace NitroModules { class ArrayBufferHolder; }
 // Forward declaration of `HybridMpvVideoViewSpec` to properly resolve imports.
 namespace margelo::nitro::nativempv { class HybridMpvVideoViewSpec; }
 // Forward declaration of `HybridNativeMpvSpec` to properly resolve imports.
@@ -48,8 +46,6 @@ namespace NativeMpv { class HybridNativeMpvSpec_cxx; }
 #include "MpvPlaybackState.hpp"
 #include "MpvRemoteCommand.hpp"
 #include "MpvSubtitleTrack.hpp"
-#include <NitroModules/ArrayBuffer.hpp>
-#include <NitroModules/ArrayBufferHolder.hpp>
 #include <NitroModules/Null.hpp>
 #include <NitroModules/Result.hpp>
 #include <exception>

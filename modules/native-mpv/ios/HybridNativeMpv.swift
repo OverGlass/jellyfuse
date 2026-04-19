@@ -1033,6 +1033,55 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
 
     // MARK: Bitmap subtitle worker
 
+    // RGBA (bytes = R,G,B,A) → PNG → base64 data URI. Returns nil on
+    // allocation / encoder failure. The RGBA layout matches what
+    // FFmpegBridge.mm produces; byte order 32Big + premultiplied-last
+    // feeds it straight to CoreGraphics without a channel swap.
+    private static func encodeRgbaAsPngDataUri(
+        _ rgba: UnsafePointer<UInt8>,
+        width: Int,
+        height: Int,
+    ) -> String? {
+        let bytesPerRow = width * 4
+        let byteCount = bytesPerRow * height
+        guard let provider = CGDataProvider(
+            dataInfo: nil,
+            data: rgba,
+            size: byteCount,
+            releaseData: { _, _, _ in },
+        ) else {
+            return nil
+        }
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        // The PGS / VobSub palette ships straight (non-premultiplied)
+        // RGBA. Using `.last` preserves the anti-aliased edges — with
+        // `.premultipliedLast` CoreGraphics assumes the RGB was already
+        // multiplied by A and un-multiplies, halving the brightness of
+        // edge pixels.
+        let bitmapInfo: CGBitmapInfo = [
+            .byteOrder32Big,
+            CGBitmapInfo(rawValue: CGImageAlphaInfo.last.rawValue),
+        ]
+        guard let cgImage = CGImage(
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bitsPerPixel: 32,
+            bytesPerRow: bytesPerRow,
+            space: colorSpace,
+            bitmapInfo: bitmapInfo,
+            provider: provider,
+            decode: nil,
+            shouldInterpolate: false,
+            intent: .defaultIntent,
+        ) else {
+            return nil
+        }
+        let uiImage = UIImage(cgImage: cgImage)
+        guard let png = uiImage.pngData() else { return nil }
+        return "data:image/png;base64,\(png.base64EncodedString())"
+    }
+
     private func startBitmapSubWorker(url: String, startSeconds: Double) {
         stopBitmapSubWorker()
         bitmapSubQueue.async { [weak self] in
@@ -1086,27 +1135,29 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
                     for s in self.bitmapSubClearSubs { s.callback() }
                 }
             } else if let rgbaPtr = rgba, w > 0, h > 0 {
-                let byteCount = Int(w) * Int(h) * 4
-                // Copy the decoder's malloc'd buffer into a Nitro-owned
-                // ArrayBuffer, then free the source so the decoder can
-                // reuse its allocator. JS keeps the ArrayBuffer alive as
-                // long as it needs it.
-                let buffer = ArrayBuffer.copy(of: rgbaPtr, size: byteCount)
+                // Encode RGBA → PNG → base64 → data URI so the JS overlay
+                // can feed it straight into <Image>. PGS rects are tiny
+                // (few hundred bytes compressed) and fire every 2–3 s,
+                // so the per-event cost is negligible vs pulling in a
+                // pixel-pushing lib.
+                let dataUri = Self.encodeRgbaAsPngDataUri(rgbaPtr, width: Int(w), height: Int(h))
                 jf_bitmap_sub_free_rgba(rgbaPtr)
                 rgba = nil
 
-                let event = MpvBitmapSubtitle(
-                    ptsSeconds: pts,
-                    durationSeconds: dur,
-                    x: Double(x),
-                    y: Double(y),
-                    width: Double(w),
-                    height: Double(h),
-                    pixels: buffer,
-                )
-                DispatchQueue.main.async { [weak self] in
-                    guard let self else { return }
-                    for s in self.bitmapSubSubs { s.callback(event) }
+                if let dataUri {
+                    let event = MpvBitmapSubtitle(
+                        ptsSeconds: pts,
+                        durationSeconds: dur,
+                        x: Double(x),
+                        y: Double(y),
+                        width: Double(w),
+                        height: Double(h),
+                        imageUri: dataUri,
+                    )
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self else { return }
+                        for s in self.bitmapSubSubs { s.callback(event) }
+                    }
                 }
             } else if let rgbaPtr = rgba {
                 jf_bitmap_sub_free_rgba(rgbaPtr)

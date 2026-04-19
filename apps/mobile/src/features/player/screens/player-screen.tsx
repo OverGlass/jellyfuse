@@ -13,6 +13,7 @@ import { useConnectionStatus } from "@/services/connection/monitor";
 import { useMovieDetail } from "@/services/query";
 import { ControlsOverlay } from "../components/controls-overlay";
 import { SkipSegmentPill } from "../components/skip-segment-pill";
+import { BitmapSubtitleOverlay } from "../components/bitmap-subtitle-overlay";
 import { SubtitleOverlay } from "../components/subtitle-overlay";
 import { TrackPicker } from "../components/track-picker";
 import { useMpvPlayer } from "../hooks/use-mpv-player";
@@ -160,6 +161,11 @@ export function PlayerScreen({ jellyfinId }: Props) {
           Renders on top of mpv's own caption draw during the migration
           window so both appear; Phase 2 disables mpv's compositor. */}
       <SubtitleOverlay text={player.subtitleText} />
+
+      {/* Bitmap subtitle overlay — Phase 3 of the migration. Renders
+          PGS / VobSub / DVB events from the sidecar ffmpeg decoder
+          when the selected sub track is a bitmap codec. */}
+      <BitmapSubtitleOverlay event={player.bitmapSubtitle} />
 
       {/* Intro/recap/credits skip pill */}
       <SkipSegmentPill
