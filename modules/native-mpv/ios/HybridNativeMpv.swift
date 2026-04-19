@@ -24,12 +24,16 @@ import UIKit
 
 private let npLog = OSLog(subsystem: "com.jellyfuse.app", category: "NativeMpv")
 
-// Phase 3 link-test — pulled in via @_silgen_name so we don't need a
-// modulemap / bridging header for this one-off scaffold call. Defined
-// in FFmpegBridge.mm; promoted to a proper header when the real
+// Phase 3 bitmap-sub shim entry points (see
+// docs/native-video-pipeline.md). Pulled in via @_silgen_name so we
+// don't need a modulemap / bridging header for these diagnostic calls.
+// Promoted to a proper header + module setup when the full
 // BitmapSubDecoder API lands.
 @_silgen_name("jf_ffmpeg_version_info")
 private func jf_ffmpeg_version_info() -> UnsafePointer<CChar>?
+
+@_silgen_name("jf_bitmap_sub_probe")
+private func jf_bitmap_sub_probe(_ url: UnsafePointer<CChar>?)
 
 // MARK: - HybridNativeMpv
 
@@ -158,6 +162,19 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         free(loadfile); free(url)
         if rc < 0 {
             throw mpvError("loadfile failed: \(String(cString: mpv_error_string(rc)))")
+        }
+
+        // Phase 3 diagnostic probe (see docs/native-video-pipeline.md).
+        // Opens a parallel avformat context to list subtitle streams +
+        // codecs so we can see what bitmap flavour (PGS/VobSub/DVB) a
+        // given Jellyfin title ships with. Runs on a background queue
+        // because the HTTP handshake blocks. Removed when the real
+        // BitmapSubDecoder replaces it.
+        let probeUrl = streamUrl
+        DispatchQueue.global(qos: .utility).async {
+            probeUrl.withCString { cstr in
+                jf_bitmap_sub_probe(cstr)
+            }
         }
 
         // External subtitles BEFORE selection — each sub-add grows
@@ -723,15 +740,6 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         if mpv_initialize(mpv) < 0 {
             mpv_destroy(mpv)
             return nil
-        }
-
-        // Phase 3 link-test (see docs/native-video-pipeline.md). Logs
-        // the FFmpeg build-time version so we can confirm the sidecar
-        // include path + static libs are wired end-to-end before the
-        // bitmap-sub decoder lands. Remove once Phase 3 ships.
-        if let verPtr = jf_ffmpeg_version_info() {
-            let ver = String(cString: verPtr)
-            os_log("ffmpeg linked, av_version_info=%{public}@", log: npLog, type: .default, ver)
         }
 
         // Observe the properties we surface as events.
