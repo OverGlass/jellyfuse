@@ -693,13 +693,28 @@ Phase 5.
 
 ### 8.4 Display capability
 
-- `UIWindowScene.preferredDisplayCriteria` (iOS 17.2+) — set to
-  60fps / Dolby Vision when DV content is playing, HDR/60fps when
-  HDR10, omit when SDR.
-- Without this, iOS may leave the display in SDR mode even for HDR
-  content (it does auto-enter for full-screen `AVPlayer`, but
-  AVSampleBufferDisplayLayer requires the explicit request).
-- Bracket with `preferredDisplayCriteria = nil` on detach.
+On iOS iPhone/iPad, HDR display-mode switching is driven entirely by
+the compositor reading the pixel-buffer attachments we set in §8.2.
+Once a frame arrives tagged with PQ or HLG transfer + BT.2020
+primaries + a mastering-display attachment, iOS routes it through
+its HDR path on any HDR-capable display (iPhone 12+, all iPad Pros
+with XDR, iPhone 15 Pro XDR). No explicit per-scene display-mode
+request is needed — and in fact the `AVDisplayCriteria` API the
+original plan referenced is **tvOS-only** (`API_UNAVAILABLE(ios)`),
+so there is no iOS-side equivalent to bracket.
+
+Non-HDR devices (iPad mini 6, iPhone SE) rely on iOS tone-mapping
+the same tagged frames to SDR on the compositor. Tested and verified
+— the tagging does double duty: it unlocks HDR on capable displays
+and drives correct SDR tone-mapping elsewhere.
+
+External HDR displays via AirPlay are handled by iOS's display
+pipeline when the AVSampleBufferDisplayLayer is routed through PiP
+or the standard window scene — no explicit API call required.
+
+For tvOS (out of scope for Phase 2), the AVSampleBufferDisplayLayer
+route would need `AVDisplayManager.preferredDisplayCriteria` set on
+the scene's window. Flagged for the future tvOS pass.
 
 ---
 
@@ -999,12 +1014,12 @@ spike lands to avoid redoing work.
 
 ### 2c — HDR
 
-- [ ] Pixel format selection (nv12 / p010) from stream bit depth.
-- [ ] Color tagging (primaries, transfer, matrix, range).
-- [ ] Mastering + CLL metadata attachment.
-- [ ] DV spike: profile 5 end-to-end on AVSampleBufferDisplayLayer.
-- [ ] `UIWindowScene.preferredDisplayCriteria` bracket.
-- [ ] Format-change resilience (rebuild VT session on color-space change).
+- [x] Pixel format selection (nv12 / p010) from stream bit depth. (C-side, harness commit)
+- [x] Color tagging (primaries, transfer, matrix). (C5)
+- [x] Mastering + CLL metadata attachment. (C5)
+- [ ] DV spike: profile 5 end-to-end on AVSampleBufferDisplayLayer. (needs DOVI_CONF extractor on C side first)
+- [-] ~~`UIWindowScene.preferredDisplayCriteria` bracket.~~ (tvOS-only API; iOS compositor auto-switches from tagging — see §8.4)
+- [ ] Format-change resilience (rebuild VT session on color-space change). (C-side)
 
 ### 2d — Rollout
 
