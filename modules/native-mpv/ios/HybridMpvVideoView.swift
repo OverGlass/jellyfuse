@@ -58,6 +58,12 @@ protocol VideoSource: AnyObject {
     /// Stop producing frames and release all resources. Idempotent.
     func detach()
 
+    /// The owning player jumped to a new stream position. The
+    /// mpv render path is a no-op (mpv re-primes its own demuxer);
+    /// the native source has to cancel its decode thread, reposition
+    /// its libavformat context, and clear any stale frame.
+    func seek(to seconds: Double)
+
     /// Called whenever the owning app transitions between foreground
     /// and background. `pipKeepingLayerLive` is `true` when PiP is
     /// active or armed to auto-start — in that case the source should
@@ -207,6 +213,13 @@ final class MpvVideoView: UIView {
     /// Disconnect from the player. Tears down source + PiP + timebase.
     func detach() {
         tearDown()
+    }
+
+    /// Forward a seek notification to the active source. Safe to call
+    /// from any thread; sources that need main for layer work hop on
+    /// their own.
+    func sourceDidSeek(to seconds: Double) {
+        source?.seek(to: seconds)
     }
 
     // MARK: - PiP controller

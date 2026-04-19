@@ -332,6 +332,11 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         if currentBitmapStreamIndex >= 0 {
             restartBitmapSubWorker(at: positionSeconds)
         }
+        // Same story for the Phase 2c native video source: it runs
+        // its own libavformat demuxer in parallel with mpv, and has
+        // to be told to cancel + reposition. The mpv render-ctx
+        // source treats this as a no-op (mpv seeks on its own).
+        notifyViewsSeek(positionSeconds: positionSeconds)
     }
 
     // MARK: Tracks / rate / volume (protocol)
@@ -522,6 +527,19 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
                     isPaused: isPaused,
                     rate: rate
                 )
+            }
+        }
+    }
+
+    /// Tell every attached view's video source that mpv just jumped
+    /// to a new position so it can cancel + reposition. The mpv
+    /// render-ctx source ignores this; the native VT source uses it
+    /// to cancel its decode thread and call `jf_video_seek`.
+    func notifyViewsSeek(positionSeconds: Double) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            for view in self.attachedViews {
+                view.sourceDidSeek(to: positionSeconds)
             }
         }
     }

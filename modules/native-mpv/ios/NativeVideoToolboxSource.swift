@@ -42,6 +42,12 @@ final class NativeVideoToolboxSource: VideoSource {
     private var decodeThread: Thread?
     private var stopFlag = atomicFlag()
     private var isBackgroundPaused = atomicFlag()
+    private var isDetached = atomicFlag()
+
+    // Serialises seek work so a teardown that fires mid-seek blocks
+    // on any in-flight cancel/join/seek/restart. Also prevents two
+    // seek notifications (scrub storms) from racing each other.
+    private let seekQueue = DispatchQueue(label: "jf.native-video.seek")
 
     // ── Presentation gate tuning (see §6.2) ────────────────────────────
     /// Frame is on-time or up to this far ahead of audio → present.
@@ -103,7 +109,64 @@ final class NativeVideoToolboxSource: VideoSource {
     }
 
     func detach() {
+        isDetached.store(true)
+        // Wait for any in-flight seek before ripping the context out
+        // from under it — otherwise `jf_video_seek` could race with
+        // `jf_video_close`.
+        seekQueue.sync {}
         tearDown()
+    }
+
+    func seek(to seconds: Double) {
+        if isDetached.load() { return }
+        seekQueue.async { [weak self] in
+            guard let self = self else { return }
+            if self.isDetached.load() { return }
+            self.performSeek(to: seconds)
+        }
+    }
+
+    /// Cancel the decode thread, clear the display layer, reposition
+    /// the demuxer + decoder, and spin up a fresh decode thread. Runs
+    /// on `seekQueue` so multiple seek notifications serialise.
+    private func performSeek(to seconds: Double) {
+        guard let ctx = videoCtx else { return }
+
+        // 1. Stop the decode thread — flag + cancel the blocking
+        //    HTTP / av_read_frame call so `jf_video_decode_next`
+        //    returns promptly.
+        stopFlag.store(true)
+        jf_video_cancel(ctx)
+
+        let thread = decodeThread
+        decodeThread = nil
+        if let thread = thread {
+            let deadline = Date().addingTimeInterval(1.0)
+            while !thread.isFinished && Date() < deadline {
+                Thread.sleep(forTimeInterval: 0.01)
+            }
+        }
+
+        if isDetached.load() { return }
+
+        // 2. Clear the stale frame that was on screen before seek —
+        //    otherwise the scrubber has already moved but the frame
+        //    sticks until the first post-seek frame arrives.
+        DispatchQueue.main.async { [weak self] in
+            self?.targetLayer?.flushAndRemoveImage()
+        }
+
+        // 3. Reposition demuxer + decoder. `jf_video_seek` flushes
+        //    VT internally and reissues parameter sets.
+        _ = jf_video_seek(ctx, seconds)
+
+        if isDetached.load() { return }
+
+        // 4. Restart the decode thread. `stopFlag` must go back to
+        //    false *before* spawning — the new thread reads it from
+        //    its first loop iteration.
+        stopFlag.store(false)
+        startDecodeThread()
     }
 
     func applicationBackgroundDidChange(isBackground: Bool, pipKeepingLayerLive: Bool) {

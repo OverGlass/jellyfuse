@@ -128,6 +128,14 @@ final class MpvRenderContextSource: VideoSource {
         tearDown()
     }
 
+    func seek(to seconds: Double) {
+        // mpv's own demuxer + render context handle the reposition;
+        // the next update callback will push a fresh frame through.
+        // Nudge a render tick so the layer repaints ASAP even if the
+        // display link is gated on `needsRender`.
+        needsRender = true
+    }
+
     func applicationBackgroundDidChange(isBackground: Bool, pipKeepingLayerLive: Bool) {
         if isBackground && !pipKeepingLayerLive {
             displayLink?.isPaused = true
