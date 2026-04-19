@@ -704,6 +704,14 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         _ = mpv_set_option_string(mpv, "cache", "yes")
         _ = mpv_set_option_string(mpv, "demuxer-max-bytes", "50MiB")
         _ = mpv_set_option_string(mpv, "demuxer-max-back-bytes", "25MiB")
+        // Phase 1 of the native video pipeline migration (see
+        // docs/native-video-pipeline.md): mpv still parses + tracks
+        // subs (so `sub-text` keeps firing), but stops compositing
+        // them into the video frame. The JS `SubtitleOverlay` is now
+        // the sole sub renderer — ends the double-draw from the
+        // validation window and puts us on the data path Phase 2
+        // keeps after `video=no` lands.
+        _ = mpv_set_option_string(mpv, "sub-visibility", "no")
 
         if mpv_initialize(mpv) < 0 {
             mpv_destroy(mpv)
