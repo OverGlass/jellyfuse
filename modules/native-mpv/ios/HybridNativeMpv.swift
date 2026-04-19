@@ -655,10 +655,21 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         }
 
         // Defaults matching the Rust backend:
-        // - videotoolbox-copy hwdec fixed the color correctness issue
-        //   (see commit 51fec4ba in the Rust repo). Tried non-copy on
-        //   iOS — mpv's GL renderer silently falls back to SW decode
-        //   (colors wrong, startup slow, CPU unchanged), so keep copy.
+        // - `videotoolbox-copy` is required. Straight `videotoolbox`
+        //   (zero-copy) appears to negotiate correctly in mpv's logs
+        //   but the libmpv GLES renderer has two confirmed bugs:
+        //     1. nv12 (8-bit) frames render with a heavy green tint
+        //        (color-conversion matrix is wrong). Same bug the Rust
+        //        commit 51fec4ba hit.
+        //     2. p010 (10-bit HDR) frames are rejected by the VT↔GL
+        //        interop — "Format unsupported. Initializing texture
+        //        for hardware decoding failed" — and fall back to a
+        //        blue/black screen. The GLES interop doesn't register
+        //        the p010 pixel format.
+        //   Both are resolved by forcing `-copy`, which makes mpv do
+        //   the CPU readback + re-upload in a color-correct path.
+        //   The true zero-copy win needs the Metal backend (`vo=gpu`
+        //   / `gpu-next` + CAMetalLayer), not a hwdec flag change.
         // - vid=no until MpvGLView.attach() plugs in the render context;
         //   otherwise libmpv tries to open a window on its own.
         _ = mpv_set_option_string(mpv, "hwdec", "videotoolbox-copy")
