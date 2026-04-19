@@ -38,6 +38,18 @@ final class NativeVideoToolboxSource: VideoSource {
     // ── libavformat + VT context ───────────────────────────────────────
     private var videoCtx: OpaquePointer?
 
+    // ── Color / HDR metadata (cached once per stream) ──────────────────
+    /// Populated on first successful `jf_video_open`. The attachments
+    /// are stream-global — they don't change mid-playback barring
+    /// color-space hotswap (rare; §10.2 in the plan doc).
+    private var cachedColorAttachments: [CFString: CFTypeRef]?
+    /// Raw bytes for the HDR10 mastering display color volume and
+    /// content-light-level attachments. Stored as `CFData` because
+    /// that's the type AVFoundation expects on the CVPixelBuffer
+    /// attachment dictionary.
+    private var cachedMasteringCFData: CFData?
+    private var cachedCllCFData: CFData?
+
     // ── Decode thread ──────────────────────────────────────────────────
     private var decodeThread: Thread?
     private var stopFlag = atomicFlag()
@@ -98,6 +110,12 @@ final class NativeVideoToolboxSource: VideoSource {
                 return
             }
             self.videoCtx = ctx
+
+            // Pull color + HDR metadata off the stream once. The values
+            // are invariant for the session (barring the rare mid-stream
+            // color-space change the plan doc calls out), so caching
+            // avoids hitting the C bridge on the hot decode path.
+            self.cacheStreamMetadata(ctx: ctx)
 
             // mpv initialised with vid=no + pause=yes. Keep vid=no (the
             // native decoder is rendering video now) and unpause audio
@@ -213,6 +231,7 @@ final class NativeVideoToolboxSource: VideoSource {
             // `jf_video_decode_next` hands us a retained CVPixelBuffer.
             let pixelBuffer = Unmanaged<CVPixelBuffer>
                 .fromOpaque(pbPtr).takeRetainedValue()
+            applyColorAttachments(to: pixelBuffer)
 
             // ── Presentation gate ───────────────────────────────────
             // Use mpv's audio-pts as the master clock. While we're
@@ -249,6 +268,94 @@ final class NativeVideoToolboxSource: VideoSource {
             }
 
             enqueueOnLayer(pixelBuffer: pixelBuffer, ptsSeconds: ptsSeconds)
+        }
+    }
+
+    // MARK: - Color / HDR tagging
+
+    /// Read color primaries / transfer / matrix + HDR10 mastering + CLL
+    /// off the ctx and pre-build the CF objects we'll stamp onto each
+    /// pixel buffer. Called once right after `jf_video_open` succeeds.
+    private func cacheStreamMetadata(ctx: OpaquePointer) {
+        var pri: Int32 = 0
+        var trc: Int32 = 0
+        var mat: Int32 = 0
+        var rng: Int32 = 0
+        jf_video_color_info(ctx, &pri, &trc, &mat, &rng)
+
+        var attachments: [CFString: CFTypeRef] = [:]
+        if let key = cvColorPrimariesKey(forAVColorPrimaries: pri) {
+            attachments[kCVImageBufferColorPrimariesKey] = key
+        }
+        if let key = cvTransferFunctionKey(forAVTransfer: trc) {
+            attachments[kCVImageBufferTransferFunctionKey] = key
+        }
+        if let key = cvYCbCrMatrixKey(forAVColorSpace: mat) {
+            attachments[kCVImageBufferYCbCrMatrixKey] = key
+        }
+        cachedColorAttachments = attachments.isEmpty ? nil : attachments
+
+        // HDR10 static mastering display color volume. FFmpeg hands us
+        // chromaticities in 1/50000 fixed-point and luminances in
+        // 1/10000 fixed-point — the exact units AVFoundation expects
+        // in the 24-byte big-endian blob for
+        // kCVImageBufferMasteringDisplayColorVolumeKey.
+        var mastering = [UInt32](repeating: 0, count: 10)
+        let hasMastering =
+            mastering.withUnsafeMutableBufferPointer { buf -> Int32 in
+                guard let base = buf.baseAddress else { return 0 }
+                return jf_video_hdr_mastering(ctx, base)
+            }
+        if hasMastering == 1 {
+            cachedMasteringCFData = packMasteringDisplayVolume(mastering)
+        }
+
+        var cll = [UInt16](repeating: 0, count: 2)
+        let hasCll = cll.withUnsafeMutableBufferPointer { buf -> Int32 in
+            guard let base = buf.baseAddress else { return 0 }
+            return jf_video_hdr_cll(ctx, base)
+        }
+        if hasCll == 1 {
+            cachedCllCFData = packContentLightLevel(cll)
+        }
+
+        if let attachments = cachedColorAttachments, !attachments.isEmpty {
+            let pri = attachments[kCVImageBufferColorPrimariesKey] as? String ?? "-"
+            let trc = attachments[kCVImageBufferTransferFunctionKey] as? String ?? "-"
+            let mat = attachments[kCVImageBufferYCbCrMatrixKey] as? String ?? "-"
+            NSLog(
+                "[NativeVideoSource] color primaries=%@ transfer=%@ matrix=%@ hdr=%@",
+                pri, trc, mat,
+                (cachedMasteringCFData != nil || cachedCllCFData != nil) ? "yes" : "no"
+            )
+        }
+    }
+
+    /// Stamp the cached color + HDR attachments on a decoded frame.
+    /// iOS's compositor falls back to Rec.709 when these are missing,
+    /// which crushes HDR blacks and shifts Rec.2020 primaries toward
+    /// sRGB.
+    private func applyColorAttachments(to pixelBuffer: CVPixelBuffer) {
+        if let attachments = cachedColorAttachments {
+            for (key, value) in attachments {
+                CVBufferSetAttachment(pixelBuffer, key, value, .shouldPropagate)
+            }
+        }
+        if let mastering = cachedMasteringCFData {
+            CVBufferSetAttachment(
+                pixelBuffer,
+                kCVImageBufferMasteringDisplayColorVolumeKey,
+                mastering,
+                .shouldPropagate
+            )
+        }
+        if let cll = cachedCllCFData {
+            CVBufferSetAttachment(
+                pixelBuffer,
+                kCVImageBufferContentLightLevelInfoKey,
+                cll,
+                .shouldPropagate
+            )
         }
     }
 
@@ -342,6 +449,10 @@ final class NativeVideoToolboxSource: VideoSource {
             videoCtx = nil
         }
 
+        cachedColorAttachments = nil
+        cachedMasteringCFData = nil
+        cachedCllCFData = nil
+
         attachedPlayer = nil
         mpvHandle = nil
         targetLayer = nil
@@ -349,6 +460,96 @@ final class NativeVideoToolboxSource: VideoSource {
 
     deinit {
         tearDown()
+    }
+}
+
+// MARK: - FFmpeg → CoreVideo color mapping
+//
+// FFmpeg hands us `AVColorPrimaries` / `AVColorTransferCharacteristic` /
+// `AVColorSpace` enum values straight off the codec context. CoreVideo
+// expects CFString keys on the pixel-buffer attachments. The three
+// helpers below map the enums we actually see in Jellyfin libraries —
+// everything else is left untagged so iOS's default (Rec.709) applies.
+//
+// FFmpeg enum numeric values are ABI-stable; raw ints are cheaper than
+// pulling in the `@_silgen_name` symbol table.
+
+private func cvColorPrimariesKey(forAVColorPrimaries value: Int32) -> CFString? {
+    // AVCOL_PRI_BT709 = 1, BT2020 = 9, SMPTE432 (P3 D65) = 12.
+    switch value {
+    case 1: return kCVImageBufferColorPrimaries_ITU_R_709_2
+    case 9: return kCVImageBufferColorPrimaries_ITU_R_2020
+    case 12: return kCVImageBufferColorPrimaries_P3_D65
+    default: return nil
+    }
+}
+
+private func cvTransferFunctionKey(forAVTransfer value: Int32) -> CFString? {
+    // AVCOL_TRC_BT709 = 1, SMPTE2084 (PQ) = 16, ARIB_STD_B67 (HLG) = 18.
+    switch value {
+    case 1: return kCVImageBufferTransferFunction_ITU_R_709_2
+    case 16: return kCVImageBufferTransferFunction_SMPTE_ST_2084_PQ
+    case 18: return kCVImageBufferTransferFunction_ITU_R_2100_HLG
+    default: return nil
+    }
+}
+
+private func cvYCbCrMatrixKey(forAVColorSpace value: Int32) -> CFString? {
+    // AVCOL_SPC_BT709 = 1, SMPTE170M = 6 (BT.601), BT2020_NCL = 9.
+    switch value {
+    case 1: return kCVImageBufferYCbCrMatrix_ITU_R_709_2
+    case 6: return kCVImageBufferYCbCrMatrix_ITU_R_601_4
+    case 9: return kCVImageBufferYCbCrMatrix_ITU_R_2020
+    default: return nil
+    }
+}
+
+// MARK: - HDR10 static metadata packing
+//
+// CoreVideo's `kCVImageBufferMasteringDisplayColorVolumeKey` takes a
+// 24-byte big-endian blob (SMPTE ST 2086). The FFmpeg fixed-point
+// layout matches exactly — chromaticities in 1/50000 and luminance in
+// 1/10000 cd/m² — so packing is just a memcpy with byte swaps.
+//
+// Layout: Rx Ry Gx Gy Bx By WPx WPy (u16 each) + max_luma, min_luma (u32 each).
+
+private func packMasteringDisplayVolume(_ mastering: [UInt32]) -> CFData? {
+    guard mastering.count == 10 else { return nil }
+    var bytes = [UInt8](repeating: 0, count: 24)
+    // 8 × u16 chromaticities (RGB primaries + white point).
+    for i in 0..<8 {
+        let v = UInt16(clamping: mastering[i])
+        bytes[i * 2] = UInt8((v >> 8) & 0xff)
+        bytes[i * 2 + 1] = UInt8(v & 0xff)
+    }
+    // 2 × u32 luminance.
+    for i in 0..<2 {
+        let v = mastering[8 + i]
+        let off = 16 + i * 4
+        bytes[off] = UInt8((v >> 24) & 0xff)
+        bytes[off + 1] = UInt8((v >> 16) & 0xff)
+        bytes[off + 2] = UInt8((v >> 8) & 0xff)
+        bytes[off + 3] = UInt8(v & 0xff)
+    }
+    return bytes.withUnsafeBufferPointer { buf -> CFData? in
+        guard let base = buf.baseAddress else { return nil }
+        return CFDataCreate(kCFAllocatorDefault, base, 24)
+    }
+}
+
+/// Content-light-level info — 4 bytes, big-endian: MaxCLL (u16),
+/// MaxFALL (u16). cd/m², zero = unknown.
+private func packContentLightLevel(_ cll: [UInt16]) -> CFData? {
+    guard cll.count == 2 else { return nil }
+    let bytes: [UInt8] = [
+        UInt8((cll[0] >> 8) & 0xff),
+        UInt8(cll[0] & 0xff),
+        UInt8((cll[1] >> 8) & 0xff),
+        UInt8(cll[1] & 0xff),
+    ]
+    return bytes.withUnsafeBufferPointer { buf -> CFData? in
+        guard let base = buf.baseAddress else { return nil }
+        return CFDataCreate(kCFAllocatorDefault, base, 4)
     }
 }
 
