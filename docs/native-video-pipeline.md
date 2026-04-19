@@ -51,16 +51,26 @@ property observers. Bitmap subs run through a sidecar ffmpeg context.
 
 ## Phased delivery
 
-| #                | Scope                                                                                                                         | Effort  | Ship gate                                                    |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------------- | ------- | ------------------------------------------------------------ |
-| **0**            | `-copy` stays; plan tracked                                                                                                   | done    | main                                                         |
-| **1**            | mpv `sub-text` observer → JS overlay; mpv still renders video + its own subs behind it                                        | ~3 d    | JS overlay visible on top of mpv's subs, validates data path |
-| **2**            | AVSampleBufferDisplayLayer video + parallel VT decode, `video=no` in mpv, disable mpv sub render in favour of Phase 1 overlay | ~2 wk   | Flag-gated; zero-copy 8-bit + native 10-bit HDR              |
-| **3**            | Parallel libavformat PGS/VobSub/DVB pipeline                                                                                  | ~1–2 wk | Bitmap subs restored on the new path                         |
-| **4** (optional) | libass-backed text sub renderer                                                                                               | ~1 wk   | Full ASS fidelity for anime content                          |
+| #                | Scope                                                                                                 | Effort  | Ship gate                                                   |
+| ---------------- | ----------------------------------------------------------------------------------------------------- | ------- | ----------------------------------------------------------- |
+| **0**            | `-copy` stays; plan tracked                                                                           | done    | main                                                        |
+| **1**            | mpv `sub-text` observer → JS overlay; `sub-visibility=no` so JS overlay is the sole text-sub renderer | ~3 d    | Text subs render via JS overlay; mpv stops compositing subs |
+| **2**            | AVSampleBufferDisplayLayer video + parallel VT decode, `video=no` in mpv                              | ~2 wk   | Flag-gated; zero-copy 8-bit + native 10-bit HDR             |
+| **3**            | Parallel libavformat PGS/VobSub/DVB pipeline                                                          | ~1–2 wk | Bitmap subs restored on the new path                        |
+| **4** (optional) | libass-backed text sub renderer                                                                       | ~1 wk   | Full ASS fidelity for anime content                         |
 
 Minimum ship: 0–2 (~2.5 wk) with a flag fallback to `-copy` when a
 bitmap sub track is selected. Full parity: 0–3 (~4 wk).
+
+### Known regression on-branch
+
+After Phase 1 landed `sub-visibility=no`, bitmap subtitle tracks
+(PGS/VobSub/DVB — common on Blu-ray rips like Titanic) render as
+nothing: mpv's `sub-text` property only fires for text codecs
+(SRT/ASS/WebVTT/mov_text), and mpv is no longer compositing the
+bitmap draw. This is the exact gap Phase 3 closes. The branch is
+not shippable to main until either Phase 3 lands or we gate
+`sub-visibility` per track codec.
 
 ## Sync model (Phase 2+)
 

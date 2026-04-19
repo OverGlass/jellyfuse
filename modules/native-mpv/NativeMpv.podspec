@@ -64,11 +64,20 @@ Pod::Spec.new do |s|
     # the system `<time.h>`. With -I the shadow breaks `<ctime>` →
     # `time_t` resolution. -isystem searches AFTER system headers
     # so the real `<time.h>` wins and the C++ STL compiles correctly.
+    # `include-ffmpeg/` is the Phase 3 sidecar (see
+    # docs/native-video-pipeline.md) — public FFmpeg headers nested
+    # under `libavcodec/`, `libavutil/`, … prefix dirs, used only by
+    # our bitmap-sub C shim. No top-level `time.h` exists there, so
+    # no shadow risk this time around.
     "HEADER_SEARCH_PATHS" => [
       "$(inherited)",
       "${PODS_ROOT}/RCT-Folly",
     ].join(" "),
-    "OTHER_CFLAGS" => "$(inherited) -isystem $(PODS_TARGET_SRCROOT)/vendor/ios/mpvkit-device/include",
+    "OTHER_CFLAGS" => [
+      "$(inherited)",
+      "-isystem $(PODS_TARGET_SRCROOT)/vendor/ios/mpvkit-device/include",
+      "-isystem $(PODS_TARGET_SRCROOT)/vendor/ios/mpvkit-device/include-ffmpeg",
+    ].join(" "),
     "SWIFT_INCLUDE_PATHS[sdk=iphoneos*]"         => "$(inherited) $(PODS_TARGET_SRCROOT)/vendor/ios/mpvkit-device/include",
     "SWIFT_INCLUDE_PATHS[sdk=iphonesimulator*]"  => "$(inherited) $(PODS_TARGET_SRCROOT)/vendor/ios/mpvkit-simulator/include",
     # LIBRARY_SEARCH_PATHS + OTHER_LDFLAGS for MPVKit are set via

@@ -66,12 +66,19 @@ XCFRAMEWORKS=(
 
 # ── cache hit? ────────────────────────────────────────────────────────────────
 
-if [[ -f "${CACHE_DEVICE}/libmpv.a" && -f "${CACHE_SIM}/libmpv.a" && -f "${CACHE_DEVICE}/.complete" ]]; then
+if [[ -f "${CACHE_DEVICE}/libmpv.a" && -f "${CACHE_SIM}/libmpv.a" && -f "${CACHE_DEVICE}/.complete" && -d "${CACHE_DEVICE}/include-ffmpeg/libavcodec" ]]; then
   echo "MPVKit ${MPVKIT_VERSION} already cached at ${CACHE_ROOT}"
 else
   echo "Downloading MPVKit ${MPVKIT_VERSION} to shared cache ${CACHE_ROOT}..."
   rm -rf "${CACHE_DEVICE}" "${CACHE_SIM}"
   mkdir -p "${CACHE_DEVICE}/include" "${CACHE_SIM}/include"
+  # Sidecar dir for FFmpeg public headers. Kept OUT of the mpv include/
+  # dir so that SWIFT_INCLUDE_PATHS (mpv modulemap) and
+  # OTHER_CPLUSPLUSFLAGS (Folly / React Native) never see FFmpeg's
+  # `time.h` — only our C-shim for the bitmap-sub pipeline (Phase 3
+  # of docs/native-video-pipeline.md) reaches it, via a scoped
+  # -isystem in OTHER_CFLAGS.
+  mkdir -p "${CACHE_DEVICE}/include-ffmpeg" "${CACHE_SIM}/include-ffmpeg"
   TMP="$(mktemp -d)"
   trap 'rm -rf "${TMP}"' EXIT
 
@@ -103,6 +110,20 @@ else
         mkdir -p "${CACHE_DEVICE}/include"
         cp "${MODULEMAP}" "${CACHE_DEVICE}/include/${FW_NAME}.modulemap" 2>/dev/null || true
       fi
+      # Preserve FFmpeg public headers in a sidecar dir so the Phase 3
+      # bitmap-sub C shim can reach them without polluting the shared
+      # include path. The XCFrameworks dump headers flat, but ffmpeg's
+      # own `#include <libavcodec/...>` style expects a prefix dir —
+      # so we recreate the lowercased prefix here.
+      case "${FW_NAME}" in
+        Libavcodec | Libavformat | Libavutil | Libavfilter | Libavdevice | Libswresample | Libswscale)
+          if [[ -d "${HEADERS}" ]]; then
+            FFMPEG_PREFIX="$(echo "${FW_NAME}" | tr '[:upper:]' '[:lower:]')"
+            mkdir -p "${CACHE_DEVICE}/include-ffmpeg/${FFMPEG_PREFIX}"
+            cp -R "${HEADERS}"/* "${CACHE_DEVICE}/include-ffmpeg/${FFMPEG_PREFIX}/" 2>/dev/null || true
+          fi
+          ;;
+      esac
       break
     done
 
@@ -125,6 +146,15 @@ else
         mkdir -p "${CACHE_SIM}/include"
         cp "${MODULEMAP}" "${CACHE_SIM}/include/${FW_NAME}.modulemap" 2>/dev/null || true
       fi
+      case "${FW_NAME}" in
+        Libavcodec | Libavformat | Libavutil | Libavfilter | Libavdevice | Libswresample | Libswscale)
+          if [[ -d "${HEADERS}" ]]; then
+            FFMPEG_PREFIX="$(echo "${FW_NAME}" | tr '[:upper:]' '[:lower:]')"
+            mkdir -p "${CACHE_SIM}/include-ffmpeg/${FFMPEG_PREFIX}"
+            cp -R "${HEADERS}"/* "${CACHE_SIM}/include-ffmpeg/${FFMPEG_PREFIX}/" 2>/dev/null || true
+          fi
+          ;;
+      esac
       break
     done
 

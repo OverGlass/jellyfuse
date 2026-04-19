@@ -24,6 +24,13 @@ import UIKit
 
 private let npLog = OSLog(subsystem: "com.jellyfuse.app", category: "NativeMpv")
 
+// Phase 3 link-test — pulled in via @_silgen_name so we don't need a
+// modulemap / bridging header for this one-off scaffold call. Defined
+// in FFmpegBridge.mm; promoted to a proper header when the real
+// BitmapSubDecoder API lands.
+@_silgen_name("jf_ffmpeg_version_info")
+private func jf_ffmpeg_version_info() -> UnsafePointer<CChar>?
+
 // MARK: - HybridNativeMpv
 
 /// `NativeMpv` hybrid object — one instance per player session.
@@ -716,6 +723,15 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         if mpv_initialize(mpv) < 0 {
             mpv_destroy(mpv)
             return nil
+        }
+
+        // Phase 3 link-test (see docs/native-video-pipeline.md). Logs
+        // the FFmpeg build-time version so we can confirm the sidecar
+        // include path + static libs are wired end-to-end before the
+        // bitmap-sub decoder lands. Remove once Phase 3 ships.
+        if let verPtr = jf_ffmpeg_version_info() {
+            let ver = String(cString: verPtr)
+            os_log("ffmpeg linked, av_version_info=%{public}@", log: npLog, type: .default, ver)
         }
 
         // Observe the properties we surface as events.
