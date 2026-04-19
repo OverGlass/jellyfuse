@@ -127,6 +127,24 @@ private func jf_video_hdr_cll(
 @_silgen_name("jf_video_dolby_vision_profile")
 private func jf_video_dolby_vision_profile(_ ctx: OpaquePointer?) -> Int32
 
+@_silgen_name("jf_video_decode_next")
+private func jf_video_decode_next(
+    _ ctx: OpaquePointer?,
+    _ timeoutSeconds: Double,
+    _ outPixelBuffer: UnsafeMutablePointer<UnsafeMutableRawPointer?>,
+    _ outPtsSeconds: UnsafeMutablePointer<Double>,
+    _ outIsKeyframe: UnsafeMutablePointer<Int32>,
+) -> Int32
+
+@_silgen_name("jf_video_seek")
+private func jf_video_seek(_ ctx: OpaquePointer?, _ seconds: Double) -> Int32
+
+@_silgen_name("jf_video_format_description")
+private func jf_video_format_description(_ ctx: OpaquePointer?) -> UnsafeMutableRawPointer?
+
+@_silgen_name("jf_video_pixel_format")
+private func jf_video_pixel_format(_ ctx: OpaquePointer?) -> UInt32
+
 // MARK: - HybridNativeMpv
 
 /// `NativeMpv` hybrid object — one instance per player session.
@@ -1297,12 +1315,18 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
             }
             let dv = jf_video_dolby_vision_profile(ctx)
 
+            let pixelFmt = jf_video_pixel_format(ctx)
+            let pfChars = String(format: "%c%c%c%c",
+                                 Int((pixelFmt >> 24) & 0xff),
+                                 Int((pixelFmt >> 16) & 0xff),
+                                 Int((pixelFmt >> 8) & 0xff),
+                                 Int(pixelFmt & 0xff))
             NSLog("""
-                [VideoHarness] open OK codec=%d %dx%d bits=%d \
+                [VideoHarness] open OK codec=%d %dx%d bits=%d pf=%@ \
                 color pri=%d trc=%d mat=%d range=%d \
                 mastering=%d cll=%d (max=%d fall=%d) dv=%d
                 """,
-                  codecId, w, h, bits,
+                  codecId, w, h, bits, pfChars,
                   pri, trc, mat, rng,
                   hasMastering, hasCll, Int(cll[0]), Int(cll[1]),
                   dv)

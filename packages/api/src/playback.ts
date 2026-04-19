@@ -212,9 +212,17 @@ export async function fetchPlaybackInfo(
       const reasons = Array.isArray(src["TranscodeReasons"])
         ? (src["TranscodeReasons"] as unknown[])
         : [];
-      const video = Array.isArray(src["MediaStreams"])
-        ? (src["MediaStreams"] as Record<string, unknown>[]).find((s) => s["Type"] === "Video")
-        : undefined;
+      const streams = Array.isArray(src["MediaStreams"])
+        ? (src["MediaStreams"] as Record<string, unknown>[])
+        : [];
+      const video = streams.find((s) => s["Type"] === "Video");
+      const audios = streams.filter((s) => s["Type"] === "Audio");
+      const audioSummary = audios
+        .map(
+          (a) =>
+            `${a["Codec"]}/${a["Channels"]}ch${a["Profile"] ? `/${a["Profile"]}` : ""}${a["IsDefault"] ? "*" : ""}`,
+        )
+        .join(",");
       console.log(
         `[PlaybackInfo] source="${String(src["Name"] ?? "?")}" ` +
           `container=${String(src["Container"] ?? "?")} ` +
@@ -224,6 +232,7 @@ export async function fetchPlaybackInfo(
           `reasons=[${reasons.join(",")}] ` +
           `errorCode=${errorCode ?? "(none)"} ` +
           `video=${video ? `${video["Codec"]} ${video["Width"]}x${video["Height"]} ${video["BitDepth"]}bit ${video["VideoRangeType"] ?? video["VideoRange"]} profile=${video["Profile"]} level=${video["Level"]}` : "(none)"} ` +
+          `audio=[${audioSummary}] ` +
           `bitrate=${src["Bitrate"]} size=${src["Size"]}`,
       );
     }
