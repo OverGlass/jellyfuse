@@ -56,6 +56,9 @@ private func jf_bitmap_sub_seek(_ ctx: OpaquePointer?, _ seconds: Double) -> Int
 @_silgen_name("jf_bitmap_sub_cancel")
 private func jf_bitmap_sub_cancel(_ ctx: OpaquePointer?)
 
+@_silgen_name("jf_bitmap_sub_is_cancelled")
+private func jf_bitmap_sub_is_cancelled(_ ctx: OpaquePointer?) -> Int32
+
 @_silgen_name("jf_bitmap_sub_close")
 private func jf_bitmap_sub_close(_ ctx: OpaquePointer?)
 
@@ -1014,7 +1017,10 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
             // Active subtitle track changed (or disabled via `sid=no`).
             // Query the current codec lazily — it reflects the new
             // selection at the moment of this observer fire.
+            let sidValue = (try? getProperty(name: "sid")) ?? ""
             let codec = (try? getProperty(name: "current-tracks/sub/codec")) ?? ""
+            os_log("sid changed: sid=%{public}@ codec=%{public}@",
+                   log: npLog, type: .info, sidValue, codec)
             updateBitmapSubVisibility(codec: codec)
 
         default:
@@ -1200,6 +1206,32 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
                 // normal exit — the stopper set the flag on purpose.
                 break
             }
+
+            // Pace the emission against mpv's playback time. The ffmpeg
+            // demuxer reads as fast as I/O allows, so without this the
+            // worker races ahead of the video and captions fire minutes
+            // early. While mpv is paused, `currentPosition` freezes and
+            // the sleep loop idles — which also stops the overlay from
+            // advancing through captions during a pause.
+            while !isShuttingDown
+                && jf_bitmap_sub_is_cancelled(ctx) == 0
+                && self.currentPosition < pts - 0.2
+            {
+                Thread.sleep(forTimeInterval: 0.1)
+            }
+            if jf_bitmap_sub_is_cancelled(ctx) != 0 {
+                if let rgbaPtr = rgba { jf_bitmap_sub_free_rgba(rgbaPtr); rgba = nil }
+                break
+            }
+            // Skip events that belong entirely to the past — after a
+            // forward seek, the decoder may still emit a few events from
+            // before the seek before av_read_frame reads from the new
+            // position. Drop them so they don't flash on screen.
+            if dur > 0 && self.currentPosition > pts + dur + 0.5 {
+                if let rgbaPtr = rgba { jf_bitmap_sub_free_rgba(rgbaPtr); rgba = nil }
+                continue
+            }
+
             if numRects == 0 {
                 DispatchQueue.main.async { [weak self] in
                     guard let self, self.bitmapSubVisible else { return }

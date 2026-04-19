@@ -326,6 +326,14 @@ extern "C" void jf_bitmap_sub_cancel(struct jf_bitmap_sub_ctx *ctx) {
     ctx->cancel.store(1);
 }
 
+// Query the cancel flag so the Swift-side pacing loop can bail out
+// when a seek/teardown was requested while it was waiting for mpv's
+// playback time to catch up to the next sub's pts.
+extern "C" int jf_bitmap_sub_is_cancelled(struct jf_bitmap_sub_ctx *ctx) {
+    if (!ctx) return 1;
+    return ctx->cancel.load() ? 1 : 0;
+}
+
 extern "C" void jf_bitmap_sub_close(struct jf_bitmap_sub_ctx *ctx) {
     if (!ctx) return;
     ctx->cancel.store(1);
