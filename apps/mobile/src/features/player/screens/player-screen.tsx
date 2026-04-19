@@ -7,6 +7,7 @@ import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { resolvePlayback } from "@/services/playback/resolver";
 import { useResolverSettings } from "@/services/settings/use-resolver-settings";
+import { useLocalSettings } from "@/services/settings/use-local-settings";
 import { localTrickplayData, resolveLocalStream } from "@/services/downloads/local-stream";
 import { useDownloadForItem } from "@/services/downloads/use-local-downloads";
 import { useConnectionStatus } from "@/services/connection/monitor";
@@ -35,6 +36,7 @@ export function PlayerScreen({ jellyfinId }: Props) {
 
   const { serverUrl } = useAuth();
   const resolverSettings = useResolverSettings();
+  const localSettings = useLocalSettings();
   const detail = useMovieDetail(jellyfinId);
   // Local-first policy:
   //   - Original download → always use local (source file, full fidelity,
@@ -148,7 +150,9 @@ export function PlayerScreen({ jellyfinId }: Props) {
           hybridRef={callback((ref) => {
             if (ref && player.mpv) {
               try {
-                ref.attachPlayer(player.mpv.instanceId);
+                ref.attachPlayer(player.mpv.instanceId, {
+                  source: localSettings.nativeVideoPipelineEnabled ? "native" : "mpv",
+                });
               } catch (e) {
                 console.error("[player] attachPlayer error:", e);
               }

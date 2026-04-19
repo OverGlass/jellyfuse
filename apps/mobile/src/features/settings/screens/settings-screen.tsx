@@ -297,6 +297,27 @@ export function SettingsScreen() {
           />
         </SettingsSection>
 
+        <SettingsSection
+          title="Advanced"
+          footer="Routes video through VideoToolbox directly instead of mpv's readback path. Unlocks 10-bit HDR and Dolby Vision tagging. Experimental — disable if playback glitches."
+        >
+          <SettingsRow
+            label="Native video pipeline"
+            sublabel="HDR / Dolby Vision"
+            trailing={
+              <Switch
+                value={local.nativeVideoPipelineEnabled ?? false}
+                onValueChange={(v) =>
+                  updateLocal({ nativeVideoPipelineEnabled: v ? true : undefined })
+                }
+                trackColor={{ false: colors.border, true: colors.accent }}
+                thumbColor={colors.textPrimary}
+              />
+            }
+            hasDivider={false}
+          />
+        </SettingsSection>
+
         {jellyseerrUrl ? (
           <SettingsSection
             title="Requests"

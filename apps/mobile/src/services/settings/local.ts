@@ -31,10 +31,17 @@ export interface LocalSettings {
    * (let Jellyfin pick based on the `PlaybackInfo` response).
    */
   maxStreamingBitrateMbps: number | undefined;
+  /**
+   * Opt-in to the native VideoToolbox pipeline (AVSampleBufferDisplayLayer +
+   * libavformat side-decode) instead of mpv's readback path. Enables 10-bit
+   * HDR + Dolby Vision tagging. `undefined` = use the mpv path (default).
+   */
+  nativeVideoPipelineEnabled: boolean | undefined;
 }
 
 export const DEFAULT_LOCAL_SETTINGS: LocalSettings = {
   maxStreamingBitrateMbps: undefined,
+  nativeVideoPipelineEnabled: undefined,
 };
 
 export function readLocalSettings(userId: string): LocalSettings {
@@ -46,6 +53,10 @@ export function readLocalSettings(userId: string): LocalSettings {
       maxStreamingBitrateMbps:
         typeof parsed.maxStreamingBitrateMbps === "number"
           ? parsed.maxStreamingBitrateMbps
+          : undefined,
+      nativeVideoPipelineEnabled:
+        typeof parsed.nativeVideoPipelineEnabled === "boolean"
+          ? parsed.nativeVideoPipelineEnabled
           : undefined,
     };
   } catch {
