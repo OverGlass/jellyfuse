@@ -438,9 +438,9 @@ extension MpvVideoView: AVPictureInPictureSampleBufferPlaybackDelegate {
 
 /// Nitro HybridView wrapping `MpvVideoView`. React mounts this as
 /// `<MpvVideoView>` and calls `attachPlayer` / `detachPlayer` via the
-/// `hybridRef`. The concrete `VideoSource` is selected here — Phase 2b
-/// ships the legacy `MpvRenderContextSource` unconditionally; Phase 2c
-/// adds a `source` option that picks the native decoder.
+/// `hybridRef`. The concrete `VideoSource` is selected from the
+/// `source` attach option — `.mpv` uses the legacy mpv_render_context
+/// path, `.native` uses the libavformat + VideoToolbox decoder.
 public final class HybridMpvVideoView: HybridMpvVideoViewSpec {
 
     private let videoView = MpvVideoView()
@@ -459,21 +459,15 @@ public final class HybridMpvVideoView: HybridMpvVideoViewSpec {
             throw RuntimeError("Player has been released")
         }
         let selected = options?.source ?? .mpv
-        if selected == .native {
-            // Phase 2c — NativeVideoToolboxSource lands in Commit C3.
-            // Until then, fall back to the legacy render path so the
-            // option can be plumbed through JS without breaking
-            // playback.
-            NSLog(
-                "[MpvVideoView] source=native requested but decoder not implemented yet — falling back to mpv render"
-            )
-        }
         // Nitro calls hybridRef from the JS thread, but the source's
         // GL setup and `AVPictureInPictureController` construction
         // must run on main.
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            let source: VideoSource = MpvRenderContextSource()
+            let source: VideoSource =
+                (selected == .native)
+                ? NativeVideoToolboxSource()
+                : MpvRenderContextSource()
             self.videoView.attach(source: source, player: player, mpvHandle: handle)
         }
     }
