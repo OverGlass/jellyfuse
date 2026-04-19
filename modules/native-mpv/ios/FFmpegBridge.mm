@@ -101,7 +101,10 @@ static void jf_dump_rect_png(const AVSubtitleRect *rect, double pts_seconds) {
     }
 
     NSString *filename = [NSString stringWithFormat:@"jf-pgs-%.3f.png", pts_seconds];
-    NSString *path = [NSTemporaryDirectory() stringByAppendingPathComponent:filename];
+    NSArray<NSString *> *docs =
+        NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+    NSString *dir = docs.firstObject ?: NSTemporaryDirectory();
+    NSString *path = [dir stringByAppendingPathComponent:filename];
     NSURL *url = [NSURL fileURLWithPath:path];
     CGImageDestinationRef dest =
         CGImageDestinationCreateWithURL((CFURLRef)url, kUTTypePNG, 1, nullptr);
