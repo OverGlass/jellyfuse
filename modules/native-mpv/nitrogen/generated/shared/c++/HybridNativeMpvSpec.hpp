@@ -91,6 +91,7 @@ namespace margelo::nitro::nativempv {
       virtual MpvListener addErrorListener(const std::function<void(const std::string& /* message */)>& onError) = 0;
       virtual MpvListener addTracksListener(const std::function<void(const std::vector<MpvAudioTrack>& /* audio */, const std::vector<MpvSubtitleTrack>& /* subtitle */)>& onTracksDiscovered) = 0;
       virtual MpvListener addBufferingListener(const std::function<void(bool /* isBuffering */, double /* progress */)>& onBuffering) = 0;
+      virtual MpvListener addSubtitleTextListener(const std::function<void(const std::string& /* text */)>& onSubtitleText) = 0;
       virtual void setNowPlayingMetadata(const std::optional<std::variant<nitro::NullType, MpvNowPlayingInfo>>& info) = 0;
       virtual MpvListener addRemoteCommandListener(const std::function<void(MpvRemoteCommand /* command */, double /* value */)>& onRemoteCommand) = 0;
 

@@ -30,6 +30,14 @@ export interface MpvPlayerState {
   isBuffering: boolean;
   duration: number;
   error: string | null;
+  /**
+   * Current caption from mpv's `sub-text` property — plain text with
+   * ASS tags stripped. Empty string when no caption is active or subs
+   * are disabled. Drives the JS `SubtitleOverlay` (Phase 1 of the
+   * native video pipeline migration, see
+   * `docs/native-video-pipeline.md`).
+   */
+  subtitleText: string;
 }
 
 export interface UseMpvPlayerReturn extends MpvPlayerState {
@@ -63,6 +71,7 @@ export function useMpvPlayer(
   const [isBuffering, setIsBuffering] = useState(false);
   const [duration, setDuration] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [subtitleText, setSubtitleText] = useState("");
   const positionShared = useSharedValue(0);
   const durationShared = useSharedValue(0);
   const durationRef = useRef(0);
@@ -103,6 +112,10 @@ export function useMpvPlayer(
     setIsBuffering(buffering);
   });
 
+  const onSubtitleText = useEffectEvent((text: string) => {
+    setSubtitleText(text);
+  });
+
   // ── Sync mpv lifecycle with React ─────────────────────────────────
 
   useEffect(() => {
@@ -115,6 +128,7 @@ export function useMpvPlayer(
       mpv.addEndedListener(onEnded),
       mpv.addErrorListener(onError),
       mpv.addBufferingListener(onBuffering),
+      mpv.addSubtitleTextListener(onSubtitleText),
     ];
 
     return () => {
@@ -201,6 +215,7 @@ export function useMpvPlayer(
     positionShared,
     durationShared,
     error,
+    subtitleText,
     play,
     pause,
     seek,

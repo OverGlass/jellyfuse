@@ -87,6 +87,7 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
     private var tracksSubs: [Subscription<([MpvAudioTrack], [MpvSubtitleTrack]) -> Void>] = []
     private var bufferingSubs: [Subscription<(Bool, Double) -> Void>] = []
     private var remoteSubs: [Subscription<(MpvRemoteCommand, Double) -> Void>] = []
+    private var subTextSubs: [Subscription<(String) -> Void>] = []
 
     // Cached now-playing base dict. Elapsed time + rate are merged on
     // every progress/pause update so the lock-screen scrubber stays in
@@ -303,6 +304,21 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         bufferingSubs.append(sub)
         return makeListener { [weak self] in
             self?.bufferingSubs.removeAll { $0 === sub }
+        }
+    }
+
+    public func addSubtitleTextListener(
+        onSubtitleText: @escaping (String) -> Void
+    ) throws -> MpvListener {
+        let sub = Subscription(onSubtitleText)
+        subTextSubs.append(sub)
+        // Fire the current value immediately so a listener attached
+        // mid-caption doesn't wait until the next boundary to render.
+        if !currentSubText.isEmpty {
+            sub.callback(currentSubText)
+        }
+        return makeListener { [weak self] in
+            self?.subTextSubs.removeAll { $0 === sub }
         }
     }
 
@@ -707,6 +723,9 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         // ao_audiounit has just called setCategory(.playback, options:)
         // which drops routeSharingPolicy back to .default.
         mpv_observe_property(mpv, 8, "audio-params", MPV_FORMAT_NODE)
+        // Current subtitle caption (stripped of ASS tags). Fires on
+        // every sub-boundary transition — no polling.
+        mpv_observe_property(mpv, 9, "sub-text", MPV_FORMAT_STRING)
 
         // Background thread pumping `mpv_wait_event`. Phase 3b may
         // merge this with the render context's update callback.
@@ -736,6 +755,7 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         tracksSubs.removeAll()
         bufferingSubs.removeAll()
         remoteSubs.removeAll()
+        subTextSubs.removeAll()
         nowPlayingBase = nil
         DispatchQueue.main.async { [weak self] in
             MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
@@ -795,6 +815,10 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
     // (Time Profiler showed ~23% on the RN JS thread for Hermes +
     // React re-renders during playback).
     private var lastProgressEmitAt: TimeInterval = 0
+    // Last caption we emitted — deduped before firing listeners so
+    // repeated identical property events (mpv re-emits on track /
+    // seek) don't spam the JS bridge.
+    private var currentSubText: String = ""
 
     private func handlePropertyChange(_ event: mpv_event) {
         guard let dataPtr = event.data else { return }
@@ -856,6 +880,27 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
             applyAudioSessionConfig()
             os_log("re-applied AVAudioSession after audio-params change",
                    log: npLog, type: .default)
+
+        case "sub-text":
+            // prop.data holds a `char **` — dereference twice. Format
+            // is MPV_FORMAT_STRING; mpv owns the buffer for the
+            // duration of this event.
+            let text: String
+            if prop.format == MPV_FORMAT_STRING, let valPtr = prop.data {
+                let strPtrPtr = valPtr.assumingMemoryBound(to: UnsafePointer<CChar>?.self)
+                if let strPtr = strPtrPtr.pointee {
+                    text = String(cString: strPtr)
+                } else {
+                    text = ""
+                }
+            } else {
+                text = ""
+            }
+            if text != currentSubText {
+                currentSubText = text
+                let snap = subTextSubs
+                for s in snap { s.callback(text) }
+            }
 
         default:
             break

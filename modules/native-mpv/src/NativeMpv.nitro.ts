@@ -230,6 +230,19 @@ export interface NativeMpv extends HybridObject<{ ios: "swift" }> {
   /** Buffering / seek spinner. `progress` is 0–1 if mpv reports it, else 0. */
   addBufferingListener(onBuffering: (isBuffering: boolean, progress: number) => void): MpvListener;
 
+  /**
+   * Current subtitle caption as plain text. Fires each time mpv
+   * crosses a subtitle boundary (including on → off with an empty
+   * string). Empty string means no active caption.
+   *
+   * Source: mpv's `sub-text` property — strips ASS tags, preserves
+   * newlines. Used by the JS subtitle overlay; forms the data path
+   * that Phase 2 of the native video pipeline (see
+   * `docs/native-video-pipeline.md`) leans on once mpv stops
+   * compositing subs into the video frame itself.
+   */
+  addSubtitleTextListener(onSubtitleText: (text: string) => void): MpvListener;
+
   // ── lock-screen / Control Center integration ────────────────────────────
   /**
    * Publish now-playing metadata to `MPNowPlayingInfoCenter` (iOS) or

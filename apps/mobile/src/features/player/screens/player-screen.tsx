@@ -13,6 +13,7 @@ import { useConnectionStatus } from "@/services/connection/monitor";
 import { useMovieDetail } from "@/services/query";
 import { ControlsOverlay } from "../components/controls-overlay";
 import { SkipSegmentPill } from "../components/skip-segment-pill";
+import { SubtitleOverlay } from "../components/subtitle-overlay";
 import { TrackPicker } from "../components/track-picker";
 import { useMpvPlayer } from "../hooks/use-mpv-player";
 import { useNowPlaying } from "../hooks/use-now-playing";
@@ -154,6 +155,11 @@ export function PlayerScreen({ jellyfinId }: Props) {
           })}
         />
       ) : null}
+
+      {/* Subtitle overlay — Phase 1 of native video pipeline migration.
+          Renders on top of mpv's own caption draw during the migration
+          window so both appear; Phase 2 disables mpv's compositor. */}
+      <SubtitleOverlay text={player.subtitleText} />
 
       {/* Intro/recap/credits skip pill */}
       <SkipSegmentPill

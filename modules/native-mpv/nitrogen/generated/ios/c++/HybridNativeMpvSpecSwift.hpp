@@ -219,6 +219,14 @@ namespace margelo::nitro::nativempv {
       auto __value = std::move(__result.value());
       return __value;
     }
+    inline MpvListener addSubtitleTextListener(const std::function<void(const std::string& /* text */)>& onSubtitleText) override {
+      auto __result = _swiftPart.addSubtitleTextListener(onSubtitleText);
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
     inline void setNowPlayingMetadata(const std::optional<std::variant<nitro::NullType, MpvNowPlayingInfo>>& info) override {
       auto __result = _swiftPart.setNowPlayingMetadata(info);
       if (__result.hasError()) [[unlikely]] {
