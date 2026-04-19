@@ -941,6 +941,11 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         // visibility so switching to a text track (or disabling subs)
         // hides PGS immediately.
         mpv_observe_property(mpv, 10, "sid", MPV_FORMAT_STRING)
+        // Audio clock — true audio-output PTS. The native VideoToolbox
+        // decoder path (Phase 2c) uses this as the master clock to gate
+        // frame presentation. `playback-time` would double-advance the
+        // estimate because mpv already derives it from the AO position.
+        mpv_observe_property(mpv, 11, "audio-pts", MPV_FORMAT_DOUBLE)
 
         // Background thread pumping `mpv_wait_event`. Phase 3b may
         // merge this with the render context's update callback.
@@ -1026,6 +1031,21 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
     private var currentDuration: Double = 0
     private var currentRate: Double = 1.0
     private var isPausedNow: Bool = true
+    // Master audio clock in seconds. Written from the mpv event
+    // thread on every `audio-pts` observation (100–200 Hz, same
+    // cadence as `playback-time`). Read from the VideoToolbox decode
+    // + present threads to gate frame timing. Guarded by a tiny
+    // unfair-lock — a torn Double read on arm64 is theoretically
+    // possible and would manifest as a single-frame jitter.
+    private var _audioPtsSeconds: Double = 0
+    private var audioPtsLock = os_unfair_lock()
+    /// Thread-safe snapshot of the latest `audio-pts` value.
+    var audioPtsSeconds: Double {
+        os_unfair_lock_lock(&audioPtsLock)
+        let val = _audioPtsSeconds
+        os_unfair_lock_unlock(&audioPtsLock)
+        return val
+    }
     // Throttle MPNowPlayingInfoCenter writes to ~1 Hz — libmpv fires
     // `playback-time` observers much more frequently than the lock
     // screen UI needs.
@@ -1059,6 +1079,13 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
             }
             throttledRefreshNowPlaying()
             syncViewPlaybackState(throttled: true)
+
+        case "audio-pts":
+            guard prop.format == MPV_FORMAT_DOUBLE, let valPtr = prop.data else { return }
+            let pts = valPtr.assumingMemoryBound(to: Double.self).pointee
+            os_unfair_lock_lock(&audioPtsLock)
+            _audioPtsSeconds = pts
+            os_unfair_lock_unlock(&audioPtsLock)
 
         case "duration":
             guard prop.format == MPV_FORMAT_DOUBLE, let valPtr = prop.data else { return }

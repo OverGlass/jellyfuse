@@ -13,9 +13,12 @@
 #error NitroModules cannot be found! Are you sure you installed NitroModules properly?
 #endif
 
-
+// Forward declaration of `MpvAttachOptions` to properly resolve imports.
+namespace margelo::nitro::nativempv { struct MpvAttachOptions; }
 
 #include <string>
+#include "MpvAttachOptions.hpp"
+#include <optional>
 
 namespace margelo::nitro::nativempv {
 
@@ -48,7 +51,7 @@ namespace margelo::nitro::nativempv {
 
     public:
       // Methods
-      virtual void attachPlayer(const std::string& instanceId) = 0;
+      virtual void attachPlayer(const std::string& instanceId, const std::optional<MpvAttachOptions>& options) = 0;
       virtual void detachPlayer() = 0;
 
     protected:

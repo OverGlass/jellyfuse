@@ -12,6 +12,8 @@
 namespace margelo::nitro::nativempv { class HybridMpvVideoViewSpec; }
 // Forward declaration of `HybridNativeMpvSpec` to properly resolve imports.
 namespace margelo::nitro::nativempv { class HybridNativeMpvSpec; }
+// Forward declaration of `MpvAttachOptions` to properly resolve imports.
+namespace margelo::nitro::nativempv { struct MpvAttachOptions; }
 // Forward declaration of `MpvAudioTrack` to properly resolve imports.
 namespace margelo::nitro::nativempv { struct MpvAudioTrack; }
 // Forward declaration of `MpvBitmapSubtitle` to properly resolve imports.
@@ -28,6 +30,8 @@ namespace margelo::nitro::nativempv { enum class MpvPlaybackState; }
 namespace margelo::nitro::nativempv { enum class MpvRemoteCommand; }
 // Forward declaration of `MpvSubtitleTrack` to properly resolve imports.
 namespace margelo::nitro::nativempv { struct MpvSubtitleTrack; }
+// Forward declaration of `MpvVideoSource` to properly resolve imports.
+namespace margelo::nitro::nativempv { enum class MpvVideoSource; }
 
 // Forward declarations of Swift defined types
 // Forward declaration of `HybridMpvVideoViewSpec_cxx` to properly resolve imports.
@@ -38,6 +42,7 @@ namespace NativeMpv { class HybridNativeMpvSpec_cxx; }
 // Include C++ defined types
 #include "HybridMpvVideoViewSpec.hpp"
 #include "HybridNativeMpvSpec.hpp"
+#include "MpvAttachOptions.hpp"
 #include "MpvAudioTrack.hpp"
 #include "MpvBitmapSubtitle.hpp"
 #include "MpvExternalSubtitle.hpp"
@@ -46,6 +51,7 @@ namespace NativeMpv { class HybridNativeMpvSpec_cxx; }
 #include "MpvPlaybackState.hpp"
 #include "MpvRemoteCommand.hpp"
 #include "MpvSubtitleTrack.hpp"
+#include "MpvVideoSource.hpp"
 #include <NitroModules/Null.hpp>
 #include <NitroModules/Result.hpp>
 #include <exception>
@@ -62,6 +68,36 @@ namespace NativeMpv { class HybridNativeMpvSpec_cxx; }
  */
 namespace margelo::nitro::nativempv::bridge::swift {
 
+  // pragma MARK: std::optional<MpvVideoSource>
+  /**
+   * Specialized version of `std::optional<MpvVideoSource>`.
+   */
+  using std__optional_MpvVideoSource_ = std::optional<MpvVideoSource>;
+  inline std::optional<MpvVideoSource> create_std__optional_MpvVideoSource_(const MpvVideoSource& value) noexcept {
+    return std::optional<MpvVideoSource>(value);
+  }
+  inline bool has_value_std__optional_MpvVideoSource_(const std::optional<MpvVideoSource>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline MpvVideoSource get_std__optional_MpvVideoSource_(const std::optional<MpvVideoSource>& optional) noexcept {
+    return optional.value();
+  }
+  
+  // pragma MARK: std::optional<MpvAttachOptions>
+  /**
+   * Specialized version of `std::optional<MpvAttachOptions>`.
+   */
+  using std__optional_MpvAttachOptions_ = std::optional<MpvAttachOptions>;
+  inline std::optional<MpvAttachOptions> create_std__optional_MpvAttachOptions_(const MpvAttachOptions& value) noexcept {
+    return std::optional<MpvAttachOptions>(value);
+  }
+  inline bool has_value_std__optional_MpvAttachOptions_(const std::optional<MpvAttachOptions>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline MpvAttachOptions get_std__optional_MpvAttachOptions_(const std::optional<MpvAttachOptions>& optional) noexcept {
+    return optional.value();
+  }
+  
   // pragma MARK: std::shared_ptr<HybridMpvVideoViewSpec>
   /**
    * Specialized version of `std::shared_ptr<HybridMpvVideoViewSpec>`.

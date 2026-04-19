@@ -13,7 +13,7 @@ public protocol HybridMpvVideoViewSpec_protocol: HybridObject, HybridView {
   
 
   // Methods
-  func attachPlayer(instanceId: String) throws -> Void
+  func attachPlayer(instanceId: String, options: MpvAttachOptions?) throws -> Void
   func detachPlayer() throws -> Void
 }
 

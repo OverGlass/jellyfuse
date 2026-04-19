@@ -451,19 +451,29 @@ public final class HybridMpvVideoView: HybridMpvVideoViewSpec {
         super.init()
     }
 
-    public func attachPlayer(instanceId: String) throws {
+    public func attachPlayer(instanceId: String, options: MpvAttachOptions?) throws {
         guard let player = HybridNativeMpv.instance(for: instanceId) else {
             throw RuntimeError("No player with instanceId \(instanceId)")
         }
         guard let handle = player.mpvHandle else {
             throw RuntimeError("Player has been released")
         }
+        let selected = options?.source ?? .mpv
+        if selected == .native {
+            // Phase 2c — NativeVideoToolboxSource lands in Commit C3.
+            // Until then, fall back to the legacy render path so the
+            // option can be plumbed through JS without breaking
+            // playback.
+            NSLog(
+                "[MpvVideoView] source=native requested but decoder not implemented yet — falling back to mpv render"
+            )
+        }
         // Nitro calls hybridRef from the JS thread, but the source's
         // GL setup and `AVPictureInPictureController` construction
         // must run on main.
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            let source = MpvRenderContextSource()
+            let source: VideoSource = MpvRenderContextSource()
             self.videoView.attach(source: source, player: player, mpvHandle: handle)
         }
     }

@@ -20,13 +20,34 @@ import type { HybridView, HybridViewMethods, HybridViewProps } from "react-nativ
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface MpvVideoViewProps extends HybridViewProps {}
 
+/**
+ * Selects which frame producer feeds the view's
+ * `AVSampleBufferDisplayLayer`. Phase 2b ships the legacy
+ * `"mpv"` path as the default; Phase 2c lights up `"native"` —
+ * a parallel libavformat + VideoToolbox pipeline that decodes
+ * straight into CVPixelBuffers (zero-copy, 10-bit HDR, Dolby
+ * Vision). See `docs/native-video-pipeline-phase-2.md`.
+ *
+ * `"native"` currently falls back to `"mpv"` with a warning
+ * until the decoder lands in Commit C3.
+ */
+export type MpvVideoSource = "mpv" | "native";
+
+export interface MpvAttachOptions {
+  /** Defaults to `"mpv"`. */
+  source?: MpvVideoSource;
+}
+
 export interface MpvVideoViewMethods extends HybridViewMethods {
   /**
    * Connect this render surface to a `NativeMpv` player instance.
-   * Creates an OpenGL ES render context, enables video decoding
-   * (`vid=auto`), and starts the CADisplayLink render loop.
+   * By default, creates an OpenGL ES render context, enables video
+   * decoding (`vid=auto`), and starts the CADisplayLink render loop.
+   *
+   * Pass `{ source: "native" }` to select the VideoToolbox decoder
+   * (Phase 2c — behind the feature flag for now).
    */
-  attachPlayer(instanceId: string): void;
+  attachPlayer(instanceId: string, options?: MpvAttachOptions): void;
 
   /**
    * Disconnect from the player. Tears down the render context and

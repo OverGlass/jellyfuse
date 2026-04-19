@@ -12,9 +12,15 @@
 // Forward declaration of `HybridMpvVideoViewSpec_cxx` to properly resolve imports.
 namespace NativeMpv { class HybridMpvVideoViewSpec_cxx; }
 
-
+// Forward declaration of `MpvAttachOptions` to properly resolve imports.
+namespace margelo::nitro::nativempv { struct MpvAttachOptions; }
+// Forward declaration of `MpvVideoSource` to properly resolve imports.
+namespace margelo::nitro::nativempv { enum class MpvVideoSource; }
 
 #include <string>
+#include "MpvAttachOptions.hpp"
+#include <optional>
+#include "MpvVideoSource.hpp"
 
 #include "NativeMpv-Swift-Cxx-Umbrella.hpp"
 
@@ -66,8 +72,8 @@ namespace margelo::nitro::nativempv {
 
   public:
     // Methods
-    inline void attachPlayer(const std::string& instanceId) override {
-      auto __result = _swiftPart.attachPlayer(instanceId);
+    inline void attachPlayer(const std::string& instanceId, const std::optional<MpvAttachOptions>& options) override {
+      auto __result = _swiftPart.attachPlayer(instanceId, options);
       if (__result.hasError()) [[unlikely]] {
         std::rethrow_exception(__result.error());
       }

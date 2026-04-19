@@ -125,9 +125,9 @@ open class HybridMpvVideoViewSpec_cxx {
 
   // Methods
   @inline(__always)
-  public final func attachPlayer(instanceId: std.string) -> bridge.Result_void_ {
+  public final func attachPlayer(instanceId: std.string, options: bridge.std__optional_MpvAttachOptions_) -> bridge.Result_void_ {
     do {
-      try self.__implementation.attachPlayer(instanceId: String(instanceId))
+      try self.__implementation.attachPlayer(instanceId: String(instanceId), options: options.value)
       return bridge.create_Result_void_()
     } catch (let __error) {
       let __exceptionPtr = __error.toCpp()
