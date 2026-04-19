@@ -135,6 +135,30 @@ export interface MpvNowPlayingInfo {
 }
 
 /**
+ * One bitmap subtitle event (PGS / VobSub / DVB). Emitted by the
+ * sidecar ffmpeg decoder — see docs/native-video-pipeline.md Phase 3.
+ * `pixels` is a tightly packed RGBA8888 buffer of size `width *
+ * height * 4`; byte order matches Skia's kRGBA_8888 layout so the JS
+ * overlay can feed it straight into an `SkImage`.
+ *
+ * `x` / `y` / `width` / `height` are in the source video's coordinate
+ * system (1920×1080 for PGS, 720×480 for DVD, etc.). The overlay scales
+ * them against the on-screen video rect before rendering. For clears,
+ * subscribe to `addBitmapSubtitleClearListener` — the decoder emits a
+ * dedicated clear event whenever a composition-delete packet arrives,
+ * so the overlay doesn't need to track duration timers.
+ */
+export interface MpvBitmapSubtitle {
+  ptsSeconds: number;
+  durationSeconds: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  pixels: ArrayBuffer;
+}
+
+/**
  * Remote-control commands dispatched from the lock screen /
  * Control Center / AirPods. The optional `value` carries the
  * scrub target (in seconds) for `changePlaybackPosition`.
@@ -242,6 +266,23 @@ export interface NativeMpv extends HybridObject<{ ios: "swift" }> {
    * compositing subs into the video frame itself.
    */
   addSubtitleTextListener(onSubtitleText: (text: string) => void): MpvListener;
+
+  /**
+   * Emitted when a bitmap-subtitle show packet is decoded. Bitmap subs
+   * (PGS on Blu-ray, VobSub on DVD, DVB broadcast) go through a
+   * sidecar ffmpeg context rather than through mpv's compositor — see
+   * docs/native-video-pipeline.md Phase 3. The listener receives raw
+   * RGBA pixels and source-video-coordinate position; the JS overlay
+   * owns all scaling + layering.
+   *
+   * Fires only when the currently selected subtitle track is a bitmap
+   * codec. Pair with `addBitmapSubtitleClearListener` to handle the
+   * hide events that PGS streams emit between dialogue lines.
+   */
+  addBitmapSubtitleListener(onBitmapSubtitle: (event: MpvBitmapSubtitle) => void): MpvListener;
+
+  /** Bitmap subtitle hide event — clear the overlay. */
+  addBitmapSubtitleClearListener(onClear: () => void): MpvListener;
 
   // ── lock-screen / Control Center integration ────────────────────────────
   /**

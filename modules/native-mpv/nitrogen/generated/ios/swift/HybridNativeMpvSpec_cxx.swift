@@ -394,6 +394,40 @@ open class HybridNativeMpvSpec_cxx {
   }
   
   @inline(__always)
+  public final func addBitmapSubtitleListener(onBitmapSubtitle: bridge.Func_void_MpvBitmapSubtitle) -> bridge.Result_MpvListener_ {
+    do {
+      let __result = try self.__implementation.addBitmapSubtitleListener(onBitmapSubtitle: { () -> (MpvBitmapSubtitle) -> Void in
+        let __wrappedFunction = bridge.wrap_Func_void_MpvBitmapSubtitle(onBitmapSubtitle)
+        return { (__event: MpvBitmapSubtitle) -> Void in
+          __wrappedFunction.call(__event)
+        }
+      }())
+      let __resultCpp = __result
+      return bridge.create_Result_MpvListener_(__resultCpp)
+    } catch (let __error) {
+      let __exceptionPtr = __error.toCpp()
+      return bridge.create_Result_MpvListener_(__exceptionPtr)
+    }
+  }
+  
+  @inline(__always)
+  public final func addBitmapSubtitleClearListener(onClear: bridge.Func_void) -> bridge.Result_MpvListener_ {
+    do {
+      let __result = try self.__implementation.addBitmapSubtitleClearListener(onClear: { () -> () -> Void in
+        let __wrappedFunction = bridge.wrap_Func_void(onClear)
+        return { () -> Void in
+          __wrappedFunction.call()
+        }
+      }())
+      let __resultCpp = __result
+      return bridge.create_Result_MpvListener_(__resultCpp)
+    } catch (let __error) {
+      let __exceptionPtr = __error.toCpp()
+      return bridge.create_Result_MpvListener_(__exceptionPtr)
+    }
+  }
+  
+  @inline(__always)
   public final func setNowPlayingMetadata(info: bridge.std__optional_std__variant_nitro__NullType__MpvNowPlayingInfo__) -> bridge.Result_void_ {
     do {
       try self.__implementation.setNowPlayingMetadata(info: { () -> Variant_NullType_MpvNowPlayingInfo? in

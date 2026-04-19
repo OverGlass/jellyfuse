@@ -23,6 +23,8 @@ namespace margelo::nitro::nativempv { enum class MpvPlaybackState; }
 namespace margelo::nitro::nativempv { struct MpvAudioTrack; }
 // Forward declaration of `MpvSubtitleTrack` to properly resolve imports.
 namespace margelo::nitro::nativempv { struct MpvSubtitleTrack; }
+// Forward declaration of `MpvBitmapSubtitle` to properly resolve imports.
+namespace margelo::nitro::nativempv { struct MpvBitmapSubtitle; }
 // Forward declaration of `MpvNowPlayingInfo` to properly resolve imports.
 namespace margelo::nitro::nativempv { struct MpvNowPlayingInfo; }
 // Forward declaration of `MpvRemoteCommand` to properly resolve imports.
@@ -36,6 +38,7 @@ namespace margelo::nitro::nativempv { enum class MpvRemoteCommand; }
 #include "MpvAudioTrack.hpp"
 #include <vector>
 #include "MpvSubtitleTrack.hpp"
+#include "MpvBitmapSubtitle.hpp"
 #include <NitroModules/Null.hpp>
 #include "MpvNowPlayingInfo.hpp"
 #include <variant>
@@ -92,6 +95,8 @@ namespace margelo::nitro::nativempv {
       virtual MpvListener addTracksListener(const std::function<void(const std::vector<MpvAudioTrack>& /* audio */, const std::vector<MpvSubtitleTrack>& /* subtitle */)>& onTracksDiscovered) = 0;
       virtual MpvListener addBufferingListener(const std::function<void(bool /* isBuffering */, double /* progress */)>& onBuffering) = 0;
       virtual MpvListener addSubtitleTextListener(const std::function<void(const std::string& /* text */)>& onSubtitleText) = 0;
+      virtual MpvListener addBitmapSubtitleListener(const std::function<void(const MpvBitmapSubtitle& /* event */)>& onBitmapSubtitle) = 0;
+      virtual MpvListener addBitmapSubtitleClearListener(const std::function<void()>& onClear) = 0;
       virtual void setNowPlayingMetadata(const std::optional<std::variant<nitro::NullType, MpvNowPlayingInfo>>& info) = 0;
       virtual MpvListener addRemoteCommandListener(const std::function<void(MpvRemoteCommand /* command */, double /* value */)>& onRemoteCommand) = 0;
 

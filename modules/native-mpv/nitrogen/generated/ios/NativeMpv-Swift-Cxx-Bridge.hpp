@@ -8,12 +8,16 @@
 #pragma once
 
 // Forward declarations of C++ defined types
+// Forward declaration of `ArrayBufferHolder` to properly resolve imports.
+namespace NitroModules { class ArrayBufferHolder; }
 // Forward declaration of `HybridMpvVideoViewSpec` to properly resolve imports.
 namespace margelo::nitro::nativempv { class HybridMpvVideoViewSpec; }
 // Forward declaration of `HybridNativeMpvSpec` to properly resolve imports.
 namespace margelo::nitro::nativempv { class HybridNativeMpvSpec; }
 // Forward declaration of `MpvAudioTrack` to properly resolve imports.
 namespace margelo::nitro::nativempv { struct MpvAudioTrack; }
+// Forward declaration of `MpvBitmapSubtitle` to properly resolve imports.
+namespace margelo::nitro::nativempv { struct MpvBitmapSubtitle; }
 // Forward declaration of `MpvExternalSubtitle` to properly resolve imports.
 namespace margelo::nitro::nativempv { struct MpvExternalSubtitle; }
 // Forward declaration of `MpvListener` to properly resolve imports.
@@ -37,12 +41,15 @@ namespace NativeMpv { class HybridNativeMpvSpec_cxx; }
 #include "HybridMpvVideoViewSpec.hpp"
 #include "HybridNativeMpvSpec.hpp"
 #include "MpvAudioTrack.hpp"
+#include "MpvBitmapSubtitle.hpp"
 #include "MpvExternalSubtitle.hpp"
 #include "MpvListener.hpp"
 #include "MpvNowPlayingInfo.hpp"
 #include "MpvPlaybackState.hpp"
 #include "MpvRemoteCommand.hpp"
 #include "MpvSubtitleTrack.hpp"
+#include <NitroModules/ArrayBuffer.hpp>
+#include <NitroModules/ArrayBufferHolder.hpp>
 #include <NitroModules/Null.hpp>
 #include <NitroModules/Result.hpp>
 #include <exception>
@@ -288,6 +295,28 @@ namespace margelo::nitro::nativempv::bridge::swift {
   Func_void_bool_double create_Func_void_bool_double(void* NON_NULL swiftClosureWrapper) noexcept;
   inline Func_void_bool_double_Wrapper wrap_Func_void_bool_double(Func_void_bool_double value) noexcept {
     return Func_void_bool_double_Wrapper(std::move(value));
+  }
+  
+  // pragma MARK: std::function<void(const MpvBitmapSubtitle& /* event */)>
+  /**
+   * Specialized version of `std::function<void(const MpvBitmapSubtitle&)>`.
+   */
+  using Func_void_MpvBitmapSubtitle = std::function<void(const MpvBitmapSubtitle& /* event */)>;
+  /**
+   * Wrapper class for a `std::function<void(const MpvBitmapSubtitle& / * event * /)>`, this can be used from Swift.
+   */
+  class Func_void_MpvBitmapSubtitle_Wrapper final {
+  public:
+    explicit Func_void_MpvBitmapSubtitle_Wrapper(std::function<void(const MpvBitmapSubtitle& /* event */)>&& func): _function(std::make_unique<std::function<void(const MpvBitmapSubtitle& /* event */)>>(std::move(func))) {}
+    inline void call(MpvBitmapSubtitle event) const noexcept {
+      _function->operator()(event);
+    }
+  private:
+    std::unique_ptr<std::function<void(const MpvBitmapSubtitle& /* event */)>> _function;
+  } SWIFT_NONCOPYABLE;
+  Func_void_MpvBitmapSubtitle create_Func_void_MpvBitmapSubtitle(void* NON_NULL swiftClosureWrapper) noexcept;
+  inline Func_void_MpvBitmapSubtitle_Wrapper wrap_Func_void_MpvBitmapSubtitle(Func_void_MpvBitmapSubtitle value) noexcept {
+    return Func_void_MpvBitmapSubtitle_Wrapper(std::move(value));
   }
   
   // pragma MARK: std::optional<bool>

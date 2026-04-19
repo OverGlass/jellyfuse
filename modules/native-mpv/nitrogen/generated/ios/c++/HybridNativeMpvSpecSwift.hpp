@@ -24,6 +24,10 @@ namespace margelo::nitro::nativempv { enum class MpvPlaybackState; }
 namespace margelo::nitro::nativempv { struct MpvAudioTrack; }
 // Forward declaration of `MpvSubtitleTrack` to properly resolve imports.
 namespace margelo::nitro::nativempv { struct MpvSubtitleTrack; }
+// Forward declaration of `MpvBitmapSubtitle` to properly resolve imports.
+namespace margelo::nitro::nativempv { struct MpvBitmapSubtitle; }
+// Forward declaration of `ArrayBufferHolder` to properly resolve imports.
+namespace NitroModules { class ArrayBufferHolder; }
 // Forward declaration of `MpvNowPlayingInfo` to properly resolve imports.
 namespace margelo::nitro::nativempv { struct MpvNowPlayingInfo; }
 // Forward declaration of `MpvRemoteCommand` to properly resolve imports.
@@ -39,6 +43,9 @@ namespace margelo::nitro::nativempv { enum class MpvRemoteCommand; }
 #include "MpvPlaybackState.hpp"
 #include "MpvAudioTrack.hpp"
 #include "MpvSubtitleTrack.hpp"
+#include "MpvBitmapSubtitle.hpp"
+#include <NitroModules/ArrayBuffer.hpp>
+#include <NitroModules/ArrayBufferHolder.hpp>
 #include <NitroModules/Null.hpp>
 #include "MpvNowPlayingInfo.hpp"
 #include <variant>
@@ -221,6 +228,22 @@ namespace margelo::nitro::nativempv {
     }
     inline MpvListener addSubtitleTextListener(const std::function<void(const std::string& /* text */)>& onSubtitleText) override {
       auto __result = _swiftPart.addSubtitleTextListener(onSubtitleText);
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
+    inline MpvListener addBitmapSubtitleListener(const std::function<void(const MpvBitmapSubtitle& /* event */)>& onBitmapSubtitle) override {
+      auto __result = _swiftPart.addBitmapSubtitleListener(onBitmapSubtitle);
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
+    inline MpvListener addBitmapSubtitleClearListener(const std::function<void()>& onClear) override {
+      auto __result = _swiftPart.addBitmapSubtitleClearListener(onClear);
       if (__result.hasError()) [[unlikely]] {
         std::rethrow_exception(__result.error());
       }

@@ -126,6 +126,8 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
     private var bufferingSubs: [Subscription<(Bool, Double) -> Void>] = []
     private var remoteSubs: [Subscription<(MpvRemoteCommand, Double) -> Void>] = []
     private var subTextSubs: [Subscription<(String) -> Void>] = []
+    private var bitmapSubSubs: [Subscription<(MpvBitmapSubtitle) -> Void>] = []
+    private var bitmapSubClearSubs: [Subscription<() -> Void>] = []
 
     // Bitmap subtitle decoder (PGS / VobSub / DVB) — parallel avformat
     // context that sits alongside mpv and pumps sub packets on a
@@ -373,6 +375,26 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         }
         return makeListener { [weak self] in
             self?.subTextSubs.removeAll { $0 === sub }
+        }
+    }
+
+    public func addBitmapSubtitleListener(
+        onBitmapSubtitle: @escaping (MpvBitmapSubtitle) -> Void
+    ) throws -> MpvListener {
+        let sub = Subscription(onBitmapSubtitle)
+        bitmapSubSubs.append(sub)
+        return makeListener { [weak self] in
+            self?.bitmapSubSubs.removeAll { $0 === sub }
+        }
+    }
+
+    public func addBitmapSubtitleClearListener(
+        onClear: @escaping () -> Void
+    ) throws -> MpvListener {
+        let sub = Subscription(onClear)
+        bitmapSubClearSubs.append(sub)
+        return makeListener { [weak self] in
+            self?.bitmapSubClearSubs.removeAll { $0 === sub }
         }
     }
 
@@ -819,6 +841,8 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         bufferingSubs.removeAll()
         remoteSubs.removeAll()
         subTextSubs.removeAll()
+        bitmapSubSubs.removeAll()
+        bitmapSubClearSubs.removeAll()
         nowPlayingBase = nil
         DispatchQueue.main.async { [weak self] in
             MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
@@ -1057,11 +1081,35 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
                 break
             }
             if numRects == 0 {
-                os_log("bitmap-sub: clear @ %{public}.3fs", log: npLog, type: .debug, pts)
-            } else {
-                os_log("bitmap-sub: show @ %{public}.3fs dur=%{public}.3fs pos=(%d,%d) size=%dx%d",
-                       log: npLog, type: .debug, pts, dur, Int(x), Int(y), Int(w), Int(h))
-                if let rgba { jf_bitmap_sub_free_rgba(rgba) }
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    for s in self.bitmapSubClearSubs { s.callback() }
+                }
+            } else if let rgbaPtr = rgba, w > 0, h > 0 {
+                let byteCount = Int(w) * Int(h) * 4
+                // Copy the decoder's malloc'd buffer into a Nitro-owned
+                // ArrayBuffer, then free the source so the decoder can
+                // reuse its allocator. JS keeps the ArrayBuffer alive as
+                // long as it needs it.
+                let buffer = ArrayBuffer.copy(of: rgbaPtr, size: byteCount)
+                jf_bitmap_sub_free_rgba(rgbaPtr)
+                rgba = nil
+
+                let event = MpvBitmapSubtitle(
+                    ptsSeconds: pts,
+                    durationSeconds: dur,
+                    x: Double(x),
+                    y: Double(y),
+                    width: Double(w),
+                    height: Double(h),
+                    pixels: buffer,
+                )
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    for s in self.bitmapSubSubs { s.callback(event) }
+                }
+            } else if let rgbaPtr = rgba {
+                jf_bitmap_sub_free_rgba(rgbaPtr)
                 rgba = nil
             }
         }

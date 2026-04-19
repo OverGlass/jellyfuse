@@ -32,6 +32,8 @@ public protocol HybridNativeMpvSpec_protocol: HybridObject {
   func addTracksListener(onTracksDiscovered: @escaping (_ audio: [MpvAudioTrack], _ subtitle: [MpvSubtitleTrack]) -> Void) throws -> MpvListener
   func addBufferingListener(onBuffering: @escaping (_ isBuffering: Bool, _ progress: Double) -> Void) throws -> MpvListener
   func addSubtitleTextListener(onSubtitleText: @escaping (_ text: String) -> Void) throws -> MpvListener
+  func addBitmapSubtitleListener(onBitmapSubtitle: @escaping (_ event: MpvBitmapSubtitle) -> Void) throws -> MpvListener
+  func addBitmapSubtitleClearListener(onClear: @escaping () -> Void) throws -> MpvListener
   func setNowPlayingMetadata(info: Variant_NullType_MpvNowPlayingInfo?) throws -> Void
   func addRemoteCommandListener(onRemoteCommand: @escaping (_ command: MpvRemoteCommand, _ value: Double) -> Void) throws -> MpvListener
 }

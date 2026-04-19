@@ -14,6 +14,8 @@ namespace margelo::nitro::nativempv { class HybridMpvVideoViewSpec; }
 namespace margelo::nitro::nativempv { class HybridNativeMpvSpec; }
 // Forward declaration of `MpvAudioTrack` to properly resolve imports.
 namespace margelo::nitro::nativempv { struct MpvAudioTrack; }
+// Forward declaration of `MpvBitmapSubtitle` to properly resolve imports.
+namespace margelo::nitro::nativempv { struct MpvBitmapSubtitle; }
 // Forward declaration of `MpvExternalSubtitle` to properly resolve imports.
 namespace margelo::nitro::nativempv { struct MpvExternalSubtitle; }
 // Forward declaration of `MpvListener` to properly resolve imports.
@@ -33,6 +35,7 @@ namespace margelo::nitro::nativempv { struct MpvSubtitleTrack; }
 #include "HybridMpvVideoViewSpec.hpp"
 #include "HybridNativeMpvSpec.hpp"
 #include "MpvAudioTrack.hpp"
+#include "MpvBitmapSubtitle.hpp"
 #include "MpvExternalSubtitle.hpp"
 #include "MpvListener.hpp"
 #include "MpvLoadOptions.hpp"
@@ -40,6 +43,7 @@ namespace margelo::nitro::nativempv { struct MpvSubtitleTrack; }
 #include "MpvPlaybackState.hpp"
 #include "MpvRemoteCommand.hpp"
 #include "MpvSubtitleTrack.hpp"
+#include <NitroModules/ArrayBuffer.hpp>
 #include <NitroModules/Null.hpp>
 #include <NitroModules/Result.hpp>
 #include <exception>
