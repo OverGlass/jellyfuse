@@ -26,18 +26,41 @@ private let npLog = OSLog(subsystem: "com.jellyfuse.app", category: "NativeMpv")
 
 // Phase 3 bitmap-sub shim entry points (see
 // docs/native-video-pipeline.md). Pulled in via @_silgen_name so we
-// don't need a modulemap / bridging header for these diagnostic calls.
-// Promoted to a proper header + module setup when the full
-// BitmapSubDecoder API lands.
+// don't need a modulemap / bridging header — the C functions live in
+// FFmpegBridge.mm and expose an opaque-handle streaming API.
 @_silgen_name("jf_ffmpeg_version_info")
 private func jf_ffmpeg_version_info() -> UnsafePointer<CChar>?
 
-@_silgen_name("jf_bitmap_sub_test_decode")
-private func jf_bitmap_sub_test_decode(
+@_silgen_name("jf_bitmap_sub_open")
+private func jf_bitmap_sub_open(
     _ url: UnsafePointer<CChar>?,
     _ startSeconds: Double,
-    _ maxEvents: Int32,
+) -> OpaquePointer?
+
+@_silgen_name("jf_bitmap_sub_decode_next")
+private func jf_bitmap_sub_decode_next(
+    _ ctx: OpaquePointer?,
+    _ outPtsSeconds: UnsafeMutablePointer<Double>,
+    _ outDurationSeconds: UnsafeMutablePointer<Double>,
+    _ outNumRects: UnsafeMutablePointer<Int32>,
+    _ outX: UnsafeMutablePointer<Int32>,
+    _ outY: UnsafeMutablePointer<Int32>,
+    _ outWidth: UnsafeMutablePointer<Int32>,
+    _ outHeight: UnsafeMutablePointer<Int32>,
+    _ outRgba: UnsafeMutablePointer<UnsafeMutablePointer<UInt8>?>,
 ) -> Int32
+
+@_silgen_name("jf_bitmap_sub_seek")
+private func jf_bitmap_sub_seek(_ ctx: OpaquePointer?, _ seconds: Double) -> Int32
+
+@_silgen_name("jf_bitmap_sub_cancel")
+private func jf_bitmap_sub_cancel(_ ctx: OpaquePointer?)
+
+@_silgen_name("jf_bitmap_sub_close")
+private func jf_bitmap_sub_close(_ ctx: OpaquePointer?)
+
+@_silgen_name("jf_bitmap_sub_free_rgba")
+private func jf_bitmap_sub_free_rgba(_ rgba: UnsafeMutablePointer<UInt8>?)
 
 // MARK: - HybridNativeMpv
 
@@ -104,6 +127,14 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
     private var remoteSubs: [Subscription<(MpvRemoteCommand, Double) -> Void>] = []
     private var subTextSubs: [Subscription<(String) -> Void>] = []
 
+    // Bitmap subtitle decoder (PGS / VobSub / DVB) — parallel avformat
+    // context that sits alongside mpv and pumps sub packets on a
+    // background queue. See docs/native-video-pipeline.md Phase 3.
+    // mpv's sub-text observer only fires for text codecs; bitmap tracks
+    // go through this sidecar and render via a JS overlay layer.
+    private var bitmapSubCtx: OpaquePointer?
+    private let bitmapSubQueue = DispatchQueue(label: "com.jellyfuse.bitmapsub", qos: .utility)
+
     // Cached now-playing base dict. Elapsed time + rate are merged on
     // every progress/pause update so the lock-screen scrubber stays in
     // sync. `nil` means the session hasn't published metadata yet — in
@@ -168,22 +199,13 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
             throw mpvError("loadfile failed: \(String(cString: mpv_error_string(rc)))")
         }
 
-        // Phase 3 diagnostic decode (see docs/native-video-pipeline.md).
-        // Opens a parallel avformat context, selects the first bitmap
-        // sub stream, seeks to mpv's start position (so we don't scan
-        // through minutes of video waiting for the first sparse PGS
-        // packet), and decodes the first N events — logs PTS,
-        // duration, and per-rect geometry for each. Runs on a
-        // background queue because the HTTP handshake + header read
-        // block. Replaced by the real streaming BitmapSubDecoder in
-        // follow-up commits.
-        let decodeUrl = streamUrl
-        let decodeStart = options.startPositionSeconds ?? 0
-        DispatchQueue.global(qos: .utility).async {
-            decodeUrl.withCString { cstr in
-                _ = jf_bitmap_sub_test_decode(cstr, decodeStart, 20)
-            }
-        }
+        // Kick off the parallel bitmap-sub decoder (PGS / VobSub / DVB).
+        // See docs/native-video-pipeline.md Phase 3 — mpv's `sub-text`
+        // observer only fires for text codecs, so we pump bitmap
+        // packets through a sidecar avformat context and let a JS
+        // overlay render them. The worker is a no-op if the file has
+        // no bitmap sub streams.
+        startBitmapSubWorker(url: streamUrl, startSeconds: options.startPositionSeconds ?? 0)
 
         // External subtitles BEFORE selection — each sub-add grows
         // the track list and mpv assigns the next sequential sid.
@@ -781,6 +803,7 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
     private func tearDownMpv() {
         if isShuttingDown { return }
         isShuttingDown = true
+        stopBitmapSubWorker()
         HybridNativeMpv.instances.removeValue(forKey: instanceId)
         // Detach all render views BEFORE destroying the mpv handle.
         // mpv docs: "mpv_render_context_free() should be called before
@@ -982,5 +1005,65 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         // closure field — nitrogen produces the backing type from
         // the TS interface declaration in NativeMpv.nitro.ts.
         return MpvListener(remove: remove)
+    }
+
+    // MARK: Bitmap subtitle worker
+
+    private func startBitmapSubWorker(url: String, startSeconds: Double) {
+        stopBitmapSubWorker()
+        bitmapSubQueue.async { [weak self] in
+            guard let self else { return }
+            guard let ctx = url.withCString({ jf_bitmap_sub_open($0, startSeconds) }) else {
+                return
+            }
+            // Publish the handle so `stopBitmapSubWorker` can signal
+            // cancel from another thread. The worker itself owns the
+            // close — the stopper only flips the cancel flag and
+            // clears the published ref.
+            self.bitmapSubCtx = ctx
+            self.runBitmapSubLoop(ctx: ctx)
+            self.bitmapSubCtx = nil
+            jf_bitmap_sub_close(ctx)
+        }
+    }
+
+    private func stopBitmapSubWorker() {
+        // Signal cancel; the worker unblocks from av_read_frame via the
+        // interrupt_callback, the loop exits (cancel-aware), and the
+        // worker's own close path frees the ctx. We do NOT close here —
+        // that would race with a decode_next still in flight.
+        if let ctx = bitmapSubCtx {
+            jf_bitmap_sub_cancel(ctx)
+        }
+    }
+
+    private func runBitmapSubLoop(ctx: OpaquePointer) {
+        var pts: Double = 0
+        var dur: Double = 0
+        var numRects: Int32 = 0
+        var x: Int32 = 0, y: Int32 = 0, w: Int32 = 0, h: Int32 = 0
+        var rgba: UnsafeMutablePointer<UInt8>? = nil
+
+        while !isShuttingDown {
+            let rc = jf_bitmap_sub_decode_next(ctx, &pts, &dur, &numRects, &x, &y, &w, &h, &rgba)
+            if rc == 1 {
+                os_log("bitmap-sub: EOF", log: npLog, type: .info)
+                break
+            }
+            if rc < 0 {
+                // Cancel is reported back through decode_next (av_read_frame
+                // returns EIO via the interrupt_callback). Treat it as a
+                // normal exit — the stopper set the flag on purpose.
+                break
+            }
+            if numRects == 0 {
+                os_log("bitmap-sub: clear @ %{public}.3fs", log: npLog, type: .debug, pts)
+            } else {
+                os_log("bitmap-sub: show @ %{public}.3fs dur=%{public}.3fs pos=(%d,%d) size=%dx%d",
+                       log: npLog, type: .debug, pts, dur, Int(x), Int(y), Int(w), Int(h))
+                if let rgba { jf_bitmap_sub_free_rgba(rgba) }
+                rgba = nil
+            }
+        }
     }
 }

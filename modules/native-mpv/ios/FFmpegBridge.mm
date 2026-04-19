@@ -1,9 +1,7 @@
 // Phase 3 bitmap-sub shim (see docs/native-video-pipeline.md). Exports
 // pure-C symbols picked up by Swift via @_silgen_name in
 // HybridNativeMpv.swift — no bridging header / modulemap needed for
-// these diagnostic probes. When the full BitmapSubDecoder API lands
-// (open / decode-loop / seek with streaming RGBA transfer) we'll
-// promote this to a proper header + module setup.
+// an opaque-handle C API.
 //
 // MPVKit's FFmpeg public headers ship WITHOUT `extern "C"` guards.
 // This file compiles as Objective-C++ (pod-wide GCC_INPUT_FILETYPE=
@@ -25,9 +23,11 @@ extern "C" {
 #import <ImageIO/ImageIO.h>
 #import <MobileCoreServices/UTCoreTypes.h>
 
+#include <atomic>
 #include <dispatch/dispatch.h>
 #include <os/log.h>
-#include <vector>
+#include <stdlib.h>
+#include <string.h>
 
 static os_log_t jf_ffmpeg_log(void) {
     static os_log_t log;
@@ -52,77 +52,6 @@ extern "C" const char *jf_ffmpeg_version_info(void) {
     return av_version_info();
 }
 
-// One-shot diagnostic: convert the first decoded PAL8 rect to RGBA and
-// write a PNG to NSTemporaryDirectory(). We need this before building
-// the streaming pipeline to confirm the palette byte order — ffmpeg
-// hands us `rect->data[1]` as a 256-entry uint32_t palette, but the
-// layout (ARGB / RGBA / endianness) is not trivially documented for
-// each codec. A garbled PNG here would mean all downstream frames are
-// miscolored; better to catch it with a single static image we can
-// eyeball than after wiring up the full Metal texture pipeline.
-static void jf_dump_rect_png(const AVSubtitleRect *rect, double pts_seconds) {
-    if (!rect || rect->w <= 0 || rect->h <= 0) return;
-    if (!rect->data[0] || !rect->data[1]) return;
-
-    const int w = rect->w;
-    const int h = rect->h;
-    const int stride = rect->linesize[0];
-    const uint32_t *palette = (const uint32_t *)rect->data[1];
-    const uint8_t *indices = rect->data[0];
-
-    std::vector<uint8_t> rgba((size_t)w * (size_t)h * 4, 0);
-    for (int y = 0; y < h; y++) {
-        for (int x = 0; x < w; x++) {
-            uint8_t idx = indices[y * stride + x];
-            uint32_t argb = palette[idx];
-            uint8_t a = (argb >> 24) & 0xff;
-            uint8_t r = (argb >> 16) & 0xff;
-            uint8_t g = (argb >>  8) & 0xff;
-            uint8_t b = (argb >>  0) & 0xff;
-            uint8_t *p = &rgba[((size_t)y * (size_t)w + (size_t)x) * 4];
-            p[0] = r; p[1] = g; p[2] = b; p[3] = a;
-        }
-    }
-
-    CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
-    CGBitmapInfo bi = (CGBitmapInfo)(kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
-    CGContextRef ctx = CGBitmapContextCreate(rgba.data(), (size_t)w, (size_t)h,
-                                             8, (size_t)w * 4, cs, bi);
-    CGColorSpaceRelease(cs);
-    if (!ctx) {
-        os_log_error(jf_ffmpeg_log(), "dump: CGBitmapContextCreate failed");
-        return;
-    }
-    CGImageRef img = CGBitmapContextCreateImage(ctx);
-    CGContextRelease(ctx);
-    if (!img) {
-        os_log_error(jf_ffmpeg_log(), "dump: CGBitmapContextCreateImage failed");
-        return;
-    }
-
-    NSString *filename = [NSString stringWithFormat:@"jf-pgs-%.3f.png", pts_seconds];
-    NSArray<NSString *> *docs =
-        NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
-    NSString *dir = docs.firstObject ?: NSTemporaryDirectory();
-    NSString *path = [dir stringByAppendingPathComponent:filename];
-    NSURL *url = [NSURL fileURLWithPath:path];
-    CGImageDestinationRef dest =
-        CGImageDestinationCreateWithURL((CFURLRef)url, kUTTypePNG, 1, nullptr);
-    if (!dest) {
-        CGImageRelease(img);
-        os_log_error(jf_ffmpeg_log(), "dump: CGImageDestinationCreateWithURL failed");
-        return;
-    }
-    CGImageDestinationAddImage(dest, img, nullptr);
-    bool ok = CGImageDestinationFinalize(dest);
-    CFRelease(dest);
-    CGImageRelease(img);
-
-    os_log(jf_ffmpeg_log(),
-           "dump: wrote %dx%d PNG ok=%d → %{public}s",
-           w, h, ok ? 1 : 0, path.UTF8String);
-}
-
 static bool is_bitmap_sub_codec(enum AVCodecID id) {
     switch (id) {
     case AV_CODEC_ID_HDMV_PGS_SUBTITLE:
@@ -134,23 +63,60 @@ static bool is_bitmap_sub_codec(enum AVCodecID id) {
     }
 }
 
-// Opens `url`, finds the first bitmap-sub stream, seeks to
-// `start_seconds`, and decodes up to `max_events` subtitle events —
-// logs PTS / duration / per-rect geometry for each. Synchronous —
-// callers must run on a background queue. Purely diagnostic:
-// validates that the PGS / VobSub / DVB decoder path works end-to-end
-// before we wire up RGBA transfer and the Nitro-exposed streaming
-// API.
+// Streaming PAL8→RGBA for a single subtitle rect. Writes into a caller-
+// owned buffer sized w*h*4. Byte order: R, G, B, A — matches Skia's
+// kRGBA_8888_SkColorType which is what the JS overlay consumes.
 //
-// The seek matters because PGS packets are sparse (typically minutes
-// apart for dialogue subs). Starting from byte 0 means av_read_frame
-// has to stream over tens of MB of video chunks before it hits the
-// first sub packet. Seeking to mpv's resume position lines the
-// sidecar up with where the user will actually see captions.
-extern "C" int jf_bitmap_sub_test_decode(const char *url, double start_seconds,
-                                         int max_events) {
-    if (!url) return -1;
-    if (max_events <= 0) max_events = 20;
+// FFmpeg hands us `rect->data[1]` as a 256-entry uint32_t palette in
+// AV_PIX_FMT_RGB32 layout. On little-endian (iOS/ARM) that's BGRA bytes
+// in memory, so reading as uint32_t gives us 0xAARRGGBB — the shifts
+// below extract the four channels regardless of endianness.
+static void rect_to_rgba(const AVSubtitleRect *rect, uint8_t *rgba) {
+    const int w = rect->w;
+    const int h = rect->h;
+    const int stride = rect->linesize[0];
+    const uint32_t *palette = (const uint32_t *)rect->data[1];
+    const uint8_t *indices = rect->data[0];
+
+    for (int y = 0; y < h; y++) {
+        const uint8_t *srcRow = indices + y * stride;
+        uint8_t *dstRow = rgba + (size_t)y * (size_t)w * 4;
+        for (int x = 0; x < w; x++) {
+            uint32_t argb = palette[srcRow[x]];
+            uint8_t *p = dstRow + (size_t)x * 4;
+            p[0] = (argb >> 16) & 0xff; // R
+            p[1] = (argb >>  8) & 0xff; // G
+            p[2] = (argb >>  0) & 0xff; // B
+            p[3] = (argb >> 24) & 0xff; // A
+        }
+    }
+}
+
+// ─── Streaming decoder ──────────────────────────────────────────────
+// Opaque context the Swift side owns. Swift holds a raw pointer and
+// invokes the C functions below; the context is single-threaded — the
+// caller must not poke it from more than one queue at a time.
+
+struct jf_bitmap_sub_ctx {
+    AVFormatContext *fmt;
+    AVCodecContext *cctx;
+    int streamIndex;
+    AVRational timeBase;
+    AVPacket *pkt;
+    std::atomic<int> cancel;
+};
+
+// Interrupt callback — returns non-zero when avformat should abort the
+// current blocking op. Lets `close` unblock a `decode_next` that's
+// parked inside av_read_frame waiting on HTTPS bytes.
+static int jf_bitmap_sub_interrupt(void *opaque) {
+    auto *ctx = (struct jf_bitmap_sub_ctx *)opaque;
+    return ctx && ctx->cancel.load() ? 1 : 0;
+}
+
+extern "C" struct jf_bitmap_sub_ctx *jf_bitmap_sub_open(const char *url,
+                                                         double start_seconds) {
+    if (!url) return nullptr;
     jf_ffmpeg_init_once();
 
     AVFormatContext *fmt = nullptr;
@@ -163,15 +129,15 @@ extern "C" int jf_bitmap_sub_test_decode(const char *url, double start_seconds,
     if (rc < 0) {
         char err[AV_ERROR_MAX_STRING_SIZE] = {0};
         av_strerror(rc, err, sizeof(err));
-        os_log_error(jf_ffmpeg_log(), "decode: open_input failed rc=%d (%{public}s)", rc, err);
-        return -1;
+        os_log_error(jf_ffmpeg_log(), "open: avformat_open_input failed (%{public}s)", err);
+        return nullptr;
     }
 
     rc = avformat_find_stream_info(fmt, nullptr);
     if (rc < 0) {
-        os_log_error(jf_ffmpeg_log(), "decode: find_stream_info failed");
+        os_log_error(jf_ffmpeg_log(), "open: find_stream_info failed");
         avformat_close_input(&fmt);
-        return -1;
+        return nullptr;
     }
 
     int streamIndex = -1;
@@ -184,13 +150,11 @@ extern "C" int jf_bitmap_sub_test_decode(const char *url, double start_seconds,
         }
     }
     if (streamIndex < 0) {
-        os_log(jf_ffmpeg_log(), "decode: no bitmap sub stream found");
+        os_log(jf_ffmpeg_log(), "open: no bitmap sub stream");
         avformat_close_input(&fmt);
-        return 0;
+        return nullptr;
     }
 
-    // Skip every other stream at the demux layer — saves bandwidth +
-    // in-memory packet copies. We only need this one sub track.
     for (unsigned i = 0; i < fmt->nb_streams; i++) {
         fmt->streams[i]->discard = (int(i) == streamIndex) ? AVDISCARD_DEFAULT : AVDISCARD_ALL;
     }
@@ -198,135 +162,175 @@ extern "C" int jf_bitmap_sub_test_decode(const char *url, double start_seconds,
     AVStream *st = fmt->streams[streamIndex];
     const AVCodec *codec = avcodec_find_decoder(st->codecpar->codec_id);
     if (!codec) {
-        os_log_error(jf_ffmpeg_log(),
-                     "decode: no decoder for codec id %d",
+        os_log_error(jf_ffmpeg_log(), "open: no decoder for codec %d",
                      (int)st->codecpar->codec_id);
         avformat_close_input(&fmt);
-        return -1;
+        return nullptr;
     }
 
     AVCodecContext *cctx = avcodec_alloc_context3(codec);
     if (!cctx) {
         avformat_close_input(&fmt);
-        return -1;
+        return nullptr;
     }
-    if (avcodec_parameters_to_context(cctx, st->codecpar) < 0) {
+    if (avcodec_parameters_to_context(cctx, st->codecpar) < 0 ||
+        avcodec_open2(cctx, codec, nullptr) < 0) {
         avcodec_free_context(&cctx);
         avformat_close_input(&fmt);
-        return -1;
+        return nullptr;
     }
-    if (avcodec_open2(cctx, codec, nullptr) < 0) {
-        os_log_error(jf_ffmpeg_log(), "decode: avcodec_open2 failed");
-        avcodec_free_context(&cctx);
-        avformat_close_input(&fmt);
-        return -1;
+
+    if (start_seconds > 0) {
+        int64_t seekTs = (int64_t)(start_seconds / av_q2d(st->time_base));
+        (void)av_seek_frame(fmt, streamIndex, seekTs, AVSEEK_FLAG_BACKWARD);
     }
+
+    auto *ctx = new jf_bitmap_sub_ctx();
+    ctx->fmt = fmt;
+    ctx->cctx = cctx;
+    ctx->streamIndex = streamIndex;
+    ctx->timeBase = st->time_base;
+    ctx->pkt = av_packet_alloc();
+    ctx->cancel.store(0);
+    fmt->interrupt_callback.callback = jf_bitmap_sub_interrupt;
+    fmt->interrupt_callback.opaque = ctx;
 
     AVDictionaryEntry *lang = av_dict_get(st->metadata, "language", nullptr, 0);
     os_log(jf_ffmpeg_log(),
-           "decode: stream #%d codec=%{public}s lang=%{public}s — seek=%.2fs max=%d",
-           streamIndex,
-           codec->name,
-           lang ? lang->value : "?",
-           start_seconds,
-           max_events);
+           "open: stream #%d codec=%{public}s lang=%{public}s start=%.2fs",
+           streamIndex, codec->name, lang ? lang->value : "?", start_seconds);
+    return ctx;
+}
 
-    // Seek to the requested start so we don't have to stream through
-    // minutes of video to find the first sub packet. AVSEEK_FLAG_ANY
-    // lets ffmpeg land on any frame (for subs there are no keyframes),
-    // and we use the sub stream's own time_base so the timestamp
-    // resolves in the same units the packet PTSs will carry.
-    if (start_seconds > 0) {
-        int64_t seekTs = (int64_t)(start_seconds / av_q2d(st->time_base));
-        int srv = av_seek_frame(fmt, streamIndex, seekTs, AVSEEK_FLAG_BACKWARD);
-        if (srv < 0) {
-            char err[AV_ERROR_MAX_STRING_SIZE] = {0};
-            av_strerror(srv, err, sizeof(err));
-            os_log(jf_ffmpeg_log(), "decode: seek failed (%{public}s) — continuing from 0", err);
-        }
-    }
+// Reads the next subtitle event off the wire. Blocking — caller must
+// invoke from a background queue.
+//
+// Returns:
+//   0  = event decoded; `*out_rgba` points to malloc'd buffer (NULL for
+//        clear events where `*out_num_rects == 0`). Caller frees via
+//        `jf_bitmap_sub_free_rgba`.
+//   1  = EOF
+//  <0  = error
+//
+// Multi-rect events (DVB / DVD sometimes emit two) are collapsed to the
+// first rect — logged so we can tell if a track needs real multi-rect
+// support later. PGS always ships a single rect per event.
+extern "C" int jf_bitmap_sub_decode_next(struct jf_bitmap_sub_ctx *ctx,
+                                          double *out_pts_seconds,
+                                          double *out_duration_seconds,
+                                          int *out_num_rects,
+                                          int *out_x, int *out_y,
+                                          int *out_width, int *out_height,
+                                          uint8_t **out_rgba) {
+    if (!ctx || !ctx->fmt || !ctx->cctx || !ctx->pkt) return -1;
 
-    AVPacket *pkt = av_packet_alloc();
-    int decoded = 0;
+    *out_pts_seconds = 0;
+    *out_duration_seconds = 0;
+    *out_num_rects = 0;
+    *out_x = 0;
+    *out_y = 0;
+    *out_width = 0;
+    *out_height = 0;
+    *out_rgba = nullptr;
 
-    while (decoded < max_events) {
-        rc = av_read_frame(fmt, pkt);
-        if (rc == AVERROR_EOF) break;
+    while (true) {
+        int rc = av_read_frame(ctx->fmt, ctx->pkt);
+        if (rc == AVERROR_EOF) return 1;
         if (rc < 0) {
             char err[AV_ERROR_MAX_STRING_SIZE] = {0};
             av_strerror(rc, err, sizeof(err));
             os_log_error(jf_ffmpeg_log(), "decode: read_frame failed (%{public}s)", err);
-            break;
+            return -1;
         }
-        if (pkt->stream_index != streamIndex) {
-            av_packet_unref(pkt);
+        if (ctx->pkt->stream_index != ctx->streamIndex) {
+            av_packet_unref(ctx->pkt);
             continue;
         }
 
         AVSubtitle sub;
         int got = 0;
-        rc = avcodec_decode_subtitle2(cctx, &sub, &got, pkt);
+        rc = avcodec_decode_subtitle2(ctx->cctx, &sub, &got, ctx->pkt);
         if (rc < 0) {
             os_log_error(jf_ffmpeg_log(), "decode: decode_subtitle2 failed");
-            av_packet_unref(pkt);
+            av_packet_unref(ctx->pkt);
             continue;
         }
         if (!got) {
-            av_packet_unref(pkt);
+            av_packet_unref(ctx->pkt);
             continue;
         }
 
         double pts_seconds = 0;
-        if (pkt->pts != AV_NOPTS_VALUE) {
-            pts_seconds = (double)pkt->pts * av_q2d(st->time_base);
+        if (ctx->pkt->pts != AV_NOPTS_VALUE) {
+            pts_seconds = (double)ctx->pkt->pts * av_q2d(ctx->timeBase);
         }
-        // sub.start/end_display_time are milliseconds RELATIVE to the
-        // packet PTS. The final screen-out window is pts + start → pts + end.
         double start_ms = (double)sub.start_display_time;
         double end_ms = (double)sub.end_display_time;
         double duration_s =
             (end_ms > start_ms && end_ms != (double)UINT32_MAX) ? (end_ms - start_ms) / 1000.0
                                                                 : 0.0;
 
-        os_log(jf_ffmpeg_log(),
-               "decode: event #%d pts=%.3f dur=%.3f rects=%u",
-               decoded,
-               pts_seconds,
-               duration_s,
-               sub.num_rects);
+        *out_pts_seconds = pts_seconds + start_ms / 1000.0;
+        *out_duration_seconds = duration_s;
+        *out_num_rects = (int)sub.num_rects;
 
-        static bool dumped = false;
-        for (unsigned r = 0; r < sub.num_rects; r++) {
-            AVSubtitleRect *rect = sub.rects[r];
-            const char *pixFmtName = av_get_pix_fmt_name((AVPixelFormat)AV_PIX_FMT_PAL8);
-            // PGS rects are always PAL8 (8-bit palette indexed) — we log
-            // the declared format just to spot anything unusual that would
-            // need a different decode path.
-            os_log(jf_ffmpeg_log(),
-                   "  rect[%u] pos=(%d,%d) size=%dx%d nb_colors=%d fmt=%{public}s",
-                   r,
-                   rect->x,
-                   rect->y,
-                   rect->w,
-                   rect->h,
-                   rect->nb_colors,
-                   pixFmtName ? pixFmtName : "?");
-
-            if (!dumped && rect->w > 0 && rect->h > 0 && rect->data[0] && rect->data[1]) {
-                jf_dump_rect_png(rect, pts_seconds);
-                dumped = true;
+        if (sub.num_rects > 0) {
+            if (sub.num_rects > 1) {
+                os_log(jf_ffmpeg_log(),
+                       "decode: event has %u rects, using first only",
+                       sub.num_rects);
+            }
+            AVSubtitleRect *rect = sub.rects[0];
+            if (rect->w > 0 && rect->h > 0 && rect->data[0] && rect->data[1]) {
+                size_t bytes = (size_t)rect->w * (size_t)rect->h * 4;
+                uint8_t *rgba = (uint8_t *)malloc(bytes);
+                if (rgba) {
+                    rect_to_rgba(rect, rgba);
+                    *out_x = rect->x;
+                    *out_y = rect->y;
+                    *out_width = rect->w;
+                    *out_height = rect->h;
+                    *out_rgba = rgba;
+                }
             }
         }
 
         avsubtitle_free(&sub);
-        av_packet_unref(pkt);
-        decoded++;
+        av_packet_unref(ctx->pkt);
+        return 0;
     }
+}
 
-    os_log(jf_ffmpeg_log(), "decode: finished, %d event(s) decoded", decoded);
+extern "C" int jf_bitmap_sub_seek(struct jf_bitmap_sub_ctx *ctx, double seconds) {
+    if (!ctx || !ctx->fmt || !ctx->cctx) return -1;
+    int64_t seekTs = (int64_t)(seconds / av_q2d(ctx->timeBase));
+    int rc = av_seek_frame(ctx->fmt, ctx->streamIndex, seekTs, AVSEEK_FLAG_BACKWARD);
+    if (rc < 0) {
+        char err[AV_ERROR_MAX_STRING_SIZE] = {0};
+        av_strerror(rc, err, sizeof(err));
+        os_log_error(jf_ffmpeg_log(), "seek: av_seek_frame failed (%{public}s)", err);
+        return -1;
+    }
+    // Clear any state the bitmap decoder may have carried across the seek
+    // (PGS in particular keeps a composition buffer).
+    avcodec_flush_buffers(ctx->cctx);
+    return 0;
+}
 
-    av_packet_free(&pkt);
-    avcodec_free_context(&cctx);
-    avformat_close_input(&fmt);
-    return decoded;
+extern "C" void jf_bitmap_sub_free_rgba(uint8_t *rgba) {
+    if (rgba) free(rgba);
+}
+
+extern "C" void jf_bitmap_sub_cancel(struct jf_bitmap_sub_ctx *ctx) {
+    if (!ctx) return;
+    ctx->cancel.store(1);
+}
+
+extern "C" void jf_bitmap_sub_close(struct jf_bitmap_sub_ctx *ctx) {
+    if (!ctx) return;
+    ctx->cancel.store(1);
+    if (ctx->pkt) av_packet_free(&ctx->pkt);
+    if (ctx->cctx) avcodec_free_context(&ctx->cctx);
+    if (ctx->fmt) avformat_close_input(&ctx->fmt);
+    delete ctx;
 }
