@@ -20,8 +20,14 @@ extern "C" {
 #include <libavutil/pixdesc.h>
 }
 
+#import <CoreGraphics/CoreGraphics.h>
+#import <Foundation/Foundation.h>
+#import <ImageIO/ImageIO.h>
+#import <MobileCoreServices/UTCoreTypes.h>
+
 #include <dispatch/dispatch.h>
 #include <os/log.h>
+#include <vector>
 
 static os_log_t jf_ffmpeg_log(void) {
     static os_log_t log;
@@ -44,6 +50,74 @@ static void jf_ffmpeg_init_once(void) {
 
 extern "C" const char *jf_ffmpeg_version_info(void) {
     return av_version_info();
+}
+
+// One-shot diagnostic: convert the first decoded PAL8 rect to RGBA and
+// write a PNG to NSTemporaryDirectory(). We need this before building
+// the streaming pipeline to confirm the palette byte order — ffmpeg
+// hands us `rect->data[1]` as a 256-entry uint32_t palette, but the
+// layout (ARGB / RGBA / endianness) is not trivially documented for
+// each codec. A garbled PNG here would mean all downstream frames are
+// miscolored; better to catch it with a single static image we can
+// eyeball than after wiring up the full Metal texture pipeline.
+static void jf_dump_rect_png(const AVSubtitleRect *rect, double pts_seconds) {
+    if (!rect || rect->w <= 0 || rect->h <= 0) return;
+    if (!rect->data[0] || !rect->data[1]) return;
+
+    const int w = rect->w;
+    const int h = rect->h;
+    const int stride = rect->linesize[0];
+    const uint32_t *palette = (const uint32_t *)rect->data[1];
+    const uint8_t *indices = rect->data[0];
+
+    std::vector<uint8_t> rgba((size_t)w * (size_t)h * 4, 0);
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+            uint8_t idx = indices[y * stride + x];
+            uint32_t argb = palette[idx];
+            uint8_t a = (argb >> 24) & 0xff;
+            uint8_t r = (argb >> 16) & 0xff;
+            uint8_t g = (argb >>  8) & 0xff;
+            uint8_t b = (argb >>  0) & 0xff;
+            uint8_t *p = &rgba[((size_t)y * (size_t)w + (size_t)x) * 4];
+            p[0] = r; p[1] = g; p[2] = b; p[3] = a;
+        }
+    }
+
+    CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
+    CGBitmapInfo bi = (CGBitmapInfo)(kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
+    CGContextRef ctx = CGBitmapContextCreate(rgba.data(), (size_t)w, (size_t)h,
+                                             8, (size_t)w * 4, cs, bi);
+    CGColorSpaceRelease(cs);
+    if (!ctx) {
+        os_log_error(jf_ffmpeg_log(), "dump: CGBitmapContextCreate failed");
+        return;
+    }
+    CGImageRef img = CGBitmapContextCreateImage(ctx);
+    CGContextRelease(ctx);
+    if (!img) {
+        os_log_error(jf_ffmpeg_log(), "dump: CGBitmapContextCreateImage failed");
+        return;
+    }
+
+    NSString *filename = [NSString stringWithFormat:@"jf-pgs-%.3f.png", pts_seconds];
+    NSString *path = [NSTemporaryDirectory() stringByAppendingPathComponent:filename];
+    NSURL *url = [NSURL fileURLWithPath:path];
+    CGImageDestinationRef dest =
+        CGImageDestinationCreateWithURL((CFURLRef)url, kUTTypePNG, 1, nullptr);
+    if (!dest) {
+        CGImageRelease(img);
+        os_log_error(jf_ffmpeg_log(), "dump: CGImageDestinationCreateWithURL failed");
+        return;
+    }
+    CGImageDestinationAddImage(dest, img, nullptr);
+    bool ok = CGImageDestinationFinalize(dest);
+    CFRelease(dest);
+    CGImageRelease(img);
+
+    os_log(jf_ffmpeg_log(),
+           "dump: wrote %dx%d PNG ok=%d → %{public}s",
+           w, h, ok ? 1 : 0, path.UTF8String);
 }
 
 static bool is_bitmap_sub_codec(enum AVCodecID id) {
@@ -218,6 +292,7 @@ extern "C" int jf_bitmap_sub_test_decode(const char *url, double start_seconds,
                duration_s,
                sub.num_rects);
 
+        static bool dumped = false;
         for (unsigned r = 0; r < sub.num_rects; r++) {
             AVSubtitleRect *rect = sub.rects[r];
             const char *pixFmtName = av_get_pix_fmt_name((AVPixelFormat)AV_PIX_FMT_PAL8);
@@ -233,6 +308,11 @@ extern "C" int jf_bitmap_sub_test_decode(const char *url, double start_seconds,
                    rect->h,
                    rect->nb_colors,
                    pixFmtName ? pixFmtName : "?");
+
+            if (!dumped && rect->w > 0 && rect->h > 0 && rect->data[0] && rect->data[1]) {
+                jf_dump_rect_png(rect, pts_seconds);
+                dumped = true;
+            }
         }
 
         avsubtitle_free(&sub);
