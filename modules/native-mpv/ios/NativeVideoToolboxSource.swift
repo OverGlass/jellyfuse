@@ -49,6 +49,10 @@ final class NativeVideoToolboxSource: VideoSource {
     /// attachment dictionary.
     private var cachedMasteringCFData: CFData?
     private var cachedCllCFData: CFData?
+    /// Last value of `jf_video_format_change_count` we consumed — when the
+    /// C side bumps it we refresh every metadata cache before the next
+    /// frame stamps the display layer.
+    private var cachedFormatChangeCount: UInt32 = 0
 
     // ── Decode thread ──────────────────────────────────────────────────
     private var decodeThread: Thread?
@@ -219,6 +223,14 @@ final class NativeVideoToolboxSource: VideoSource {
 
             guard let ctx = videoCtx else { break }
 
+            // Pick up any mid-stream format change the pump thread
+            // signalled (HLS variant switch, fMP4 moof with new hvcC).
+            // Cheap atomic load — only does work when the counter moved.
+            let fccNow = jf_video_format_change_count(ctx)
+            if fccNow != cachedFormatChangeCount {
+                cacheStreamMetadata(ctx: ctx)
+            }
+
             outPtr = nil
             ptsSeconds = 0
             isKeyframe = 0
@@ -329,6 +341,28 @@ final class NativeVideoToolboxSource: VideoSource {
                 (cachedMasteringCFData != nil || cachedCllCFData != nil) ? "yes" : "no"
             )
         }
+
+        // Dolby Vision decoder configuration — logged once so telemetry /
+        // device logs capture whether the stream engaged DV mode. The
+        // dvcC atom itself is already wired onto the format description
+        // C-side; this is informational only.
+        var dvProfile: Int32 = -1
+        var dvLevel: Int32 = 0
+        var rpu: Int32 = 0
+        var el: Int32 = 0
+        var bl: Int32 = 0
+        var blCompat: Int32 = 0
+        if jf_video_dolby_vision_info(
+            ctx, &dvProfile, &dvLevel, &rpu, &el, &bl, &blCompat) == 1
+        {
+            NSLog(
+                "[NativeVideoSource] dolby-vision profile=%d level=%d "
+                    + "rpu=%d el=%d bl=%d bl_compat=%d",
+                dvProfile, dvLevel, rpu, el, bl, blCompat
+            )
+        }
+
+        cachedFormatChangeCount = jf_video_format_change_count(ctx)
     }
 
     /// Stamp the cached color + HDR attachments on a decoded frame.

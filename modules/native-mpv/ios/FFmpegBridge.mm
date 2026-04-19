@@ -15,6 +15,7 @@ extern "C" {
 #include <libavformat/avformat.h>
 #include <libavutil/avutil.h>
 #include <libavutil/dict.h>
+#include <libavutil/dovi_meta.h>
 #include <libavutil/error.h>
 #include <libavutil/mastering_display_metadata.h>
 #include <libavutil/pixdesc.h>
@@ -482,6 +483,12 @@ struct jf_video_ctx {
     // Seek (consumer → pump)
     std::mutex seekMutex;
     std::optional<double> pendingSeek;
+
+    // Bumped every time the pump rebuilds format description + VT session
+    // in response to a mid-stream extradata change. Swift polls this each
+    // frame so it can re-read color / HDR metadata before stamping the
+    // next decoded pixel buffer.
+    std::atomic<uint32_t> formatChangeCount{0};
 };
 
 static int jf_video_interrupt(void *opaque) {
@@ -689,6 +696,26 @@ static CFDataRef buildAvcCFromAnnexB(const uint8_t *extra, int extraSize) {
 
 // ── VT session ──────────────────────────────────────────────────────
 
+// Serialise AVDOVIDecoderConfigurationRecord into the 24-byte ISO/IEC
+// 14496-15 §8.1 dvcC atom payload. VT accepts this under
+// SampleDescriptionExtensionAtoms and engages Dolby Vision decoding on
+// supported devices (A12+ iPhone / Apple TV 4K / iPad Pro) for HEVC
+// profiles 5 / 7 / 8.
+static CFDataRef buildDvccAtom(const AVDOVIDecoderConfigurationRecord *rec) {
+    uint8_t buf[24] = {0};
+    buf[0] = 1;                        // dv_version_major
+    buf[1] = 0;                        // dv_version_minor
+    buf[2] = (uint8_t)(((rec->dv_profile & 0x7F) << 1) |
+                        ((rec->dv_level >> 5) & 0x01));
+    buf[3] = (uint8_t)(((rec->dv_level & 0x1F) << 3) |
+                        ((rec->rpu_present_flag & 0x01) << 2) |
+                        ((rec->el_present_flag & 0x01) << 1) |
+                         (rec->bl_present_flag & 0x01));
+    buf[4] = (uint8_t)((rec->dv_bl_signal_compatibility_id & 0x0F) << 4);
+    // bytes 5..23 already zero (reserved).
+    return CFDataCreate(kCFAllocatorDefault, buf, sizeof(buf));
+}
+
 // Build the CMFormatDescription for the stream. Uses the codec's
 // extradata packed as an HVCC / AVCC atom under
 // `SampleDescriptionExtensionAtoms`, matching the mp4 sample description
@@ -719,6 +746,24 @@ static CMVideoFormatDescriptionRef buildFormatDescription(AVStream *st, bool ann
                      "buildFormatDescription: unsupported codec %d",
                      (int)par->codec_id);
         return nullptr;
+    }
+
+    // Dolby Vision decoder configuration — present as coded side-data
+    // on every DV stream. Only profiles 5 / 7 / 8 use the dvcC atom
+    // (HEVC-based); profile 10 would need dvvC, skipped for now.
+    const AVDOVIDecoderConfigurationRecord *dovi = nullptr;
+    if (par->codec_id == AV_CODEC_ID_HEVC) {
+        for (int i = 0; i < par->nb_coded_side_data; i++) {
+            AVPacketSideData *sd = &par->coded_side_data[i];
+            if (sd->type != AV_PKT_DATA_DOVI_CONF) continue;
+            if (sd->size < (int)sizeof(AVDOVIDecoderConfigurationRecord)) continue;
+            const AVDOVIDecoderConfigurationRecord *r =
+                (const AVDOVIDecoderConfigurationRecord *)sd->data;
+            if (r->dv_profile == 5 || r->dv_profile == 7 || r->dv_profile == 8) {
+                dovi = r;
+            }
+            break;
+        }
     }
 
     CFMutableDictionaryRef extensions = CFDictionaryCreateMutable(
@@ -765,6 +810,57 @@ static CMVideoFormatDescriptionRef buildFormatDescription(AVStream *st, bool ann
                          (int)rc);
             return nullptr;
         }
+        if (dovi) {
+            // Merge dvcC into the atoms dict by rebuilding the description —
+            // CMVideoFormatDescription is immutable, so we extract the
+            // synthesised hvcC + every other extension and call
+            // CMVideoFormatDescriptionCreate ourselves.
+            CFDictionaryRef existingExt =
+                CMFormatDescriptionGetExtensions(fd);
+            if (existingExt) {
+                CFMutableDictionaryRef mergedExt =
+                    CFDictionaryCreateMutableCopy(kCFAllocatorDefault, 0,
+                                                   existingExt);
+                CFDictionaryRef existingAtoms = (CFDictionaryRef)
+                    CFDictionaryGetValue(mergedExt,
+                        kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms);
+                CFMutableDictionaryRef mergedAtoms =
+                    existingAtoms
+                    ? CFDictionaryCreateMutableCopy(kCFAllocatorDefault, 0,
+                                                     existingAtoms)
+                    : CFDictionaryCreateMutable(kCFAllocatorDefault, 0,
+                                                 &kCFTypeDictionaryKeyCallBacks,
+                                                 &kCFTypeDictionaryValueCallBacks);
+                CFDataRef dvcc = buildDvccAtom(dovi);
+                if (dvcc) {
+                    CFDictionarySetValue(mergedAtoms, CFSTR("dvcC"), dvcc);
+                    CFRelease(dvcc);
+                }
+                CFDictionarySetValue(mergedExt,
+                    kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms,
+                    mergedAtoms);
+                CFRelease(mergedAtoms);
+
+                CMVideoFormatDescriptionRef merged = nullptr;
+                OSStatus mrc = CMVideoFormatDescriptionCreate(
+                    kCFAllocatorDefault, kCMVideoCodecType_HEVC,
+                    par->width, par->height, mergedExt, &merged);
+                CFRelease(mergedExt);
+                if (mrc == noErr && merged) {
+                    CFRelease(fd);
+                    os_log(jf_video_log(),
+                           "buildFormatDescription: DV profile=%d level=%d "
+                           "bl_compat=%d (annex-B path)",
+                           (int)dovi->dv_profile, (int)dovi->dv_level,
+                           (int)dovi->dv_bl_signal_compatibility_id);
+                    return merged;
+                }
+                os_log_error(jf_video_log(),
+                             "buildFormatDescription: DV merge rebuild rc=%d — "
+                             "falling back to HDR10",
+                             (int)mrc);
+            }
+        }
         return fd;
     }
 
@@ -792,6 +888,18 @@ static CMVideoFormatDescriptionRef buildFormatDescription(AVStream *st, bool ann
     }
     CFDictionarySetValue(atoms, atomKey, atomData);
     CFRelease(atomData);
+
+    if (dovi) {
+        CFDataRef dvcc = buildDvccAtom(dovi);
+        if (dvcc) {
+            CFDictionarySetValue(atoms, CFSTR("dvcC"), dvcc);
+            CFRelease(dvcc);
+            os_log(jf_video_log(),
+                   "buildFormatDescription: DV profile=%d level=%d bl_compat=%d",
+                   (int)dovi->dv_profile, (int)dovi->dv_level,
+                   (int)dovi->dv_bl_signal_compatibility_id);
+        }
+    }
 
     CFDictionarySetValue(extensions,
                           kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms,
@@ -1001,6 +1109,81 @@ static void vtDecodeCallback(void *refCon,
     ctx->queueCv.notify_all();
 }
 
+// ── format-change rebuild ───────────────────────────────────────────
+//
+// Tear down the current VT session + format description and rebuild
+// from a fresh extradata blob. Called when a packet carries
+// AV_PKT_DATA_NEW_EXTRADATA (HLS bitrate switch, SPS/PPS refresh,
+// chapter-level colorspace change). Must run on the pump thread — the
+// invalidate/release sequence races with VT callbacks from arbitrary
+// worker threads, so ordering (finish → wait → invalidate → swap) is
+// load-bearing. Returns `true` on success; on failure the caller
+// should bail the pump since decode can't continue with a mismatched
+// session.
+static bool rebuildDecodePath(jf_video_ctx *ctx,
+                               const uint8_t *newExtradata,
+                               int newExtradataSize) {
+    if (!ctx || !ctx->fmt || ctx->streamIndex < 0) return false;
+    AVStream *st = ctx->fmt->streams[ctx->streamIndex];
+    AVCodecParameters *par = st->codecpar;
+
+    // 1. Drain in-flight VT work so callbacks stop racing the swap.
+    if (ctx->vtSession) {
+        VTDecompressionSessionFinishDelayedFrames(ctx->vtSession);
+        VTDecompressionSessionWaitForAsynchronousFrames(ctx->vtSession);
+        VTDecompressionSessionInvalidate(ctx->vtSession);
+        CFRelease(ctx->vtSession);
+        ctx->vtSession = nullptr;
+    }
+    if (ctx->formatDesc) {
+        CFRelease(ctx->formatDesc);
+        ctx->formatDesc = nullptr;
+    }
+
+    // 2. Swap extradata in codecpar with the new blob — buildFormatDescription
+    // reads from there. av_free matches the av_mallocz the original came
+    // from; the new buffer gets AV_INPUT_BUFFER_PADDING_SIZE tail padding
+    // so FFmpeg's bitstream readers don't overrun.
+    av_freep(&par->extradata);
+    par->extradata_size = 0;
+    if (newExtradata && newExtradataSize > 0) {
+        par->extradata = (uint8_t *)av_mallocz(newExtradataSize +
+                                                AV_INPUT_BUFFER_PADDING_SIZE);
+        if (!par->extradata) {
+            os_log_error(jf_video_log(),
+                         "rebuild: av_mallocz %d bytes failed",
+                         newExtradataSize);
+            return false;
+        }
+        memcpy(par->extradata, newExtradata, (size_t)newExtradataSize);
+        par->extradata_size = newExtradataSize;
+        // Keep the Annex-B flag in sync with the new extradata byte 0 —
+        // format-change packets normally stay in the same container, but
+        // HLS→fMP4 edge cases can flip this.
+        ctx->annexB = !(par->extradata[0] == 0x01);
+    }
+
+    // 3. Rebuild format description + VT session in lock-step.
+    ctx->formatDesc = buildFormatDescription(st, ctx->annexB);
+    if (!ctx->formatDesc) {
+        os_log_error(jf_video_log(), "rebuild: buildFormatDescription failed");
+        return false;
+    }
+    int bits = (ctx->cctx && ctx->cctx->bits_per_raw_sample > 0)
+                   ? ctx->cctx->bits_per_raw_sample
+                   : (par->bits_per_raw_sample > 0 ? par->bits_per_raw_sample : 8);
+    if (!createVtSession(ctx, bits)) {
+        os_log_error(jf_video_log(), "rebuild: createVtSession failed");
+        return false;
+    }
+
+    ctx->formatChangeCount.fetch_add(1);
+    os_log(jf_video_log(),
+           "rebuild: format-change #%u applied (extradata=%d bytes annexB=%d)",
+           ctx->formatChangeCount.load(), newExtradataSize, ctx->annexB ? 1 : 0);
+    return true;
+}
+
 // ── pump thread ─────────────────────────────────────────────────────
 
 static void pumpThreadMain(jf_video_ctx *ctx) {
@@ -1057,6 +1240,21 @@ static void pumpThreadMain(jf_video_ctx *ctx) {
         if (pkt->stream_index != ctx->streamIndex) {
             av_packet_unref(pkt);
             continue;
+        }
+
+        // In-band extradata refresh — HLS variant switch, fMP4 moof with
+        // new hvcC, or raw elementary stream SPS change. Rebuild the VT
+        // session against the new parameters before the packet hits it.
+        int sideDataSize = 0;
+        const uint8_t *newExtradata = av_packet_get_side_data(
+            pkt, AV_PKT_DATA_NEW_EXTRADATA, &sideDataSize);
+        if (newExtradata && sideDataSize > 0) {
+            if (!rebuildDecodePath(ctx, newExtradata, sideDataSize)) {
+                // Unrecoverable — bail the pump so the consumer surfaces
+                // an error instead of silently stalling.
+                av_packet_unref(pkt);
+                break;
+            }
         }
 
         // Backpressure on queue size to avoid runaway packet → VT submit.
@@ -1361,12 +1559,54 @@ extern "C" int jf_video_hdr_cll(struct jf_video_ctx *ctx, uint16_t cll[2]) {
     return 0;
 }
 
-// Dolby Vision profile extraction. Commit A placeholder — DV config
-// parsing is Commit B's problem (needs AV_PKT_DATA_DOVI_CONF
-// side-data + RPU detection on first frame).
+// Locate the AV_PKT_DATA_DOVI_CONF side-data block on the video stream.
+// Returns nullptr when the source isn't Dolby Vision.
+static const AVDOVIDecoderConfigurationRecord *
+jf_video_dovi_record(struct jf_video_ctx *ctx) {
+    if (!ctx || !ctx->fmt || ctx->streamIndex < 0) return nullptr;
+    AVStream *st = ctx->fmt->streams[ctx->streamIndex];
+    for (int i = 0; i < st->codecpar->nb_coded_side_data; i++) {
+        AVPacketSideData *sd = &st->codecpar->coded_side_data[i];
+        if (sd->type != AV_PKT_DATA_DOVI_CONF) continue;
+        if (sd->size < (int)sizeof(AVDOVIDecoderConfigurationRecord)) continue;
+        return (const AVDOVIDecoderConfigurationRecord *)sd->data;
+    }
+    return nullptr;
+}
+
+// Returns the stream's Dolby Vision profile (5 / 7 / 8 / 10 / …) or -1
+// when the source isn't DV-tagged.
 extern "C" int jf_video_dolby_vision_profile(struct jf_video_ctx *ctx) {
-    (void)ctx;
-    return -1;
+    const AVDOVIDecoderConfigurationRecord *rec = jf_video_dovi_record(ctx);
+    return rec ? (int)rec->dv_profile : -1;
+}
+
+// Full DV decoder configuration record. All out-pointers optional; zeroed
+// when the stream has no DV side-data. Returns 1 when DV was present, 0
+// otherwise.
+extern "C" int jf_video_dolby_vision_info(struct jf_video_ctx *ctx,
+                                           int *out_profile,
+                                           int *out_level,
+                                           int *out_rpu_present,
+                                           int *out_el_present,
+                                           int *out_bl_present,
+                                           int *out_bl_signal_compatibility_id) {
+    if (out_profile) *out_profile = -1;
+    if (out_level) *out_level = 0;
+    if (out_rpu_present) *out_rpu_present = 0;
+    if (out_el_present) *out_el_present = 0;
+    if (out_bl_present) *out_bl_present = 0;
+    if (out_bl_signal_compatibility_id) *out_bl_signal_compatibility_id = 0;
+    const AVDOVIDecoderConfigurationRecord *rec = jf_video_dovi_record(ctx);
+    if (!rec) return 0;
+    if (out_profile) *out_profile = (int)rec->dv_profile;
+    if (out_level) *out_level = (int)rec->dv_level;
+    if (out_rpu_present) *out_rpu_present = rec->rpu_present_flag ? 1 : 0;
+    if (out_el_present) *out_el_present = rec->el_present_flag ? 1 : 0;
+    if (out_bl_present) *out_bl_present = rec->bl_present_flag ? 1 : 0;
+    if (out_bl_signal_compatibility_id)
+        *out_bl_signal_compatibility_id = (int)rec->dv_bl_signal_compatibility_id;
+    return 1;
 }
 
 // ── decode loop ─────────────────────────────────────────────────────
@@ -1441,4 +1681,14 @@ extern "C" void *jf_video_format_description(struct jf_video_ctx *ctx) {
 extern "C" uint32_t jf_video_pixel_format(struct jf_video_ctx *ctx) {
     if (!ctx) return 0;
     return (uint32_t)ctx->pixelFormat;
+}
+
+// Monotonic counter of format-description rebuilds. Swift polls this
+// each frame — when it advances the side has swapped extradata mid-
+// stream, so any cached color / HDR attachments need to be rebuilt
+// against the fresh codec parameters before the next pixel buffer
+// goes to the display layer.
+extern "C" uint32_t jf_video_format_change_count(struct jf_video_ctx *ctx) {
+    if (!ctx) return 0;
+    return ctx->formatChangeCount.load();
 }

@@ -1017,14 +1017,15 @@ spike lands to avoid redoing work.
 - [x] Pixel format selection (nv12 / p010) from stream bit depth. (C-side, harness commit)
 - [x] Color tagging (primaries, transfer, matrix). (C5)
 - [x] Mastering + CLL metadata attachment. (C5)
-- [ ] DV spike: profile 5 end-to-end on AVSampleBufferDisplayLayer. (needs DOVI_CONF extractor on C side first)
+- [x] DOVI_CONF extractor + dvcC atom wired into format description for HEVC profiles 5 / 7 / 8.
 - [-] ~~`UIWindowScene.preferredDisplayCriteria` bracket.~~ (tvOS-only API; iOS compositor auto-switches from tagging — see §8.4)
-- [ ] Format-change resilience (rebuild VT session on color-space change). (C-side)
+- [x] Format-change resilience (AV_PKT_DATA_NEW_EXTRADATA → VT session rebuild + Swift cache refresh).
 
 ### 2d — Rollout
 
-- [ ] MMKV `ENABLE_NATIVE_VIDEO_PIPELINE` flag, default off.
-- [ ] Settings → Advanced → Playback toggle.
+- [x] MMKV `nativeVideoPipelineEnabled` flag on `LocalSettings`, default undefined (=off).
+- [x] Settings → Advanced → Native video pipeline toggle.
+- [x] `attachPlayer({ source })` wired to the flag in `player-screen.tsx`.
 - [ ] Fallback triggers + once-per-session latch.
 - [ ] Dev telemetry on fallback events.
 - [ ] README + `docs/native-video-pipeline.md` update to mark Phase 2

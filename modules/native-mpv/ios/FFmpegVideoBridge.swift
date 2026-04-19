@@ -66,6 +66,20 @@ func jf_video_hdr_cll(
 @_silgen_name("jf_video_dolby_vision_profile")
 func jf_video_dolby_vision_profile(_ ctx: OpaquePointer?) -> Int32
 
+@_silgen_name("jf_video_dolby_vision_info")
+func jf_video_dolby_vision_info(
+    _ ctx: OpaquePointer?,
+    _ outProfile: UnsafeMutablePointer<Int32>,
+    _ outLevel: UnsafeMutablePointer<Int32>,
+    _ outRpuPresent: UnsafeMutablePointer<Int32>,
+    _ outElPresent: UnsafeMutablePointer<Int32>,
+    _ outBlPresent: UnsafeMutablePointer<Int32>,
+    _ outBlSignalCompatibilityId: UnsafeMutablePointer<Int32>,
+) -> Int32
+
+@_silgen_name("jf_video_format_change_count")
+func jf_video_format_change_count(_ ctx: OpaquePointer?) -> UInt32
+
 @_silgen_name("jf_video_decode_next")
 func jf_video_decode_next(
     _ ctx: OpaquePointer?,
