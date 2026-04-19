@@ -32,8 +32,8 @@ private let npLog = OSLog(subsystem: "com.jellyfuse.app", category: "NativeMpv")
 @_silgen_name("jf_ffmpeg_version_info")
 private func jf_ffmpeg_version_info() -> UnsafePointer<CChar>?
 
-@_silgen_name("jf_bitmap_sub_probe")
-private func jf_bitmap_sub_probe(_ url: UnsafePointer<CChar>?)
+@_silgen_name("jf_bitmap_sub_test_decode")
+private func jf_bitmap_sub_test_decode(_ url: UnsafePointer<CChar>?, _ maxEvents: Int32) -> Int32
 
 // MARK: - HybridNativeMpv
 
@@ -164,16 +164,17 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
             throw mpvError("loadfile failed: \(String(cString: mpv_error_string(rc)))")
         }
 
-        // Phase 3 diagnostic probe (see docs/native-video-pipeline.md).
-        // Opens a parallel avformat context to list subtitle streams +
-        // codecs so we can see what bitmap flavour (PGS/VobSub/DVB) a
-        // given Jellyfin title ships with. Runs on a background queue
-        // because the HTTP handshake blocks. Removed when the real
-        // BitmapSubDecoder replaces it.
-        let probeUrl = streamUrl
+        // Phase 3 diagnostic decode (see docs/native-video-pipeline.md).
+        // Opens a parallel avformat context, selects the first bitmap
+        // sub stream, and decodes the first N events — logs PTS,
+        // duration, and per-rect geometry for each. Runs on a
+        // background queue because the HTTP handshake + header read
+        // block. Replaced by the real streaming BitmapSubDecoder in
+        // follow-up commits.
+        let decodeUrl = streamUrl
         DispatchQueue.global(qos: .utility).async {
-            probeUrl.withCString { cstr in
-                jf_bitmap_sub_probe(cstr)
+            decodeUrl.withCString { cstr in
+                _ = jf_bitmap_sub_test_decode(cstr, 20)
             }
         }
 
