@@ -1,18 +1,31 @@
 //
 //  HybridMpvVideoView.swift
-//  @jellyfuse/native-mpv — iOS GL render surface
+//  @jellyfuse/native-mpv — iOS video render surface
 //
-//  Phase 3b: CAEAGLLayer-backed view + mpv_render_context.
-//  Ports the render pattern from the Rust reference
-//  `crates/jf-module-player/src/mpv_video_gl.rs` but simplified:
-//  renders directly to the CAEAGLLayer's renderbuffer instead of
-//  double-buffered CVPixelBuffer → IOSurface → Metal (which GPUI
-//  needed but React Native does not).
+//  One render pipeline, one layer:
 //
-//  Key settings (matching Rust):
-//    vo=libmpv          — use render context, not screen output
-//    hwdec=videotoolbox-copy — correct YCbCr→RGB color conversion
-//    ProMotion 120Hz    — CADisplayLink.preferredFramesPerSecond
+//     mpv_render_context   (OpenGL ES, off-screen)
+//         │
+//         ▼
+//     CVPixelBuffer        (BGRA, IOSurface-backed, pooled)
+//         │
+//         ▼
+//     CMSampleBuffer  ───► AVSampleBufferDisplayLayer   (our root layer)
+//                                │
+//                                └──► AVPictureInPictureController
+//                                     (auto-PiP on backgrounding)
+//
+//  OpenGL ES stays inside `mpv_render_context` because that is the
+//  render API libmpv supports on iOS. We do NOT ship GL to the
+//  compositor — the display boundary is `AVSampleBufferDisplayLayer`,
+//  the same layer iOS reads for PiP. One render per vsync feeds both
+//  the on-screen view and the floating window.
+//
+//  Background rendering: `presentRenderbuffer` is blocked when
+//  backgrounded, but IOSurface-backed submissions are not, so the
+//  render loop keeps going during PiP without the GPU-in-background
+//  error. When backgrounded *without* PiP we still pause the display
+//  link to conserve battery.
 //
 
 import AVFoundation
@@ -25,32 +38,36 @@ import NitroModules
 import OpenGLES
 import QuartzCore
 
-// MARK: - MpvGLView (UIView with CAEAGLLayer)
+// MARK: - MpvGLView
 
-/// Internal UIView subclass that owns the EAGLContext, renderbuffer,
-/// framebuffer, mpv_render_context, and CADisplayLink. The outer
-/// `HybridMpvVideoView` (Nitro HybridView) holds a reference and
-/// delegates lifecycle calls.
+/// UIView whose root layer is an `AVSampleBufferDisplayLayer`. Owns
+/// the EAGLContext, mpv render context, pixel-buffer pool, display
+/// link, and PiP controller. `HybridMpvVideoView` (the Nitro
+/// HybridView wrapper) delegates lifecycle here.
 final class MpvGLView: UIView {
 
-    // ── GL state ────────────────────────────────────────────────────────
+    // ── Root layer ──────────────────────────────────────────────────────
+    override class var layerClass: AnyClass { AVSampleBufferDisplayLayer.self }
+
+    private var sampleBufferLayer: AVSampleBufferDisplayLayer {
+        return layer as! AVSampleBufferDisplayLayer
+    }
+
+    // ── GL (off-screen FBO path only) ───────────────────────────────────
     private var eaglContext: EAGLContext?
-    private var colorRenderbuffer: GLuint = 0
+    private var textureCache: CVOpenGLESTextureCache?
     private var framebuffer: GLuint = 0
-    private var backingWidth: GLint = 0
-    private var backingHeight: GLint = 0
 
     // ── mpv render context ──────────────────────────────────────────────
-    private var renderCtx: OpaquePointer?  // mpv_render_context*
-    private var mpvHandle: OpaquePointer?  // reference to the player's mpv_handle
+    private var renderCtx: OpaquePointer?
+    private var mpvHandle: OpaquePointer?
     private weak var attachedPlayer: HybridNativeMpv?
 
     // ── Display link ────────────────────────────────────────────────────
     private var displayLink: CADisplayLink?
-    // Atomic flag — set from mpv's update callback thread, read from
-    // the main thread's CADisplayLink. Using os_unfair_lock for
-    // thread-safe access (plain Bool was a data race that could
-    // cause the render loop to stall after minutes of playback).
+    // Set from mpv's update-callback thread, read from main. Plain
+    // `Bool` was a data race that stalled the render loop after
+    // minutes of playback.
     private var _needsRender: Bool = false
     private var renderLock = os_unfair_lock()
 
@@ -68,54 +85,40 @@ final class MpvGLView: UIView {
         }
     }
 
-    // ── Layer ───────────────────────────────────────────────────────────
-    override class var layerClass: AnyClass { CAEAGLLayer.self }
-
-    private var eaglLayer: CAEAGLLayer { return layer as! CAEAGLLayer }
-
-    // ── Background tracking ─────────────────────────────────────────────
-    // Mirrors `UIApplication.applicationState == .background` but read
-    // from the hot render path — avoids a `UIApplication.shared` hop
-    // on every frame.
-    private var isAppInBackground: Bool = false
+    // ── Pixel-buffer pool ───────────────────────────────────────────────
+    private var pixelBufferPool: CVPixelBufferPool?
+    private var poolWidth: Int = 0
+    private var poolHeight: Int = 0
 
     // ── Picture-in-Picture ──────────────────────────────────────────────
-    // iOS 15+ custom-video-source PiP. We run a second render path
-    // into a CVPixelBuffer-backed texture whenever PiP is active, wrap
-    // it as a CMSampleBuffer, and enqueue to a sibling
-    // AVSampleBufferDisplayLayer that AVPictureInPictureController
-    // observes.
-    private var pipSampleBufferLayer: AVSampleBufferDisplayLayer?
     private var pipController: AVPictureInPictureController?
-    private var pipPixelBufferPool: CVPixelBufferPool?
-    private var pipTextureCache: CVOpenGLESTextureCache?
-    private var pipFramebuffer: GLuint = 0
-    // Dimensions of the buffers currently in the pool. We tear down
-    // + rebuild when mpv's `dwidth` / `dheight` changes significantly
-    // (e.g. resolution switch).
-    private var pipPoolWidth: Int = 0
-    private var pipPoolHeight: Int = 0
-    private var pipActive: Bool = false
+    private var isAppInBackground: Bool = false
+    private var isPipActive: Bool = false
 
     // MARK: Init
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        setupLayer()
+        configureView()
         registerLifecycleObservers()
     }
 
     required init?(coder: NSCoder) {
         super.init(coder: coder)
-        setupLayer()
+        configureView()
         registerLifecycleObservers()
     }
 
-    /// When the app enters background, iOS blocks GPU submissions
-    /// (`kIOGPUCommandBufferCallbackErrorBackgroundExecutionNotPermitted`)
-    /// — a running CADisplayLink floods the log and stalls the system
-    /// MediaPlayer UI. Pausing the link lets mpv continue decoding
-    /// audio while stopping all GL work until we're foreground again.
+    private func configureView() {
+        // `.resizeAspect` letterboxes the video inside the view —
+        // matches the behaviour mpv's internal letterboxing gave us
+        // with the old CAEAGLLayer path.
+        sampleBufferLayer.videoGravity = .resizeAspect
+        backgroundColor = .black
+        isOpaque = true
+        contentScaleFactor = UIScreen.main.scale
+    }
+
     private func registerLifecycleObservers() {
         let nc = NotificationCenter.default
         nc.addObserver(
@@ -134,12 +137,11 @@ final class MpvGLView: UIView {
 
     @objc private func handleDidEnterBackground() {
         isAppInBackground = true
-        // Keep the display link alive if PiP is active — we need to
-        // keep feeding frames to the sample-buffer layer even while
-        // the app is backgrounded. `renderFrame` itself skips the
-        // CAEAGLLayer submission whenever `isAppInBackground` is set,
-        // so there's no risk of a GPU-background error.
-        if !pipActive {
+        // Keep rendering if a PiP session is about to / is already
+        // running — its window is the only live consumer of our
+        // sample-buffer layer once the app is backgrounded. Otherwise
+        // pause to save battery.
+        if !shouldKeepRenderingInBackground() {
             displayLink?.isPaused = true
         }
     }
@@ -150,42 +152,28 @@ final class MpvGLView: UIView {
         needsRender = true
     }
 
-    private func setupLayer() {
-        eaglLayer.isOpaque = true
-        eaglLayer.drawableProperties = [
-            kEAGLDrawablePropertyRetainedBacking: false,
-            kEAGLDrawablePropertyColorFormat: kEAGLColorFormatRGBA8,
-        ]
-        // Scale for Retina / ProMotion
-        contentScaleFactor = UIScreen.main.scale
-        backgroundColor = .black
-    }
-
-    // MARK: Layout
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        // The PiP sample-buffer layer is a sibling of the CAEAGLLayer
-        // and must stay covered by it (so users don't see the PiP
-        // readback behind the main video). Keep the frames in sync.
-        pipSampleBufferLayer?.frame = bounds
-        guard eaglContext != nil else { return }
-        // Rebuild renderbuffer when size changes
-        setupRenderbuffer()
-        // Render immediately with new size
-        needsRender = true
+    /// True when we expect iOS to pull frames from the sample-buffer
+    /// layer in the background — either PiP is already active, or
+    /// it's armed to auto-start on backgrounding.
+    private func shouldKeepRenderingInBackground() -> Bool {
+        guard let controller = pipController else { return false }
+        if controller.isPictureInPictureActive { return true }
+        if #available(iOS 14.2, *) {
+            return controller.canStartPictureInPictureAutomaticallyFromInline
+        }
+        return false
     }
 
     // MARK: Attach / Detach
 
     /// Connect to an mpv player instance and start rendering video.
     func attach(player: HybridNativeMpv, mpvHandle handle: OpaquePointer) {
-        guard renderCtx == nil else { return }  // already attached
+        guard renderCtx == nil else { return }
         mpvHandle = handle
         attachedPlayer = player
         player.registerView(self)
 
-        // 1. Create EAGLContext (OpenGL ES 3.0, fallback to 2.0)
+        // 1. EAGLContext — off-screen only, no drawable.
         if let ctx = EAGLContext(api: .openGLES3) {
             eaglContext = ctx
         } else if let ctx = EAGLContext(api: .openGLES2) {
@@ -196,55 +184,67 @@ final class MpvGLView: UIView {
         }
         EAGLContext.setCurrent(eaglContext)
 
-        // 2. Setup renderbuffer + framebuffer
-        setupRenderbuffer()
+        // 2. Shared OpenGL ES texture cache — wraps each pooled pixel
+        //    buffer as a GL texture with no CPU copy (IOSurface path).
+        guard let eaglContext = eaglContext else { return }
+        var cache: CVOpenGLESTextureCache?
+        let cacheRc = CVOpenGLESTextureCacheCreate(
+            kCFAllocatorDefault, nil, eaglContext, nil, &cache
+        )
+        if cacheRc != kCVReturnSuccess {
+            NSLog("[MpvGLView] CVOpenGLESTextureCacheCreate failed: %d", cacheRc)
+            tearDown()
+            return
+        }
+        textureCache = cache
 
-        // 3. Create mpv render context
+        // 3. FBO reused every frame. Its color attachment is set
+        //    lazily per frame to whichever pooled pixel buffer we're
+        //    rendering into.
+        glGenFramebuffers(1, &framebuffer)
+
+        // 4. mpv render context.
         guard createRenderContext(mpv: handle) else {
             NSLog("[MpvGLView] Failed to create mpv render context")
             tearDown()
             return
         }
 
-        // 4. Enable video + unpause. mpv was initialized with pause=yes
-        // to prevent freezing while vo=libmpv had no render context.
-        // Now that the context exists, enable video and unpause.
+        // 5. Enable video + unpause. mpv was initialised with
+        //    pause=yes to avoid freezing while vo=libmpv had no
+        //    render context.
         mpv_set_property_string(handle, "vid", "auto")
         mpv_set_property_string(handle, "pause", "no")
 
-        // 5. Start CADisplayLink
+        // 6. Render loop.
         startDisplayLink()
 
-        // 6. Arm PiP (iOS only; no-op when the device doesn't
-        //    support custom-source PiP). The controller is created
-        //    lazily but the sample-buffer layer needs to exist in
-        //    the view hierarchy before `startPictureInPicture` is
-        //    called, so we set it up eagerly.
-        setupPipInfrastructure()
+        // 7. PiP controller — iOS 15+ custom-source. The controller
+        //    observes our sample-buffer layer, so the same frames we
+        //    show on-screen are the frames iOS shows in the floating
+        //    window.
+        setupPipController()
     }
 
-    /// Disconnect from the player. Tears down GL resources.
+    /// Disconnect from the player. Tears down GL + render context.
     func detach() {
         tearDown()
     }
 
-    // MARK: - Private: Render Context
+    // MARK: - mpv render context
 
     private func createRenderContext(mpv: OpaquePointer) -> Bool {
         EAGLContext.setCurrent(eaglContext)
 
-        // get_proc_address callback — resolves OpenGL ES function pointers.
-        // Matches the Rust `gl_get_proc_address` (mpv_video_gl.rs:424).
+        // Resolves GLES function pointers for libmpv.
         let getProcAddress: @convention(c) (
             UnsafeMutableRawPointer?,
             UnsafePointer<CChar>?
         ) -> UnsafeMutableRawPointer? = { _, name in
             guard let name = name else { return nil }
-            // dlsym(RTLD_DEFAULT, name) — same as the Rust reference
             return dlsym(UnsafeMutableRawPointer(bitPattern: -2), name)
         }
 
-        // Build mpv_render_param array
         var initParams = mpv_opengl_init_params(
             get_proc_address: getProcAddress,
             get_proc_address_ctx: nil
@@ -275,73 +275,22 @@ final class MpvGLView: UIView {
         }
         renderCtx = ctx
 
-        // Set the update callback — signals when mpv has a new frame.
-        // We set a flag and let CADisplayLink pick it up on the next
-        // vsync (instead of the Rust condvar approach).
+        // Update callback fires off-thread whenever mpv has a new
+        // frame. Flip the flag; the next CADisplayLink tick renders.
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()
         mpv_render_context_set_update_callback(ctx, { ctx in
             guard let ctx = ctx else { return }
             let view = Unmanaged<MpvGLView>.fromOpaque(ctx).takeUnretainedValue()
             view.needsRender = true
         }, selfPtr)
-
         return true
     }
 
-    // MARK: - Private: Renderbuffer
-
-    private func setupRenderbuffer() {
-        guard let ctx = eaglContext else { return }
-        EAGLContext.setCurrent(ctx)
-
-        // Delete old buffers
-        if colorRenderbuffer != 0 {
-            glDeleteRenderbuffers(1, &colorRenderbuffer)
-            colorRenderbuffer = 0
-        }
-        if framebuffer != 0 {
-            glDeleteFramebuffers(1, &framebuffer)
-            framebuffer = 0
-        }
-
-        // Create renderbuffer from the CAEAGLLayer drawable
-        glGenRenderbuffers(1, &colorRenderbuffer)
-        glBindRenderbuffer(GLenum(GL_RENDERBUFFER), colorRenderbuffer)
-        ctx.renderbufferStorage(Int(GL_RENDERBUFFER), from: eaglLayer)
-
-        glGetRenderbufferParameteriv(
-            GLenum(GL_RENDERBUFFER),
-            GLenum(GL_RENDERBUFFER_WIDTH),
-            &backingWidth
-        )
-        glGetRenderbufferParameteriv(
-            GLenum(GL_RENDERBUFFER),
-            GLenum(GL_RENDERBUFFER_HEIGHT),
-            &backingHeight
-        )
-
-        // Create framebuffer, attach renderbuffer
-        glGenFramebuffers(1, &framebuffer)
-        glBindFramebuffer(GLenum(GL_FRAMEBUFFER), framebuffer)
-        glFramebufferRenderbuffer(
-            GLenum(GL_FRAMEBUFFER),
-            GLenum(GL_COLOR_ATTACHMENT0),
-            GLenum(GL_RENDERBUFFER),
-            colorRenderbuffer
-        )
-
-        let status = glCheckFramebufferStatus(GLenum(GL_FRAMEBUFFER))
-        if status != GLenum(GL_FRAMEBUFFER_COMPLETE) {
-            NSLog("[MpvGLView] Framebuffer incomplete: 0x%X", status)
-        }
-    }
-
-    // MARK: - Private: Display Link
+    // MARK: - Display link
 
     private func startDisplayLink() {
         guard displayLink == nil else { return }
         let link = CADisplayLink(target: self, selector: #selector(renderFrame))
-        // ProMotion 120Hz — guarded by device capability
         if UIScreen.main.maximumFramesPerSecond >= 120 {
             link.preferredFramesPerSecond = 120
         }
@@ -350,330 +299,65 @@ final class MpvGLView: UIView {
     }
 
     @objc private func renderFrame() {
-        // Gate ALL work behind needsRender — set by mpv's update
-        // callback only when a new frame is ready. For 24fps video
-        // this skips ~96 of 120 display link ticks (nearly free).
+        // Gate all work on the update-callback flag. For 24fps video
+        // this skips ~96 of 120 display-link ticks (nearly free).
         guard needsRender, let renderCtx = renderCtx else { return }
         needsRender = false
 
         let flags = mpv_render_context_update(renderCtx)
         guard flags & UInt64(MPV_RENDER_UPDATE_FRAME.rawValue) != 0 else { return }
 
-        guard let ctx = eaglContext else { return }
-        EAGLContext.setCurrent(ctx)
-
-        // On-screen CAEAGLLayer render. Skipped when the app is
-        // backgrounded because iOS blocks GPU submissions to
-        // presentRenderbuffer; the PiP pipeline below still runs.
-        if !isAppInBackground, backingWidth > 0, backingHeight > 0 {
-            renderToMainLayer(renderCtx: renderCtx, ctx: ctx)
-        }
-
-        // Off-screen pixel-buffer render for PiP. Only active while
-        // AVPictureInPictureController is started — steady-state
-        // playback pays nothing here.
-        if pipActive {
-            renderToPipPixelBuffer(renderCtx)
-        }
-    }
-
-    /// Render the current mpv frame into our CAEAGLLayer-backed
-    /// renderbuffer and present. Extracted so `renderFrame` can
-    /// conditionally skip it without affecting the PiP render path.
-    private func renderToMainLayer(renderCtx: OpaquePointer, ctx: EAGLContext) {
-        glBindFramebuffer(GLenum(GL_FRAMEBUFFER), framebuffer)
-
-        var fbo = mpv_opengl_fbo(
-            fbo: Int32(framebuffer),
-            w: Int32(backingWidth),
-            h: Int32(backingHeight),
-            internal_format: 0
-        )
-        var flipY: Int32 = 1  // CAEAGLLayer needs flip
-
-        withUnsafeMutablePointer(to: &fbo) { fboPtr in
-            withUnsafeMutablePointer(to: &flipY) { flipYPtr in
-                var renderParams: [mpv_render_param] = [
-                    mpv_render_param(
-                        type: MPV_RENDER_PARAM_OPENGL_FBO,
-                        data: UnsafeMutableRawPointer(fboPtr)
-                    ),
-                    mpv_render_param(
-                        type: MPV_RENDER_PARAM_FLIP_Y,
-                        data: UnsafeMutableRawPointer(flipYPtr)
-                    ),
-                    mpv_render_param(type: mpv_render_param_type(rawValue: 0), data: nil),
-                ]
-                mpv_render_context_render(renderCtx, &renderParams)
-            }
-        }
-
-        glBindRenderbuffer(GLenum(GL_RENDERBUFFER), colorRenderbuffer)
-        ctx.presentRenderbuffer(Int(GL_RENDERBUFFER))
-    }
-
-    // MARK: - Private: Teardown
-
-    private func tearDown() {
-        // All GL + render context cleanup must happen on the main
-        // thread (same thread that created the EAGLContext). Nitro
-        // may call detach/deinit from the JS thread → dispatch.
-        let work = { [self] in
-            // Stop display link
-            displayLink?.invalidate()
-            displayLink = nil
-
-            // Tear down PiP BEFORE freeing the render context — the
-            // pip framebuffer + texture cache reference the same
-            // EAGLContext and must be released first so the render
-            // context teardown is clean.
-            tearDownPipInfrastructure()
-
-            // Free render context BEFORE destroying GL resources
-            if let ctx = renderCtx {
-                mpv_render_context_set_update_callback(ctx, nil, nil)
-                mpv_render_context_free(ctx)
-                renderCtx = nil
-            }
-
-            // Unregister from the player
-            attachedPlayer?.unregisterView(self)
-            attachedPlayer = nil
-            mpvHandle = nil
-
-            // Clean up GL
-            if let ctx = eaglContext {
-                EAGLContext.setCurrent(ctx)
-                if colorRenderbuffer != 0 {
-                    glDeleteRenderbuffers(1, &colorRenderbuffer)
-                    colorRenderbuffer = 0
-                }
-                if framebuffer != 0 {
-                    glDeleteFramebuffers(1, &framebuffer)
-                    framebuffer = 0
-                }
-                EAGLContext.setCurrent(nil)
-            }
-            eaglContext = nil
-            needsRender = false
-        }
-
-        if Thread.isMainThread {
-            work()
-        } else {
-            DispatchQueue.main.sync { work() }
-        }
-    }
-
-    deinit {
-        NotificationCenter.default.removeObserver(self)
-        tearDown()
-    }
-
-    // MARK: - Picture-in-Picture
-
-    /// Create the sibling `AVSampleBufferDisplayLayer`,
-    /// `CVOpenGLESTextureCache`, and `AVPictureInPictureController`.
-    /// Called from `attach()` after the GL pipeline is up. No-ops
-    /// on devices that don't support custom-source PiP (iPhones
-    /// before iOS 15, most iPads support it from iOS 9).
-    private func setupPipInfrastructure() {
-        dispatchPrecondition(condition: .onQueue(.main))
-        guard AVPictureInPictureController.isPictureInPictureSupported() else {
-            return
-        }
-        guard #available(iOS 15.0, *) else { return }
-        guard pipSampleBufferLayer == nil else { return }
-
-        // The sample-buffer layer must be in a visible window — iOS
-        // pulls frames from it via its compositing path. Insert it
-        // BEHIND the CAEAGLLayer so the on-screen video comes from
-        // the GL render (sharper + cheaper than the readback path).
-        // The layer ends up occluded 100% of the time on-screen but
-        // stays valid for PiP use.
-        let sbLayer = AVSampleBufferDisplayLayer()
-        sbLayer.videoGravity = .resizeAspect
-        sbLayer.frame = bounds
-        layer.insertSublayer(sbLayer, at: 0)
-        pipSampleBufferLayer = sbLayer
-
-        // Shared OpenGL ES texture cache — reused across every PiP
-        // frame. Requires an EAGLContext.
         guard let eaglContext = eaglContext else { return }
-        var textureCache: CVOpenGLESTextureCache?
-        let cacheRc = CVOpenGLESTextureCacheCreate(
-            kCFAllocatorDefault,
-            nil,
-            eaglContext,
-            nil,
-            &textureCache
-        )
-        if cacheRc != kCVReturnSuccess {
-            NSLog("[MpvGLView] CVOpenGLESTextureCacheCreate failed: %d", cacheRc)
-            return
-        }
-        pipTextureCache = textureCache
+        EAGLContext.setCurrent(eaglContext)
 
-        // Framebuffer for the PiP pass. The color attachment is set
-        // lazily each frame to whichever pooled pixel buffer we're
-        // currently rendering into.
-        glGenFramebuffers(1, &pipFramebuffer)
-
-        // Build the controller with a sample-buffer content source.
-        let contentSource = AVPictureInPictureController.ContentSource(
-            sampleBufferDisplayLayer: sbLayer,
-            playbackDelegate: self
-        )
-        let controller = AVPictureInPictureController(contentSource: contentSource)
-        controller.delegate = self
-        // YouTube-style behaviour: iOS auto-enters PiP when the user
-        // backgrounds the app. Requires `picture-in-picture` in the
-        // app's `UIBackgroundModes` (see `app.config.ts`) and
-        // `UIBackgroundModes: audio` (already set).
-        controller.canStartPictureInPictureAutomaticallyFromInline = true
-        pipController = controller
-
-        // Arm the dual-render path now so the sample-buffer layer
-        // has fresh frames by the time iOS polls it on
-        // `applicationWillResignActive`. Without this, auto-PiP has
-        // nothing to show and silently falls back to a frozen frame
-        // or no-start.
-        pipActive = true
+        renderAndEnqueue(renderCtx: renderCtx)
     }
 
-    /// Release the PiP sample-buffer layer, controller, texture
-    /// cache, framebuffer, and pool. Safe to call from `tearDown`
-    /// even when PiP was never started.
-    private func tearDownPipInfrastructure() {
-        pipActive = false
-        if pipFramebuffer != 0 {
-            glDeleteFramebuffers(1, &pipFramebuffer)
-            pipFramebuffer = 0
-        }
-        if let cache = pipTextureCache {
-            CVOpenGLESTextureCacheFlush(cache, 0)
-        }
-        pipTextureCache = nil
-        pipPixelBufferPool = nil
-        pipPoolWidth = 0
-        pipPoolHeight = 0
-        pipSampleBufferLayer?.flushAndRemoveImage()
-        pipSampleBufferLayer?.removeFromSuperlayer()
-        pipSampleBufferLayer = nil
-        pipController = nil
-    }
+    // MARK: - Render + enqueue
 
-    /// Create (or recreate) the CVPixelBufferPool for the given
-    /// dimensions. Returns true when the pool is ready.
-    ///
-    /// The pool is BGRA + IOSurface-backed so each pixel buffer
-    /// lives in an IOSurface that OpenGL ES can wrap as a texture
-    /// with no CPU copy (the "zero-copy" path).
-    @discardableResult
-    private func ensurePipPool(width: Int, height: Int) -> Bool {
-        guard width > 0, height > 0 else { return false }
-        if let _ = pipPixelBufferPool,
-           pipPoolWidth == width,
-           pipPoolHeight == height {
-            return true
-        }
-        // Drop any textures still referencing the old pool, then
-        // drop the pool itself.
-        if let cache = pipTextureCache {
-            CVOpenGLESTextureCacheFlush(cache, 0)
-        }
-        pipPixelBufferPool = nil
-
-        let attrs: [String: Any] = [
-            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
-            kCVPixelBufferWidthKey as String: width,
-            kCVPixelBufferHeightKey as String: height,
-            kCVPixelBufferIOSurfacePropertiesKey as String: [:],
-            kCVPixelBufferOpenGLESCompatibilityKey as String: true,
-        ]
-        var pool: CVPixelBufferPool?
-        let rc = CVPixelBufferPoolCreate(
-            kCFAllocatorDefault,
-            nil,
-            attrs as CFDictionary,
-            &pool
-        )
-        guard rc == kCVReturnSuccess, let created = pool else {
-            NSLog("[MpvGLView] CVPixelBufferPoolCreate failed: %d", rc)
-            return false
-        }
-        pipPixelBufferPool = created
-        pipPoolWidth = width
-        pipPoolHeight = height
-        return true
-    }
-
-    /// Read the current video display size from mpv (`dwidth` /
-    /// `dheight`). Returns `nil` when mpv hasn't produced a frame
-    /// yet — callers should fall back to retrying on the next tick.
-    private func readMpvVideoSize() -> (Int, Int)? {
-        guard let mpv = mpvHandle else { return nil }
-        var w: Int64 = 0
-        var h: Int64 = 0
-        let wRc = mpv_get_property(mpv, "dwidth", MPV_FORMAT_INT64, &w)
-        if wRc < 0 { return nil }
-        let hRc = mpv_get_property(mpv, "dheight", MPV_FORMAT_INT64, &h)
-        if hRc < 0 { return nil }
-        guard w > 0, h > 0 else { return nil }
-        return (Int(w), Int(h))
-    }
-
-    /// Render the current mpv frame into a pooled CVPixelBuffer,
-    /// wrap it as a `CMSampleBuffer`, and enqueue to the
-    /// sample-buffer layer. Called from `renderFrame()` only when
-    /// `pipActive == true`.
-    ///
-    /// Zero-copy path: pool → CVPixelBuffer (IOSurface-backed) →
-    /// CVOpenGLESTexture → FBO color attachment → mpv renders into
-    /// FBO → CMSampleBuffer references the same IOSurface.
-    private func renderToPipPixelBuffer(_ renderCtx: OpaquePointer) {
-        // Lazy pool resize — mpv's `dwidth` / `dheight` aren't known
-        // until the first frame decodes. We also rebuild if the
-        // resolution changes mid-stream (e.g. adaptive-bitrate).
+    /// Single pass: pool → CVPixelBuffer (IOSurface-backed) → GL
+    /// texture → FBO → mpv renders → CMSampleBuffer → enqueue. One
+    /// GPU submission per vsync feeds both the on-screen layer and
+    /// the PiP window.
+    private func renderAndEnqueue(renderCtx: OpaquePointer) {
+        // 1. Resize the pool when mpv's decoded size becomes known or
+        //    changes (adaptive-bitrate switches, resolution ladders).
         if let (w, h) = readMpvVideoSize() {
-            if pipPixelBufferPool == nil || w != pipPoolWidth || h != pipPoolHeight {
-                ensurePipPool(width: w, height: h)
+            if pixelBufferPool == nil || w != poolWidth || h != poolHeight {
+                ensurePool(width: w, height: h)
             }
         }
-        guard let pool = pipPixelBufferPool,
-              let cache = pipTextureCache,
-              let sbLayer = pipSampleBufferLayer,
-              pipPoolWidth > 0, pipPoolHeight > 0 else { return }
+        guard let pool = pixelBufferPool,
+              let cache = textureCache,
+              poolWidth > 0, poolHeight > 0 else { return }
 
-        // 1. Acquire a pixel buffer from the pool.
+        // 2. Acquire a pooled pixel buffer.
         var pixelBuffer: CVPixelBuffer?
         let poolRc = CVPixelBufferPoolCreatePixelBuffer(
             kCFAllocatorDefault, pool, &pixelBuffer
         )
         guard poolRc == kCVReturnSuccess, let pb = pixelBuffer else { return }
 
-        // 2. Wrap as a GL texture via the texture cache.
+        // 3. Tag color space so the sample-buffer layer composites our
+        //    BGRA as Rec.709 video rather than guessing.
+        tagColorSpace(pb)
+
+        // 4. Wrap as a GL texture via the shared cache. Zero-copy —
+        //    the texture references the pixel buffer's IOSurface.
         var texture: CVOpenGLESTexture?
         let texRc = CVOpenGLESTextureCacheCreateTextureFromImage(
-            kCFAllocatorDefault,
-            cache,
-            pb,
-            nil,
-            GLenum(GL_TEXTURE_2D),
-            GL_RGBA,
-            GLsizei(pipPoolWidth),
-            GLsizei(pipPoolHeight),
-            GLenum(GL_BGRA),
-            GLenum(GL_UNSIGNED_BYTE),
-            0,
-            &texture
+            kCFAllocatorDefault, cache, pb, nil,
+            GLenum(GL_TEXTURE_2D), GL_RGBA,
+            GLsizei(poolWidth), GLsizei(poolHeight),
+            GLenum(GL_BGRA), GLenum(GL_UNSIGNED_BYTE),
+            0, &texture
         )
         guard texRc == kCVReturnSuccess, let tex = texture else { return }
         let texTarget = CVOpenGLESTextureGetTarget(tex)
         let texName = CVOpenGLESTextureGetName(tex)
 
-        // 3. Attach the texture to our PiP framebuffer.
-        glBindFramebuffer(GLenum(GL_FRAMEBUFFER), pipFramebuffer)
+        // 5. Bind texture as the FBO's color attachment.
+        glBindFramebuffer(GLenum(GL_FRAMEBUFFER), framebuffer)
         glBindTexture(texTarget, texName)
         glTexParameteri(texTarget, GLenum(GL_TEXTURE_MIN_FILTER), GL_LINEAR)
         glTexParameteri(texTarget, GLenum(GL_TEXTURE_MAG_FILTER), GL_LINEAR)
@@ -682,14 +366,12 @@ final class MpvGLView: UIView {
         glFramebufferTexture2D(
             GLenum(GL_FRAMEBUFFER),
             GLenum(GL_COLOR_ATTACHMENT0),
-            texTarget,
-            texName,
-            0
+            texTarget, texName, 0
         )
 
         let status = glCheckFramebufferStatus(GLenum(GL_FRAMEBUFFER))
         guard status == GLenum(GL_FRAMEBUFFER_COMPLETE) else {
-            NSLog("[MpvGLView] PiP FBO incomplete: 0x%X", status)
+            NSLog("[MpvGLView] FBO incomplete: 0x%X", status)
             glFramebufferTexture2D(
                 GLenum(GL_FRAMEBUFFER),
                 GLenum(GL_COLOR_ATTACHMENT0),
@@ -698,12 +380,13 @@ final class MpvGLView: UIView {
             return
         }
 
-        // 4. Tell mpv to render into the FBO. No Y-flip — the sample
-        //    buffer layer expects top-left origin (unlike CAEAGLLayer).
+        // 6. Tell mpv to render into the FBO. `FLIP_Y=0` — sample
+        //    buffer layers use top-left origin (unlike CAEAGLLayer,
+        //    which needed a flip).
         var fbo = mpv_opengl_fbo(
-            fbo: Int32(pipFramebuffer),
-            w: Int32(pipPoolWidth),
-            h: Int32(pipPoolHeight),
+            fbo: Int32(framebuffer),
+            w: Int32(poolWidth),
+            h: Int32(poolHeight),
             internal_format: 0
         )
         var flipY: Int32 = 0
@@ -726,16 +409,18 @@ final class MpvGLView: UIView {
         }
         glFlush()
 
-        // Detach texture before releasing our local reference, so the
-        // FBO doesn't hold on to it.
+        // Detach texture so the FBO doesn't retain it after `tex`
+        // goes out of scope.
         glFramebufferTexture2D(
             GLenum(GL_FRAMEBUFFER),
             GLenum(GL_COLOR_ATTACHMENT0),
             GLenum(GL_TEXTURE_2D), 0, 0
         )
 
-        // 5. Wrap as CMSampleBuffer + enqueue.
+        // 7. Wrap as CMSampleBuffer + enqueue. Flush first if the
+        //    layer wants it (iOS 14+ — rebuffer after failed decode).
         guard let sampleBuffer = makeSampleBuffer(from: pb) else { return }
+        let sbLayer = sampleBufferLayer
         if #available(iOS 14.0, *), sbLayer.requiresFlushToResumeDecoding {
             sbLayer.flush()
         }
@@ -744,9 +429,81 @@ final class MpvGLView: UIView {
         }
     }
 
-    /// Wrap a CVPixelBuffer as a CMSampleBuffer with a host-clock
-    /// timestamp. iOS only requires monotonically increasing PTSes
-    /// for the sample-buffer layer's built-in decoder queue.
+    // MARK: - Helpers
+
+    /// Create or resize the pixel-buffer pool. Returns true when the
+    /// pool is ready at the requested dimensions.
+    ///
+    /// BGRA + IOSurface-backed so each pixel buffer is zero-copy
+    /// wrappable as a GL texture.
+    @discardableResult
+    private func ensurePool(width: Int, height: Int) -> Bool {
+        guard width > 0, height > 0 else { return false }
+        if pixelBufferPool != nil, poolWidth == width, poolHeight == height {
+            return true
+        }
+        if let cache = textureCache {
+            CVOpenGLESTextureCacheFlush(cache, 0)
+        }
+        pixelBufferPool = nil
+
+        let attrs: [String: Any] = [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+            kCVPixelBufferWidthKey as String: width,
+            kCVPixelBufferHeightKey as String: height,
+            kCVPixelBufferIOSurfacePropertiesKey as String: [:],
+            kCVPixelBufferOpenGLESCompatibilityKey as String: true,
+        ]
+        var pool: CVPixelBufferPool?
+        let rc = CVPixelBufferPoolCreate(
+            kCFAllocatorDefault, nil, attrs as CFDictionary, &pool
+        )
+        guard rc == kCVReturnSuccess, let created = pool else {
+            NSLog("[MpvGLView] CVPixelBufferPoolCreate failed: %d", rc)
+            return false
+        }
+        pixelBufferPool = created
+        poolWidth = width
+        poolHeight = height
+        return true
+    }
+
+    /// Read the current video display size from mpv (`dwidth` /
+    /// `dheight`). `nil` when mpv hasn't produced a frame yet —
+    /// caller retries next tick.
+    private func readMpvVideoSize() -> (Int, Int)? {
+        guard let mpv = mpvHandle else { return nil }
+        var w: Int64 = 0
+        var h: Int64 = 0
+        guard mpv_get_property(mpv, "dwidth", MPV_FORMAT_INT64, &w) >= 0 else { return nil }
+        guard mpv_get_property(mpv, "dheight", MPV_FORMAT_INT64, &h) >= 0 else { return nil }
+        guard w > 0, h > 0 else { return nil }
+        return (Int(w), Int(h))
+    }
+
+    /// Attach Rec.709 primaries + transfer function to each pixel
+    /// buffer. Without these, `AVSampleBufferDisplayLayer` may treat
+    /// our BGRA as untagged and shift colors at composition time.
+    /// The YCbCr matrix key doesn't apply — we deliver BGRA (RGB
+    /// already, post-libmpv color conversion).
+    private func tagColorSpace(_ pb: CVPixelBuffer) {
+        CVBufferSetAttachment(
+            pb,
+            kCVImageBufferColorPrimariesKey,
+            kCVImageBufferColorPrimaries_ITU_R_709_2,
+            .shouldPropagate
+        )
+        CVBufferSetAttachment(
+            pb,
+            kCVImageBufferTransferFunctionKey,
+            kCVImageBufferTransferFunction_ITU_R_709_2,
+            .shouldPropagate
+        )
+    }
+
+    /// Wrap a pixel buffer as a `CMSampleBuffer` with a host-clock
+    /// PTS and the `DisplayImmediately` attachment so iOS composites
+    /// without queueing on timing.
     private func makeSampleBuffer(from pixelBuffer: CVPixelBuffer) -> CMSampleBuffer? {
         var formatDescription: CMFormatDescription?
         let fdRc = CMVideoFormatDescriptionCreateForImageBuffer(
@@ -773,13 +530,12 @@ final class MpvGLView: UIView {
         )
         guard sbRc == noErr else { return nil }
 
-        // Mark the single sample as "display immediately" so the PiP
-        // layer doesn't queue frames waiting for a later PTS. The
-        // CFArray returned here contains CFMutableDictionary items
-        // that toll-free-bridge to NSMutableDictionary.
+        // `CMSampleBufferGetSampleAttachmentsArray` returns an array
+        // of `CFMutableDictionary` that toll-free-bridge to
+        // `NSMutableDictionary`.
         if let sampleBuffer = sb,
            let attachments = CMSampleBufferGetSampleAttachmentsArray(
-                sampleBuffer, createIfNecessary: true
+               sampleBuffer, createIfNecessary: true
            ) as NSArray?,
            let dict = attachments.firstObject as? NSMutableDictionary {
             dict[kCMSampleAttachmentKey_DisplayImmediately as String] = true
@@ -787,17 +543,105 @@ final class MpvGLView: UIView {
         return sb
     }
 
+    // MARK: - PiP controller
+
+    private func setupPipController() {
+        dispatchPrecondition(condition: .onQueue(.main))
+        guard AVPictureInPictureController.isPictureInPictureSupported() else { return }
+        guard #available(iOS 15.0, *) else { return }
+        guard pipController == nil else { return }
+
+        let contentSource = AVPictureInPictureController.ContentSource(
+            sampleBufferDisplayLayer: sampleBufferLayer,
+            playbackDelegate: self
+        )
+        let controller = AVPictureInPictureController(contentSource: contentSource)
+        controller.delegate = self
+        // YouTube-style: iOS auto-enters PiP on `willResignActive`.
+        // Requires `picture-in-picture` in `UIBackgroundModes`.
+        controller.canStartPictureInPictureAutomaticallyFromInline = true
+        pipController = controller
+    }
+
+    private func tearDownPipController() {
+        pipController = nil
+    }
+
+    // MARK: - Teardown
+
+    private func tearDown() {
+        let work = { [self] in
+            // Current the GL context up-front so `mpv_render_context_free`
+            // has the right state if libmpv issues any final GL
+            // commands during shutdown.
+            if let eaglContext = eaglContext {
+                EAGLContext.setCurrent(eaglContext)
+            }
+
+            displayLink?.invalidate()
+            displayLink = nil
+
+            tearDownPipController()
+
+            if let ctx = renderCtx {
+                mpv_render_context_set_update_callback(ctx, nil, nil)
+                mpv_render_context_free(ctx)
+                renderCtx = nil
+            }
+
+            attachedPlayer?.unregisterView(self)
+            attachedPlayer = nil
+            mpvHandle = nil
+
+            if framebuffer != 0 {
+                glDeleteFramebuffers(1, &framebuffer)
+                framebuffer = 0
+            }
+            if let cache = textureCache {
+                CVOpenGLESTextureCacheFlush(cache, 0)
+            }
+            textureCache = nil
+            pixelBufferPool = nil
+            poolWidth = 0
+            poolHeight = 0
+
+            sampleBufferLayer.flushAndRemoveImage()
+
+            EAGLContext.setCurrent(nil)
+            eaglContext = nil
+            needsRender = false
+        }
+
+        if Thread.isMainThread {
+            work()
+        } else {
+            DispatchQueue.main.sync { work() }
+        }
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+        tearDown()
+    }
 }
 
 // MARK: - AVPictureInPictureControllerDelegate
 
 @available(iOS 15.0, *)
 extension MpvGLView: AVPictureInPictureControllerDelegate {
+    func pictureInPictureControllerDidStartPictureInPicture(
+        _ controller: AVPictureInPictureController
+    ) {
+        isPipActive = true
+    }
+
     func pictureInPictureControllerDidStopPictureInPicture(
         _ controller: AVPictureInPictureController
     ) {
+        isPipActive = false
         // If the user dismisses PiP while the app is still in the
-        // background, re-pause the display link to stop burning GPU.
+        // background, pause the display link — nothing is reading
+        // our frames anymore.
         if isAppInBackground {
             displayLink?.isPaused = true
         }
@@ -839,8 +683,8 @@ extension MpvGLView: AVPictureInPictureSampleBufferPlaybackDelegate {
         }
         let duration = player.pipDuration
         if duration <= 0 || !duration.isFinite {
-            // Indefinite / live — per Apple sample code, use
-            // (-inf, +inf). The PiP overlay hides the scrubber.
+            // Indefinite / live — Apple's docs use (-inf, +inf) and
+            // the PiP overlay hides the scrubber.
             return CMTimeRange(
                 start: CMTime(seconds: -.infinity, preferredTimescale: 1),
                 duration: CMTime(seconds: .infinity, preferredTimescale: 1)
@@ -862,8 +706,8 @@ extension MpvGLView: AVPictureInPictureSampleBufferPlaybackDelegate {
         _ controller: AVPictureInPictureController,
         didTransitionToRenderSize newRenderSize: CMVideoDimensions
     ) {
-        // No-op. The pixel-buffer pool tracks mpv's decode size,
-        // not iOS's PiP window size — iOS downsamples for us.
+        // No-op. The pool tracks mpv's decode size; iOS downsamples
+        // for the PiP window.
     }
 
     func pictureInPictureController(
@@ -885,8 +729,8 @@ extension MpvGLView: AVPictureInPictureSampleBufferPlaybackDelegate {
 
 // MARK: - HybridMpvVideoView (Nitro HybridView wrapper)
 
-/// Nitro HybridView that wraps `MpvGLView`. React mounts this as
-/// `<MpvVideoView>` and calls `attachPlayer`/`detachPlayer` via
+/// Nitro HybridView wrapping `MpvGLView`. React mounts this as
+/// `<MpvVideoView>` and calls `attachPlayer` / `detachPlayer` via
 /// the `hybridRef`.
 public final class HybridMpvVideoView: HybridMpvVideoViewSpec {
 
@@ -905,8 +749,8 @@ public final class HybridMpvVideoView: HybridMpvVideoViewSpec {
         guard let handle = player.mpvHandle else {
             throw RuntimeError("Player has been released")
         }
-        // Nitro calls hybridRef from the JS thread, but GL layer
-        // setup (renderbufferStorage:fromDrawable:) must run on main.
+        // Nitro calls hybridRef from the JS thread, but GL setup and
+        // `AVPictureInPictureController` construction must run on main.
         DispatchQueue.main.async { [weak self] in
             self?.glView.attach(player: player, mpvHandle: handle)
         }
