@@ -120,16 +120,24 @@ static int jf_bitmap_sub_interrupt(void *opaque) {
 //           selection by `ff-index`.
 //   <  0  → auto-pick the first bitmap sub stream (legacy callers / no
 //           mpv mapping available yet).
+//
+// `user_agent` pins avformat's HTTP UA so the sidecar fetch hits the
+// same server session as the main mpv open. Pass whatever libmpv is
+// using (`options.userAgent` → mpv's `user-agent` property); nullptr
+// keeps avformat's default, which is only safe when the server is
+// UA-agnostic.
 extern "C" struct jf_bitmap_sub_ctx *jf_bitmap_sub_open(const char *url,
                                                          double start_seconds,
-                                                         int requested_stream_index) {
+                                                         int requested_stream_index,
+                                                         const char *user_agent) {
     if (!url) return nullptr;
     jf_ffmpeg_init_once();
 
     AVFormatContext *fmt = nullptr;
     AVDictionary *opts = nullptr;
     av_dict_set(&opts, "rw_timeout", "15000000", 0);
-    av_dict_set(&opts, "user_agent", "Jellyfuse/1.0 libavformat", 0);
+    av_dict_set(&opts, "user_agent",
+                user_agent ? user_agent : "Jellyfuse/1.0 libavformat", 0);
 
     int rc = avformat_open_input(&fmt, url, nullptr, &opts);
     av_dict_free(&opts);
@@ -322,6 +330,26 @@ extern "C" int jf_bitmap_sub_decode_next(struct jf_bitmap_sub_ctx *ctx,
         avsubtitle_free(&sub);
         av_packet_unref(ctx->pkt);
         return 0;
+    }
+}
+
+// Composition dimensions the subtitle stream was authored against —
+// the coordinate system for every rect's x/y/w/h. PGS declares these
+// in its presentation composition segment; FFmpeg copies them onto the
+// codec context during `avcodec_parameters_to_context`. Used by the
+// overlay to letterbox rects into the on-screen video rect at the
+// correct resolution (1920×1080 for HD Blu-ray, 3840×2160 for 4K).
+// Writes 0 when the codec didn't publish a size.
+extern "C" void jf_bitmap_sub_source_size(struct jf_bitmap_sub_ctx *ctx,
+                                          int *out_width,
+                                          int *out_height) {
+    if (!out_width || !out_height) return;
+    *out_width = 0;
+    *out_height = 0;
+    if (!ctx || !ctx->cctx) return;
+    if (ctx->cctx->width > 0 && ctx->cctx->height > 0) {
+        *out_width = ctx->cctx->width;
+        *out_height = ctx->cctx->height;
     }
 }
 

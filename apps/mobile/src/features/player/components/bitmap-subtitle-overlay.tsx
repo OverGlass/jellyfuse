@@ -10,11 +10,13 @@
 // etc.) on every PGS transition.
 //
 // Positioning: rects ship in source-video coordinates (e.g. 1920×1080
-// for Titanic's PGS). We compute the letterboxed video rect inside the
-// container and map the sub rect into on-screen space. Default source
-// is 1080p which covers every HD Blu-ray rip; 4K rips come through as
-// 3840×2160 PGS and the player screen should pass the actual dims from
-// mpv's `width` / `height` once the first frame lands.
+// for Titanic's PGS, 3840×2160 for 4K Blu-ray, 720×480 for DVD VobSub).
+// Each `MpvBitmapSubtitle` event now carries the composition grid it was
+// authored against (`sourceWidth` / `sourceHeight`, pulled straight off
+// the ffmpeg codec context), so we letterbox against the real source
+// resolution instead of guessing. The 1920×1080 fallback only kicks in
+// if the codec didn't publish a size — enough to avoid a divide-by-zero
+// while we wait for the next event.
 
 import type { MpvBitmapSubtitle, NativeMpv } from "@jellyfuse/native-mpv";
 import { useEffect, useState } from "react";
@@ -23,13 +25,9 @@ import { Image, StyleSheet, View } from "react-native";
 interface Props {
   /** Active mpv player instance; `null` before attach or after teardown. */
   mpv: NativeMpv | null;
-  /** Source video width in pixels. Defaults to 1920 (HD Blu-ray PGS). */
-  sourceWidth?: number;
-  /** Source video height in pixels. Defaults to 1080. */
-  sourceHeight?: number;
 }
 
-export function BitmapSubtitleOverlay({ mpv, sourceWidth = 1920, sourceHeight = 1080 }: Props) {
+export function BitmapSubtitleOverlay({ mpv }: Props) {
   const [event, setEvent] = useState<MpvBitmapSubtitle | null>(null);
   const [containerSize, setContainerSize] = useState<{ width: number; height: number } | null>(
     null,
@@ -64,6 +62,8 @@ export function BitmapSubtitleOverlay({ mpv, sourceWidth = 1920, sourceHeight = 
   // preserving AR. If the container is wider than the source AR we get
   // vertical bars; taller, horizontal bars. Bitmap subs render inside
   // the video rect, so the same transform maps their coords.
+  const sourceWidth = event.sourceWidth > 0 ? event.sourceWidth : 1920;
+  const sourceHeight = event.sourceHeight > 0 ? event.sourceHeight : 1080;
   const scale = Math.min(containerSize.width / sourceWidth, containerSize.height / sourceHeight);
   const displayedWidth = sourceWidth * scale;
   const displayedHeight = sourceHeight * scale;

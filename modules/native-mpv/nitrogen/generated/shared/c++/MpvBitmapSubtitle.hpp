@@ -45,11 +45,13 @@ namespace margelo::nitro::nativempv {
     double y     SWIFT_PRIVATE;
     double width     SWIFT_PRIVATE;
     double height     SWIFT_PRIVATE;
+    double sourceWidth     SWIFT_PRIVATE;
+    double sourceHeight     SWIFT_PRIVATE;
     std::string imageUri     SWIFT_PRIVATE;
 
   public:
     MpvBitmapSubtitle() = default;
-    explicit MpvBitmapSubtitle(double ptsSeconds, double durationSeconds, double x, double y, double width, double height, std::string imageUri): ptsSeconds(ptsSeconds), durationSeconds(durationSeconds), x(x), y(y), width(width), height(height), imageUri(imageUri) {}
+    explicit MpvBitmapSubtitle(double ptsSeconds, double durationSeconds, double x, double y, double width, double height, double sourceWidth, double sourceHeight, std::string imageUri): ptsSeconds(ptsSeconds), durationSeconds(durationSeconds), x(x), y(y), width(width), height(height), sourceWidth(sourceWidth), sourceHeight(sourceHeight), imageUri(imageUri) {}
 
   public:
     friend bool operator==(const MpvBitmapSubtitle& lhs, const MpvBitmapSubtitle& rhs) = default;
@@ -71,6 +73,8 @@ namespace margelo::nitro {
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "y"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "width"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "height"))),
+        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "sourceWidth"))),
+        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "sourceHeight"))),
         JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "imageUri")))
       );
     }
@@ -82,6 +86,8 @@ namespace margelo::nitro {
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "y"), JSIConverter<double>::toJSI(runtime, arg.y));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "width"), JSIConverter<double>::toJSI(runtime, arg.width));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "height"), JSIConverter<double>::toJSI(runtime, arg.height));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "sourceWidth"), JSIConverter<double>::toJSI(runtime, arg.sourceWidth));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "sourceHeight"), JSIConverter<double>::toJSI(runtime, arg.sourceHeight));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "imageUri"), JSIConverter<std::string>::toJSI(runtime, arg.imageUri));
       return obj;
     }
@@ -99,6 +105,8 @@ namespace margelo::nitro {
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "y")))) return false;
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "width")))) return false;
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "height")))) return false;
+      if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "sourceWidth")))) return false;
+      if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "sourceHeight")))) return false;
       if (!JSIConverter<std::string>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "imageUri")))) return false;
       return true;
     }

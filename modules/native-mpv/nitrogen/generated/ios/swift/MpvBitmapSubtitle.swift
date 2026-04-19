@@ -18,8 +18,8 @@ public extension MpvBitmapSubtitle {
   /**
    * Create a new instance of `MpvBitmapSubtitle`.
    */
-  init(ptsSeconds: Double, durationSeconds: Double, x: Double, y: Double, width: Double, height: Double, imageUri: String) {
-    self.init(ptsSeconds, durationSeconds, x, y, width, height, std.string(imageUri))
+  init(ptsSeconds: Double, durationSeconds: Double, x: Double, y: Double, width: Double, height: Double, sourceWidth: Double, sourceHeight: Double, imageUri: String) {
+    self.init(ptsSeconds, durationSeconds, x, y, width, height, sourceWidth, sourceHeight, std.string(imageUri))
   }
 
   @inline(__always)
@@ -50,6 +50,16 @@ public extension MpvBitmapSubtitle {
   @inline(__always)
   var height: Double {
     return self.__height
+  }
+  
+  @inline(__always)
+  var sourceWidth: Double {
+    return self.__sourceWidth
+  }
+  
+  @inline(__always)
+  var sourceHeight: Double {
+    return self.__sourceHeight
   }
   
   @inline(__always)

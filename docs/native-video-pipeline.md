@@ -86,9 +86,14 @@ doesn't change.
 - **Seek drift** — the sidecar ffmpeg context seeks independently.
   Mitigated by pre-fetching subs ~500 ms ahead; stale-sub blip on seek
   is acceptable UX.
-- **Auth-header parity** — the parallel ffmpeg open must carry the
-  same Jellyfin token, User-Agent, and `Cookie` as the mpv open.
-  Validate before Phase 3 lands.
+- **Auth-header parity** — validated. Jellyfin token rides in the
+  stream URL's `api_key` query param (see `packages/api/src/playback.ts`
+  for DirectPlay/Stream and the server-built `TranscodingUrl` for
+  Transcode), so the sidecar open inherits auth for free. User-Agent
+  is plumbed through `MpvLoadOptions.userAgent → currentUserAgent →
+jf_bitmap_sub_open(user_agent=)` — the UA set on the mpv context is
+  pinned to the ffmpeg context. Jellyfin stream endpoints don't
+  require cookies, so no cookie jar needed.
 - **HLS segment expiry** — both contexts follow the same manifest; not
   a correctness issue for VOD.
 

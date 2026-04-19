@@ -36,6 +36,7 @@ private func jf_bitmap_sub_open(
     _ url: UnsafePointer<CChar>?,
     _ startSeconds: Double,
     _ requestedStreamIndex: Int32,
+    _ userAgent: UnsafePointer<CChar>?,
 ) -> OpaquePointer?
 
 @_silgen_name("jf_bitmap_sub_decode_next")
@@ -53,6 +54,13 @@ private func jf_bitmap_sub_decode_next(
 
 @_silgen_name("jf_bitmap_sub_seek")
 private func jf_bitmap_sub_seek(_ ctx: OpaquePointer?, _ seconds: Double) -> Int32
+
+@_silgen_name("jf_bitmap_sub_source_size")
+private func jf_bitmap_sub_source_size(
+    _ ctx: OpaquePointer?,
+    _ outWidth: UnsafeMutablePointer<Int32>,
+    _ outHeight: UnsafeMutablePointer<Int32>,
+)
 
 @_silgen_name("jf_bitmap_sub_cancel")
 private func jf_bitmap_sub_cancel(_ ctx: OpaquePointer?)
@@ -143,11 +151,25 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
     // Cached stream URL so seeks can restart the worker at a new
     // position. Set by `load()`; nil between sessions.
     private var currentStreamUrl: String?
+    // User-Agent mpv is using for the current session. Pinned to the
+    // sidecar ffmpeg open so both contexts hit the same Jellyfin session
+    // (reverse proxies / transcode affinity can key on UA). Mirrors
+    // whatever was passed in `MpvLoadOptions.userAgent`; nil when the
+    // caller didn't override and mpv falls back to its built-in default.
+    private var currentUserAgent: String?
     // avformat stream index the worker is currently decoding. `-1` when
     // no bitmap track is selected (text or off). Updated exclusively on
     // main in response to `sid` observer events so the sid handler and
     // seek/teardown agree on what track to restart.
     private var currentBitmapStreamIndex: Int32 = -1
+    // Composition dimensions of the current bitmap sub stream. Captured
+    // once at open time from the codec context (PGS presentation grid)
+    // and attached to every emitted event so the overlay can letterbox
+    // rects against the real source resolution — 1920×1080 for HD
+    // Blu-ray, 3840×2160 for 4K, 720×480 for DVD — instead of a
+    // hard-coded guess. `0` means the codec didn't publish a size.
+    private var bitmapSubSourceWidth: Int32 = 0
+    private var bitmapSubSourceHeight: Int32 = 0
 
     // Cached now-playing base dict. Elapsed time + rate are merged on
     // every progress/pause update so the lock-screen scrubber stays in
@@ -198,6 +220,9 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         }
         if let ua = options.userAgent {
             try setProperty(name: "user-agent", value: ua)
+            currentUserAgent = ua
+        } else {
+            currentUserAgent = nil
         }
 
         // `loadfile <url>` — same invocation as the Rust backend.
@@ -869,6 +894,7 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         bitmapSubSubs.removeAll()
         bitmapSubClearSubs.removeAll()
         currentStreamUrl = nil
+        currentUserAgent = nil
         currentBitmapStreamIndex = -1
         nowPlayingBase = nil
         DispatchQueue.main.async { [weak self] in
@@ -1063,7 +1089,8 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
                 self.startBitmapSubWorker(
                     url: url,
                     startSeconds: self.currentPosition,
-                    streamIndex: ffIndex
+                    streamIndex: ffIndex,
+                    userAgent: self.currentUserAgent
                 )
             } else {
                 if self.currentBitmapStreamIndex < 0 { return }
@@ -1162,20 +1189,34 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         return "data:image/png;base64,\(png.base64EncodedString())"
     }
 
-    private func startBitmapSubWorker(url: String, startSeconds: Double, streamIndex: Int32) {
+    private func startBitmapSubWorker(
+        url: String,
+        startSeconds: Double,
+        streamIndex: Int32,
+        userAgent: String?,
+    ) {
         stopBitmapSubWorker()
         bitmapSubQueue.async { [weak self] in
             guard let self else { return }
-            guard let ctx = url.withCString({
-                jf_bitmap_sub_open($0, startSeconds, streamIndex)
-            }) else {
-                return
+            let ctx: OpaquePointer? = url.withCString { urlPtr in
+                if let ua = userAgent {
+                    return ua.withCString { uaPtr in
+                        jf_bitmap_sub_open(urlPtr, startSeconds, streamIndex, uaPtr)
+                    }
+                }
+                return jf_bitmap_sub_open(urlPtr, startSeconds, streamIndex, nil)
             }
+            guard let ctx else { return }
             // Publish the handle so `stopBitmapSubWorker` can signal
             // cancel from another thread. The worker itself owns the
             // close — the stopper only flips the cancel flag and
             // clears the published ref.
             self.bitmapSubCtx = ctx
+            var srcW: Int32 = 0
+            var srcH: Int32 = 0
+            jf_bitmap_sub_source_size(ctx, &srcW, &srcH)
+            self.bitmapSubSourceWidth = srcW
+            self.bitmapSubSourceHeight = srcH
             self.runBitmapSubLoop(ctx: ctx)
             self.bitmapSubCtx = nil
             jf_bitmap_sub_close(ctx)
@@ -1208,7 +1249,8 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         startBitmapSubWorker(
             url: url,
             startSeconds: max(0, seconds),
-            streamIndex: currentBitmapStreamIndex
+            streamIndex: currentBitmapStreamIndex,
+            userAgent: currentUserAgent
         )
     }
 
@@ -1280,6 +1322,8 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
                         y: Double(y),
                         width: Double(w),
                         height: Double(h),
+                        sourceWidth: Double(self.bitmapSubSourceWidth),
+                        sourceHeight: Double(self.bitmapSubSourceHeight),
                         imageUri: dataUri,
                     )
                     DispatchQueue.main.async { [weak self] in

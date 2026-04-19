@@ -145,11 +145,16 @@ export interface MpvNowPlayingInfo {
  * crossing is negligible.
  *
  * `x` / `y` / `width` / `height` are in the source video's coordinate
- * system (1920×1080 for PGS, 720×480 for DVD, etc.). The overlay scales
- * them against the on-screen video rect before rendering. For clears,
- * subscribe to `addBitmapSubtitleClearListener` — the decoder emits a
- * dedicated clear event whenever a composition-delete packet arrives,
- * so the overlay doesn't need to track duration timers.
+ * system. `sourceWidth` / `sourceHeight` are the composition dimensions
+ * the subtitle stream was authored against (1920×1080 for HD Blu-ray
+ * PGS, 3840×2160 for 4K, 720×480 for DVD, etc.) — read straight off
+ * the codec context on the sidecar decoder, so the overlay always
+ * letterboxes against the authoritative grid instead of a hard-coded
+ * guess. `0` means the codec didn't publish a size; the overlay should
+ * fall back to a sensible default. For clears, subscribe to
+ * `addBitmapSubtitleClearListener` — the decoder emits a dedicated
+ * clear event whenever a composition-delete packet arrives, so the
+ * overlay doesn't need to track duration timers.
  */
 export interface MpvBitmapSubtitle {
   ptsSeconds: number;
@@ -158,6 +163,8 @@ export interface MpvBitmapSubtitle {
   y: number;
   width: number;
   height: number;
+  sourceWidth: number;
+  sourceHeight: number;
   imageUri: string;
 }
 
