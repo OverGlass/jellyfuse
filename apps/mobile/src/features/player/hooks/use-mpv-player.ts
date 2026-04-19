@@ -16,17 +16,27 @@ import {
 } from "@jellyfuse/native-mpv";
 import type { ResolvedStream } from "@jellyfuse/models";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useSharedValue, type SharedValue } from "react-native-reanimated";
+
+// Position is never stored in React state — it lives only on the UI
+// thread via `positionShared`. Duration lives in both React state (for
+// segment layout) and a shared value (for UI-thread reads), but state
+// is only updated when the value actually changes, so the player tree
+// re-renders zero times during steady-state playback.
 
 export interface MpvPlayerState {
   mpv: NativeMpv | null;
   isPlaying: boolean;
   isBuffering: boolean;
-  position: number;
   duration: number;
   error: string | null;
 }
 
 export interface UseMpvPlayerReturn extends MpvPlayerState {
+  /** UI-thread position mirror, updated on every mpv tick (~10 Hz). */
+  positionShared: SharedValue<number>;
+  /** UI-thread duration mirror. */
+  durationShared: SharedValue<number>;
   play: () => void;
   pause: () => void;
   seek: (seconds: number) => void;
@@ -51,21 +61,32 @@ export function useMpvPlayer(
   const mpvRef = useRef<NativeMpv | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
-  const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const positionShared = useSharedValue(0);
+  const durationShared = useSharedValue(0);
+  const durationRef = useRef(0);
 
   // ── Event handlers via useEffectEvent ──────────────────────────────
   // These are stable — they always see the latest closure values but
   // never cause the effect to re-run. Perfect for native callbacks.
 
   const onProgress = useEffectEvent((pos: number, dur: number) => {
-    setPosition(pos);
-    setDuration(dur);
+    // Shared values update every tick — scrubber fill, thumb, time
+    // text, skip-segment pill, and now-playing remotes all read from
+    // these on the UI thread with zero React work.
+    positionShared.value = pos;
+    durationShared.value = dur;
+    // Duration effectively only changes once per load. Guarding the
+    // setState means the player tree re-renders zero times during
+    // steady-state playback.
+    if (dur !== durationRef.current) {
+      durationRef.current = dur;
+      setDuration(dur);
+    }
   });
 
   const onStateChange = useEffectEvent((state: string) => {
-    console.log("[player] state change:", state);
     setIsPlaying(state === "playing");
   });
 
@@ -117,8 +138,6 @@ export function useMpvPlayer(
   useEffect(() => {
     if (!streamUrl || !mpvRef.current) return;
 
-    console.log("[player] loading stream:", streamUrl);
-
     try {
       mpvRef.current.load(streamUrl, {
         startPositionSeconds,
@@ -143,14 +162,23 @@ export function useMpvPlayer(
 
   function seek(seconds: number) {
     mpvRef.current?.seek(seconds);
+    // Optimistic: jump the scrubber + time text immediately so the
+    // seek feels instant, even though the next mpv progress tick is
+    // up to ~100 ms away.
+    positionShared.value = seconds;
   }
 
   function skipForward() {
-    mpvRef.current?.seek(Math.min(position + 10, duration));
+    // Read from the shared value so rapid skips compose from the
+    // live position, not the 1 Hz-throttled React state.
+    const pos = positionShared.value;
+    const dur = durationShared.value;
+    seek(Math.min(pos + 10, dur > 0 ? dur : pos + 10));
   }
 
   function skipBackward() {
-    mpvRef.current?.seek(Math.max(position - 10, 0));
+    const pos = positionShared.value;
+    seek(Math.max(pos - 10, 0));
   }
 
   function setAudioTrack(trackId: number) {
@@ -169,8 +197,9 @@ export function useMpvPlayer(
     mpv: mpvRef.current,
     isPlaying,
     isBuffering,
-    position,
     duration,
+    positionShared,
+    durationShared,
     error,
     play,
     pause,

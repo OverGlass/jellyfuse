@@ -1,16 +1,23 @@
 // "Skip intro →" / "Skip recap →" / "Skip credits →" pill.
 // Appears when current position is inside a segment from the
 // intro-skipper Jellyfin plugin. Tap → seek to segment end.
-// Pure component — position + segments in, seek callback out.
+// Pure component — positionShared + segments in, seek callback out.
+//
+// The active segment is computed on the UI thread via
+// useAnimatedReaction, so the component only re-renders when the
+// active segment *changes* (enter/exit), not on every position tick.
 
-import type { IntroSkipperSegments, SkipSegment } from "@jellyfuse/models";
+import type { IntroSkipperSegments } from "@jellyfuse/models";
 import { colors, fontSize, fontWeight, radius, spacing } from "@jellyfuse/theme";
+import { useState } from "react";
 import { Pressable, StyleSheet, Text } from "react-native";
-import Animated from "react-native-reanimated";
+import Animated, { useAnimatedReaction, type SharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { scheduleOnRN } from "react-native-worklets";
 
 interface Props {
-  position: number;
+  /** UI-thread position mirror — watched via useAnimatedReaction. */
+  positionShared: SharedValue<number>;
   segments: IntroSkipperSegments | undefined;
   onSkip: (toSeconds: number) => void;
 }
@@ -20,29 +27,36 @@ interface ActiveSegment {
   end: number;
 }
 
-function findActiveSegment(
-  position: number,
-  segments: IntroSkipperSegments | undefined,
-): ActiveSegment | null {
-  if (!segments) return null;
-
-  const checks: [string, SkipSegment | undefined][] = [
-    ["Skip Intro", segments.introduction],
-    ["Skip Recap", segments.recap],
-    ["Skip Credits", segments.credits],
-  ];
-
-  for (const [label, seg] of checks) {
-    if (seg && position >= seg.start && position < seg.end) {
-      return { label, end: seg.end };
-    }
-  }
-  return null;
-}
-
-export function SkipSegmentPill({ position, segments, onSkip }: Props) {
+export function SkipSegmentPill({ positionShared, segments, onSkip }: Props) {
   const insets = useSafeAreaInsets();
-  const active = findActiveSegment(position, segments);
+  const [active, setActive] = useState<ActiveSegment | null>(null);
+
+  useAnimatedReaction(
+    () => {
+      const pos = positionShared.value;
+      if (!segments) return null;
+      if (
+        segments.introduction &&
+        pos >= segments.introduction.start &&
+        pos < segments.introduction.end
+      ) {
+        return { label: "Skip Intro", end: segments.introduction.end };
+      }
+      if (segments.recap && pos >= segments.recap.start && pos < segments.recap.end) {
+        return { label: "Skip Recap", end: segments.recap.end };
+      }
+      if (segments.credits && pos >= segments.credits.start && pos < segments.credits.end) {
+        return { label: "Skip Credits", end: segments.credits.end };
+      }
+      return null;
+    },
+    (current, previous) => {
+      if (current?.label !== previous?.label || current?.end !== previous?.end) {
+        scheduleOnRN(setActive, current);
+      }
+    },
+    [segments],
+  );
 
   const visible = active !== null;
 

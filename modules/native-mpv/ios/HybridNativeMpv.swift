@@ -124,12 +124,9 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
     public func load(streamUrl: String, options: MpvLoadOptions) throws {
         guard let mpv = self.mpv else { throw mpvError("mpv handle is nil") }
 
-        NSLog("[NativeMpv] load: %@", streamUrl)
-
         // `start` is a loadfile option — must be set BEFORE loadfile.
         // Other options (user-agent, speed, volume) are also pre-load.
         if let start = options.startPositionSeconds {
-            NSLog("[NativeMpv] setting start=%f", start)
             try setProperty(name: "start", value: String(format: "%.3f", start))
         }
         if let rate = options.playbackRate {
@@ -181,11 +178,9 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         // Track selection AFTER loadfile — matching the Rust pattern.
         // mpv can't select tracks before a file is loaded.
         if let aid = options.audioTrackIndex {
-            NSLog("[NativeMpv] setting aid=%d", Int(aid))
             mpv_set_property_string(mpv, "aid", String(Int(aid)))
         }
         if let sid = options.subtitleTrackIndex {
-            NSLog("[NativeMpv] setting sid=%d", Int(sid))
             mpv_set_property_string(mpv, "sid", String(Int(sid)))
         }
     }
@@ -206,6 +201,12 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
 
     public func seek(positionSeconds: Double) throws {
         try runCommand(["seek", String(positionSeconds), "absolute"])
+        // Optimistic sync — PiP skipByInterval fires this from the
+        // PiP floating window, and without an eager update the
+        // scrubber briefly snaps back to the pre-seek position before
+        // the playback-time observer catches up.
+        currentPosition = positionSeconds
+        syncViewPlaybackState()
     }
 
     // MARK: Tracks / rate / volume (protocol)
@@ -323,6 +324,48 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
     var pipIsPaused: Bool { isPausedNow }
     var pipRate: Double { currentRate }
 
+    private var lastViewSyncAt: TimeInterval = 0
+
+    /// Push the current playback state to every attached render view so
+    /// its PiP control timebase (driving scrubber + skip-forward gating)
+    /// matches mpv. Safe to call from any thread — hops to main where
+    /// the view touches `AVSampleBufferDisplayLayer.controlTimebase`.
+    ///
+    /// `throttled: true` — drop the call if another sync ran within
+    /// the last ~500 ms. Use for high-frequency `playback-time`
+    /// observer fires (audio-callback driven, ~100–200 Hz). The
+    /// timebase has a rate set so it advances on its own between
+    /// syncs; drift correction every half-second is more than enough
+    /// for the PiP scrubber.
+    ///
+    /// `throttled: false` — always run. Use for discontinuities
+    /// (pause / duration / seek) where the delegate return values
+    /// actually change and iOS needs an immediate re-query.
+    func syncViewPlaybackState(throttled: Bool = false) {
+        if throttled {
+            let now = CACurrentMediaTime()
+            if now - lastViewSyncAt < 0.5 { return }
+            lastViewSyncAt = now
+        } else {
+            lastViewSyncAt = CACurrentMediaTime()
+        }
+        let position = currentPosition
+        let duration = currentDuration
+        let isPaused = isPausedNow
+        let rate = currentRate
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            for view in self.attachedViews {
+                view.applyPlaybackState(
+                    position: position,
+                    duration: duration,
+                    isPaused: isPaused,
+                    rate: rate
+                )
+            }
+        }
+    }
+
     // MARK: Now-Playing + Remote Command Center
 
     public func setNowPlayingMetadata(info: Variant_NullType_MpvNowPlayingInfo?) throws {
@@ -331,8 +374,6 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         // `refreshNowPlaying` from property observers).
         switch info {
         case .none, .some(.first):
-            os_log("setNowPlayingMetadata: CLEAR", log: npLog, type: .default)
-            NSLog("[NativeMpv] setNowPlayingMetadata: CLEAR")
             DispatchQueue.main.async { [weak self] in
                 self?.nowPlayingBase = nil
                 MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
@@ -343,13 +384,6 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
             let artworkUri = payload.artworkUri
             let duration = payload.durationSeconds
             let isLive = payload.isLiveStream ?? false
-            os_log("setNowPlayingMetadata: title=%{public}@ subtitle=%{public}@ art=%{public}@ dur=%{public}f",
-                   log: npLog, type: .default,
-                   title, subtitle ?? "-", artworkUri ?? "-", duration ?? -1)
-            NSLog("[NativeMpv] setNowPlayingMetadata: title=%@ sub=%@ dur=%f",
-                  title as NSString,
-                  (subtitle ?? "-") as NSString,
-                  duration ?? -1)
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
                 self.registerRemoteCommandsIfNeeded()
@@ -454,14 +488,6 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         // private `com.apple.mediaremote.set-playback-state` entitlement
         // (Music/Podcasts only). Third-party apps communicate state via
         // `MPNowPlayingInfoPropertyPlaybackRate` in the dict above.
-        let session = AVAudioSession.sharedInstance()
-        os_log("refreshNowPlaying pos=%{public}f dur=%{public}f rate=%{public}f session.cat=%{public}@ session.mode=%{public}@ otherAudio=%{public}d",
-               log: npLog, type: .default,
-               currentPosition, currentDuration,
-               info[MPNowPlayingInfoPropertyPlaybackRate] as? Double ?? -1,
-               session.category.rawValue,
-               session.mode.rawValue,
-               session.isOtherAudioPlaying ? 1 : 0)
     }
 
     private func throttledRefreshNowPlaying() {
@@ -630,9 +656,11 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
 
         // Defaults matching the Rust backend:
         // - videotoolbox-copy hwdec fixed the color correctness issue
-        //   (see commit 51fec4ba in the Rust repo).
-        // - vid=no until phase 3b plugs in a render context; otherwise
-        //   libmpv will try to open a window on its own.
+        //   (see commit 51fec4ba in the Rust repo). Tried non-copy on
+        //   iOS — mpv's GL renderer silently falls back to SW decode
+        //   (colors wrong, startup slow, CPU unchanged), so keep copy.
+        // - vid=no until MpvGLView.attach() plugs in the render context;
+        //   otherwise libmpv tries to open a window on its own.
         _ = mpv_set_option_string(mpv, "hwdec", "videotoolbox-copy")
         _ = mpv_set_option_string(mpv, "vo", "libmpv")
         _ = mpv_set_option_string(mpv, "vid", "no")
@@ -750,6 +778,12 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
     // `playback-time` observers much more frequently than the lock
     // screen UI needs.
     private var lastNowPlayingRefreshAt: TimeInterval = 0
+    // Throttle JS progress emission to ~10 Hz. libmpv's `playback-time`
+    // observer is driven by the audio callback at 100–200 Hz; relaying
+    // every tick to JS across the Nitro bridge was the #1 CPU hotspot
+    // (Time Profiler showed ~23% on the RN JS thread for Hermes +
+    // React re-renders during playback).
+    private var lastProgressEmitAt: TimeInterval = 0
 
     private func handlePropertyChange(_ event: mpv_event) {
         guard let dataPtr = event.data else { return }
@@ -761,14 +795,20 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         case "playback-time":
             guard prop.format == MPV_FORMAT_DOUBLE, let valPtr = prop.data else { return }
             currentPosition = valPtr.assumingMemoryBound(to: Double.self).pointee
-            let snap = progressSubs
-            for s in snap { s.callback(currentPosition, currentDuration) }
+            let now = CACurrentMediaTime()
+            if now - lastProgressEmitAt >= 0.1 {
+                lastProgressEmitAt = now
+                let snap = progressSubs
+                for s in snap { s.callback(currentPosition, currentDuration) }
+            }
             throttledRefreshNowPlaying()
+            syncViewPlaybackState(throttled: true)
 
         case "duration":
             guard prop.format == MPV_FORMAT_DOUBLE, let valPtr = prop.data else { return }
             currentDuration = valPtr.assumingMemoryBound(to: Double.self).pointee
             refreshNowPlaying()
+            syncViewPlaybackState()
 
         case "pause":
             guard prop.format == MPV_FORMAT_FLAG, let valPtr = prop.data else { return }
@@ -778,6 +818,7 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
             fireState(state)
             setSilentPrimerPlaying(!paused)
             refreshNowPlaying()
+            syncViewPlaybackState()
 
         case "eof-reached":
             guard prop.format == MPV_FORMAT_FLAG, let valPtr = prop.data else { return }

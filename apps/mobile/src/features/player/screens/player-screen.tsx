@@ -107,8 +107,8 @@ export function PlayerScreen({ jellyfinId }: Props) {
     artworkUri: detail.data?.posterUrl,
     durationSeconds: player.duration > 0 ? player.duration : undefined,
     isPlaying: player.isPlaying,
-    position: player.position,
-    duration: player.duration,
+    positionShared: player.positionShared,
+    durationShared: player.durationShared,
     onPlay: player.play,
     onPause: player.pause,
     onSeek: player.seek,
@@ -157,7 +157,7 @@ export function PlayerScreen({ jellyfinId }: Props) {
 
       {/* Intro/recap/credits skip pill */}
       <SkipSegmentPill
-        position={player.position}
+        positionShared={player.positionShared}
         segments={resolved?.introSkipperSegments}
         onSkip={player.seek}
       />
@@ -168,8 +168,9 @@ export function PlayerScreen({ jellyfinId }: Props) {
         subtitle={detail.data?.seriesName}
         isPlaying={player.isPlaying}
         isBuffering={isBuffering}
-        position={player.position}
         duration={player.duration}
+        positionShared={player.positionShared}
+        durationShared={player.durationShared}
         chapters={resolved?.chapters}
         trickplay={
           hasLocal && localRecord

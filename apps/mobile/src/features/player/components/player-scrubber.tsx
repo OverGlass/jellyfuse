@@ -19,15 +19,22 @@ import {
 } from "@jellyfuse/theme";
 import MaskedView from "@react-native-masked-view/masked-view";
 import { useRef, useState } from "react";
-import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import { StyleSheet, Text, TextInput, View, type StyleProp, type ViewStyle } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
+  useAnimatedProps,
   useAnimatedStyle,
   useSharedValue,
   type SharedValue,
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import { TrickplayThumbnail } from "./trickplay-thumbnail";
+
+// Reanimated-friendly text node — we drive the left time label by
+// assigning the native `text` prop from a worklet, so the label
+// re-renders on the UI thread at mpv's tick rate without any React
+// work.
+const AnimatedTextInput = Animated.createAnimatedComponent(TextInput);
 
 // Heights — the container is fixed; only the visual track grows.
 const CONTAINER_HEIGHT = 44;
@@ -41,8 +48,11 @@ const CHAPTER_LABEL_WIDTH = 200;
 const HEIGHT_TRANSITION_MS = 150;
 
 interface Props {
-  position: number;
   duration: number;
+  /** UI-thread position mirror — drives the fill/thumb/time text without re-rendering React. */
+  positionShared: SharedValue<number>;
+  /** UI-thread duration mirror. */
+  durationShared: SharedValue<number>;
   chapters?: Chapter[];
   trickplay?: TrickplayData;
   onSeek: (seconds: number) => void;
@@ -79,8 +89,9 @@ function buildSegments(chapters: Chapter[] | undefined, duration: number): Segme
 }
 
 export function PlayerScrubber({
-  position,
   duration,
+  positionShared,
+  durationShared,
   chapters,
   trickplay,
   onSeek,
@@ -93,18 +104,20 @@ export function PlayerScrubber({
   // Throttle JS-side drag state updates to ~20Hz. The thumb and fill
   // animate on the UI thread via dragProgress (shared value) so the
   // scrubber stays silky; we only need the JS state to drive the
-  // time label, trickplay thumbnail, and chapter name — none of
-  // which benefit from 120Hz updates.
+  // trickplay thumbnail + chapter name — neither benefits from
+  // 120Hz updates.
   const lastUpdateMs = useRef(0);
 
-  const progress = duration > 0 ? position / duration : 0;
   const segments = buildSegments(chapters, duration);
 
-  // Index of the segment currently being dragged (or current position when idle)
-  const activeSeconds = isDragging ? dragSeconds : position;
-  const activeIndex = segments.findIndex(
-    (s) => activeSeconds >= s.startSeconds && activeSeconds < s.endSeconds,
-  );
+  // Active chapter is only visually used *during* drag — the
+  // emphasised mask segment, chapter-name label, and active
+  // highlight all gate on `isDragging`. Computing activeIndex during
+  // idle playback would force a re-render whenever the playhead
+  // crosses a chapter boundary, so we skip it entirely.
+  const activeIndex = isDragging
+    ? segments.findIndex((s) => dragSeconds >= s.startSeconds && dragSeconds < s.endSeconds)
+    : -1;
   const activeChapter = activeIndex >= 0 ? segments[activeIndex] : undefined;
 
   function setDraggingWithNotify(dragging: boolean) {
@@ -156,19 +169,34 @@ export function PlayerScrubber({
 
   const gesture = Gesture.Race(panGesture, tapGesture);
 
-  const fillStyle = useAnimatedStyle(() => ({
-    width: `${(isDragging ? dragProgress.value : progress) * 100}%` as `${number}%`,
-  }));
+  const fillStyle = useAnimatedStyle(() => {
+    const dur = durationShared.value;
+    const liveProgress = dur > 0 ? positionShared.value / dur : 0;
+    const p = isDragging ? dragProgress.value : liveProgress;
+    return { width: `${p * 100}%` as `${number}%` };
+  });
 
-  const thumbStyle = useAnimatedStyle(() => ({
-    left: (isDragging ? dragProgress.value : progress) * trackWidth - THUMB_SIZE / 2,
-  }));
+  const thumbStyle = useAnimatedStyle(() => {
+    const dur = durationShared.value;
+    const liveProgress = dur > 0 ? positionShared.value / dur : 0;
+    const p = isDragging ? dragProgress.value : liveProgress;
+    return { left: p * trackWidth - THUMB_SIZE / 2 };
+  });
+
+  // Left time label rides the shared position value directly, so
+  // the text updates on the UI thread without a React re-render.
+  // During drag we show dragProgress × duration (matches the thumb).
+  const currentTimeProps = useAnimatedProps(() => {
+    const secs = isDragging ? dragProgress.value * durationShared.value : positionShared.value;
+    const text = formatTime(secs);
+    return { text, defaultValue: text };
+  });
 
   return (
     <View style={styles.root}>
       {/* Time display */}
       <View style={styles.timeRow}>
-        <Text style={styles.time}>{formatTime(isDragging ? dragSeconds : position)}</Text>
+        <AnimatedTextInput editable={false} style={styles.time} animatedProps={currentTimeProps} />
         <Text style={styles.time}>{formatTime(duration)}</Text>
       </View>
 
@@ -346,6 +374,7 @@ function DragPreview({
 }
 
 function formatTime(seconds: number): string {
+  "worklet";
   const s = Math.max(0, Math.floor(seconds));
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
@@ -370,6 +399,11 @@ const styles = StyleSheet.create({
     fontSize: fontSize.caption,
     fontWeight: fontWeight.medium,
     fontVariant: ["tabular-nums"],
+    // Zero padding/border so the animated TextInput sits flush with
+    // the static Text on the right.
+    padding: 0,
+    margin: 0,
+    borderWidth: 0,
   },
   trackContainer: {
     height: CONTAINER_HEIGHT,

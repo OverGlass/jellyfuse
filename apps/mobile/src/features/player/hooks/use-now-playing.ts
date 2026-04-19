@@ -6,6 +6,7 @@
 
 import type { MpvRemoteCommand, NativeMpv } from "@jellyfuse/native-mpv";
 import { useEffect, useEffectEvent } from "react";
+import type { SharedValue } from "react-native-reanimated";
 
 interface UseNowPlayingArgs {
   mpv: NativeMpv | null;
@@ -15,8 +16,10 @@ interface UseNowPlayingArgs {
   durationSeconds: number | undefined;
   isLiveStream?: boolean;
   isPlaying: boolean;
-  position: number;
-  duration: number;
+  /** UI-thread position mirror — read inside remote-command handlers. */
+  positionShared: SharedValue<number>;
+  /** UI-thread duration mirror. */
+  durationShared: SharedValue<number>;
   onPlay: () => void;
   onPause: () => void;
   onSeek: (seconds: number) => void;
@@ -39,8 +42,8 @@ export function useNowPlaying({
   durationSeconds,
   isLiveStream,
   isPlaying,
-  position,
-  duration,
+  positionShared,
+  durationShared,
   onPlay,
   onPause,
   onSeek,
@@ -57,12 +60,17 @@ export function useNowPlaying({
         if (isPlaying) onPause();
         else onPlay();
         return;
-      case "skipForward":
-        onSeek(Math.min(position + value, duration || position + value));
+      case "skipForward": {
+        const pos = positionShared.value;
+        const dur = durationShared.value;
+        onSeek(Math.min(pos + value, dur || pos + value));
         return;
-      case "skipBackward":
-        onSeek(Math.max(position - value, 0));
+      }
+      case "skipBackward": {
+        const pos = positionShared.value;
+        onSeek(Math.max(pos - value, 0));
         return;
+      }
       case "changePlaybackPosition":
         onSeek(value);
         return;

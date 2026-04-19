@@ -95,6 +95,20 @@ final class MpvGLView: UIView {
     private var isAppInBackground: Bool = false
     private var isPipActive: Bool = false
 
+    // ── PiP scrubber timebase ───────────────────────────────────────────
+    // iOS reads this to determine "current playback time" for the PiP
+    // scrubber and to gate the skip-forward / skip-backward buttons.
+    // Without it, iOS falls back to the sample buffers' PTS — which we
+    // stamp with host-clock time — and concludes the playhead is
+    // ~boot-uptime seconds into the movie, disabling skip-forward.
+    private var controlTimebase: CMTimebase?
+    // Only reissue `invalidatePlaybackState()` when values the delegate
+    // actually returns change. Position updates every video frame but
+    // the timebase handles advancement on its own.
+    private var lastInvalidatedDuration: Double = -1
+    private var lastInvalidatedPaused: Bool = true
+    private var lastInvalidatedRate: Double = -1
+
     // MARK: Init
 
     override init(frame: CGRect) {
@@ -219,7 +233,13 @@ final class MpvGLView: UIView {
         // 6. Render loop.
         startDisplayLink()
 
-        // 7. PiP controller — iOS 15+ custom-source. The controller
+        // 7. Control timebase — must be set on the layer BEFORE the
+        //    PiP controller is created, otherwise the controller
+        //    caches the "no timebase" state and skip buttons stay
+        //    disabled for the life of the PiP session.
+        setupControlTimebase()
+
+        // 8. PiP controller — iOS 15+ custom-source. The controller
         //    observes our sample-buffer layer, so the same frames we
         //    show on-screen are the frames iOS shows in the floating
         //    window.
@@ -567,6 +587,52 @@ final class MpvGLView: UIView {
         pipController = nil
     }
 
+    // MARK: - Control timebase
+
+    private func setupControlTimebase() {
+        var timebase: CMTimebase?
+        let rc = CMTimebaseCreateWithSourceClock(
+            allocator: kCFAllocatorDefault,
+            sourceClock: CMClockGetHostTimeClock(),
+            timebaseOut: &timebase
+        )
+        guard rc == noErr, let tb = timebase else {
+            NSLog("[MpvGLView] CMTimebaseCreateWithSourceClock failed: %d", rc)
+            return
+        }
+        CMTimebaseSetTime(tb, time: .zero)
+        CMTimebaseSetRate(tb, rate: 0)
+        sampleBufferLayer.controlTimebase = tb
+        controlTimebase = tb
+    }
+
+    /// Sync the PiP scrubber and skip-gate with mpv's current playback
+    /// state. Called from `HybridNativeMpv`'s property observers on
+    /// pause / duration / playback-time ticks — and eagerly after
+    /// seek(), so the scrubber doesn't briefly jerk back before the
+    /// next observer fires. Must run on main.
+    func applyPlaybackState(
+        position: Double, duration: Double, isPaused: Bool, rate: Double
+    ) {
+        dispatchPrecondition(condition: .onQueue(.main))
+        if let tb = controlTimebase {
+            CMTimebaseSetTime(
+                tb, time: CMTime(seconds: position, preferredTimescale: 600)
+            )
+            CMTimebaseSetRate(tb, rate: isPaused ? 0 : rate)
+        }
+        let stateChanged = isPaused != lastInvalidatedPaused
+            || duration != lastInvalidatedDuration
+            || rate != lastInvalidatedRate
+        guard stateChanged else { return }
+        lastInvalidatedPaused = isPaused
+        lastInvalidatedDuration = duration
+        lastInvalidatedRate = rate
+        if #available(iOS 15.0, *) {
+            pipController?.invalidatePlaybackState()
+        }
+    }
+
     // MARK: - Teardown
 
     private func tearDown() {
@@ -582,6 +648,15 @@ final class MpvGLView: UIView {
             displayLink = nil
 
             tearDownPipController()
+
+            if let tb = controlTimebase {
+                CMTimebaseSetRate(tb, rate: 0)
+            }
+            sampleBufferLayer.controlTimebase = nil
+            controlTimebase = nil
+            lastInvalidatedDuration = -1
+            lastInvalidatedPaused = true
+            lastInvalidatedRate = -1
 
             if let ctx = renderCtx {
                 mpv_render_context_set_update_callback(ctx, nil, nil)
@@ -652,6 +727,18 @@ extension MpvGLView: AVPictureInPictureControllerDelegate {
         failedToStartPictureInPictureWithError error: Error
     ) {
         NSLog("[MpvGLView] PiP failed to start: %@", String(describing: error))
+    }
+
+    func pictureInPictureController(
+        _ controller: AVPictureInPictureController,
+        restoreUserInterfaceForPictureInPictureStopWithCompletionHandler completionHandler: @escaping (Bool) -> Void
+    ) {
+        // Option 2 auto-PiP keeps the player screen mounted behind the
+        // floating window, so the UI is already "restored" by the time
+        // iOS asks. Ack immediately — otherwise iOS finishes its
+        // zoom-in animation before we respond, then re-lays out the
+        // layer, causing a visible zoom-dezoom snap.
+        completionHandler(true)
     }
 }
 
