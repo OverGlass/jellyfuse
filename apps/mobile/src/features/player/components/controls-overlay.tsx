@@ -10,7 +10,7 @@ import { colors, fontSize, opacity, radius, spacing, withAlpha } from "@jellyfus
 import { Activity, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { Gesture, GestureDetector, Pressable } from "react-native-gesture-handler";
-import Animated from "react-native-reanimated";
+import Animated, { type SharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
 import { PlayerScrubber } from "./player-scrubber";
@@ -24,8 +24,9 @@ interface Props {
   subtitle?: string;
   isPlaying: boolean;
   isBuffering: boolean;
-  position: number;
   duration: number;
+  positionShared: SharedValue<number>;
+  durationShared: SharedValue<number>;
   chapters?: Chapter[];
   trickplay?: TrickplayData;
   audioStreams?: AudioStream[];
@@ -43,8 +44,9 @@ export function ControlsOverlay({
   subtitle,
   isPlaying,
   isBuffering,
-  position,
   duration,
+  positionShared,
+  durationShared,
   chapters,
   trickplay,
   onPlayPause,
@@ -217,8 +219,9 @@ export function ControlsOverlay({
           {/* ── Bottom: scrubber + times ───────────────────────────── */}
           <View style={styles.bottomRow} pointerEvents="box-none">
             <PlayerScrubber
-              position={position}
               duration={duration}
+              positionShared={positionShared}
+              durationShared={durationShared}
               chapters={chapters}
               trickplay={trickplay}
               onSeek={(s) => {
