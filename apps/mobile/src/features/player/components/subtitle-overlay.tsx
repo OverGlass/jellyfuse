@@ -10,7 +10,7 @@
 // migration so we can compare rendering side by side.
 
 import { colors, fontSize, spacing, withAlpha } from "@jellyfuse/theme";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 interface Props {
@@ -20,11 +20,25 @@ interface Props {
 
 export function SubtitleOverlay({ text }: Props) {
   const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
   if (!text) return null;
+  // Bottom offset scales with viewport height so captions sit in the
+  // same visual spot (≈10 % above the bottom safe area) regardless of
+  // orientation. A fixed offset looked fine in portrait but crept up
+  // into the video in landscape where the available vertical budget
+  // is half of portrait's.
+  const bottom = Math.max(insets.bottom, spacing.lg) + Math.round(height * 0.1);
   return (
     <View
       pointerEvents="none"
-      style={[styles.container, { bottom: Math.max(insets.bottom, spacing.lg) + 100 }]}
+      style={[
+        styles.container,
+        {
+          bottom,
+          paddingLeft: Math.max(insets.left, spacing.xl),
+          paddingRight: Math.max(insets.right, spacing.xl),
+        },
+      ]}
     >
       <Text style={styles.caption}>{text}</Text>
     </View>
@@ -37,7 +51,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     alignItems: "center",
-    paddingHorizontal: spacing.xl,
   },
   caption: {
     color: colors.textPrimary,
