@@ -57,13 +57,21 @@ static bool is_bitmap_sub_codec(enum AVCodecID id) {
     }
 }
 
-// Opens `url`, finds the first bitmap-sub stream, decodes up to
-// `max_events` subtitle events, and logs PTS / duration / per-rect
-// geometry for each. Synchronous — callers must run on a background
-// queue. Purely diagnostic: validates that the PGS / VobSub / DVB
-// decoder path works end-to-end before we wire up RGBA transfer and
-// the Nitro-exposed streaming API.
-extern "C" int jf_bitmap_sub_test_decode(const char *url, int max_events) {
+// Opens `url`, finds the first bitmap-sub stream, seeks to
+// `start_seconds`, and decodes up to `max_events` subtitle events —
+// logs PTS / duration / per-rect geometry for each. Synchronous —
+// callers must run on a background queue. Purely diagnostic:
+// validates that the PGS / VobSub / DVB decoder path works end-to-end
+// before we wire up RGBA transfer and the Nitro-exposed streaming
+// API.
+//
+// The seek matters because PGS packets are sparse (typically minutes
+// apart for dialogue subs). Starting from byte 0 means av_read_frame
+// has to stream over tens of MB of video chunks before it hits the
+// first sub packet. Seeking to mpv's resume position lines the
+// sidecar up with where the user will actually see captions.
+extern "C" int jf_bitmap_sub_test_decode(const char *url, double start_seconds,
+                                         int max_events) {
     if (!url) return -1;
     if (max_events <= 0) max_events = 20;
     jf_ffmpeg_init_once();
@@ -139,11 +147,27 @@ extern "C" int jf_bitmap_sub_test_decode(const char *url, int max_events) {
 
     AVDictionaryEntry *lang = av_dict_get(st->metadata, "language", nullptr, 0);
     os_log(jf_ffmpeg_log(),
-           "decode: stream #%d codec=%{public}s lang=%{public}s — decoding up to %d events",
+           "decode: stream #%d codec=%{public}s lang=%{public}s — seek=%.2fs max=%d",
            streamIndex,
            codec->name,
            lang ? lang->value : "?",
+           start_seconds,
            max_events);
+
+    // Seek to the requested start so we don't have to stream through
+    // minutes of video to find the first sub packet. AVSEEK_FLAG_ANY
+    // lets ffmpeg land on any frame (for subs there are no keyframes),
+    // and we use the sub stream's own time_base so the timestamp
+    // resolves in the same units the packet PTSs will carry.
+    if (start_seconds > 0) {
+        int64_t seekTs = (int64_t)(start_seconds / av_q2d(st->time_base));
+        int srv = av_seek_frame(fmt, streamIndex, seekTs, AVSEEK_FLAG_BACKWARD);
+        if (srv < 0) {
+            char err[AV_ERROR_MAX_STRING_SIZE] = {0};
+            av_strerror(srv, err, sizeof(err));
+            os_log(jf_ffmpeg_log(), "decode: seek failed (%{public}s) — continuing from 0", err);
+        }
+    }
 
     AVPacket *pkt = av_packet_alloc();
     int decoded = 0;

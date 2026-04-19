@@ -33,7 +33,11 @@ private let npLog = OSLog(subsystem: "com.jellyfuse.app", category: "NativeMpv")
 private func jf_ffmpeg_version_info() -> UnsafePointer<CChar>?
 
 @_silgen_name("jf_bitmap_sub_test_decode")
-private func jf_bitmap_sub_test_decode(_ url: UnsafePointer<CChar>?, _ maxEvents: Int32) -> Int32
+private func jf_bitmap_sub_test_decode(
+    _ url: UnsafePointer<CChar>?,
+    _ startSeconds: Double,
+    _ maxEvents: Int32,
+) -> Int32
 
 // MARK: - HybridNativeMpv
 
@@ -166,15 +170,18 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
 
         // Phase 3 diagnostic decode (see docs/native-video-pipeline.md).
         // Opens a parallel avformat context, selects the first bitmap
-        // sub stream, and decodes the first N events — logs PTS,
+        // sub stream, seeks to mpv's start position (so we don't scan
+        // through minutes of video waiting for the first sparse PGS
+        // packet), and decodes the first N events — logs PTS,
         // duration, and per-rect geometry for each. Runs on a
         // background queue because the HTTP handshake + header read
         // block. Replaced by the real streaming BitmapSubDecoder in
         // follow-up commits.
         let decodeUrl = streamUrl
+        let decodeStart = options.startPositionSeconds ?? 0
         DispatchQueue.global(qos: .utility).async {
             decodeUrl.withCString { cstr in
-                _ = jf_bitmap_sub_test_decode(cstr, 20)
+                _ = jf_bitmap_sub_test_decode(cstr, decodeStart, 20)
             }
         }
 
