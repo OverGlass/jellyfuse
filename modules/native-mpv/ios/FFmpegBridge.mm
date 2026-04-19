@@ -114,8 +114,15 @@ static int jf_bitmap_sub_interrupt(void *opaque) {
     return ctx && ctx->cancel.load() ? 1 : 0;
 }
 
+// `requested_stream_index` selects which subtitle stream to decode:
+//   >= 0  → open exactly that avformat stream; fail if it isn't a bitmap
+//           sub. Used when mpv's sid observer identifies the user's
+//           selection by `ff-index`.
+//   <  0  → auto-pick the first bitmap sub stream (legacy callers / no
+//           mpv mapping available yet).
 extern "C" struct jf_bitmap_sub_ctx *jf_bitmap_sub_open(const char *url,
-                                                         double start_seconds) {
+                                                         double start_seconds,
+                                                         int requested_stream_index) {
     if (!url) return nullptr;
     jf_ffmpeg_init_once();
 
@@ -141,18 +148,35 @@ extern "C" struct jf_bitmap_sub_ctx *jf_bitmap_sub_open(const char *url,
     }
 
     int streamIndex = -1;
-    for (unsigned i = 0; i < fmt->nb_streams; i++) {
-        AVStream *st = fmt->streams[i];
-        if (st->codecpar->codec_type != AVMEDIA_TYPE_SUBTITLE) continue;
-        if (is_bitmap_sub_codec(st->codecpar->codec_id)) {
-            streamIndex = (int)i;
-            break;
+    if (requested_stream_index >= 0) {
+        if (requested_stream_index < (int)fmt->nb_streams) {
+            AVStream *st = fmt->streams[requested_stream_index];
+            if (st->codecpar->codec_type == AVMEDIA_TYPE_SUBTITLE &&
+                is_bitmap_sub_codec(st->codecpar->codec_id)) {
+                streamIndex = requested_stream_index;
+            }
         }
-    }
-    if (streamIndex < 0) {
-        os_log(jf_ffmpeg_log(), "open: no bitmap sub stream");
-        avformat_close_input(&fmt);
-        return nullptr;
+        if (streamIndex < 0) {
+            os_log_error(jf_ffmpeg_log(),
+                         "open: requested stream #%d is not a bitmap sub",
+                         requested_stream_index);
+            avformat_close_input(&fmt);
+            return nullptr;
+        }
+    } else {
+        for (unsigned i = 0; i < fmt->nb_streams; i++) {
+            AVStream *st = fmt->streams[i];
+            if (st->codecpar->codec_type != AVMEDIA_TYPE_SUBTITLE) continue;
+            if (is_bitmap_sub_codec(st->codecpar->codec_id)) {
+                streamIndex = (int)i;
+                break;
+            }
+        }
+        if (streamIndex < 0) {
+            os_log(jf_ffmpeg_log(), "open: no bitmap sub stream");
+            avformat_close_input(&fmt);
+            return nullptr;
+        }
     }
 
     for (unsigned i = 0; i < fmt->nb_streams; i++) {

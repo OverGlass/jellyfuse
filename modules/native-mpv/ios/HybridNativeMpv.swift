@@ -35,6 +35,7 @@ private func jf_ffmpeg_version_info() -> UnsafePointer<CChar>?
 private func jf_bitmap_sub_open(
     _ url: UnsafePointer<CChar>?,
     _ startSeconds: Double,
+    _ requestedStreamIndex: Int32,
 ) -> OpaquePointer?
 
 @_silgen_name("jf_bitmap_sub_decode_next")
@@ -142,11 +143,11 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
     // Cached stream URL so seeks can restart the worker at a new
     // position. Set by `load()`; nil between sessions.
     private var currentStreamUrl: String?
-    // Gate for bitmap-sub event emission. Flipped on/off by the
-    // `current-tracks/sub/codec` observer so text-track selections
-    // (or `disableSubtitles`) hide the PGS overlay immediately. Starts
-    // false — first codec observation sets the correct state.
-    private var bitmapSubVisible: Bool = false
+    // avformat stream index the worker is currently decoding. `-1` when
+    // no bitmap track is selected (text or off). Updated exclusively on
+    // main in response to `sid` observer events so the sid handler and
+    // seek/teardown agree on what track to restart.
+    private var currentBitmapStreamIndex: Int32 = -1
 
     // Cached now-playing base dict. Elapsed time + rate are merged on
     // every progress/pause update so the lock-screen scrubber stays in
@@ -212,14 +213,13 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
             throw mpvError("loadfile failed: \(String(cString: mpv_error_string(rc)))")
         }
 
-        // Kick off the parallel bitmap-sub decoder (PGS / VobSub / DVB).
-        // See docs/native-video-pipeline.md Phase 3 — mpv's `sub-text`
-        // observer only fires for text codecs, so we pump bitmap
-        // packets through a sidecar avformat context and let a JS
-        // overlay render them. The worker is a no-op if the file has
-        // no bitmap sub streams.
+        // Remember the URL so the sid observer (+ seeks) can open the
+        // sidecar PGS/VobSub/DVB decoder later. We don't auto-start
+        // here: mpv's `sid` observer fires right after loadfile, tells
+        // us which subtitle track is active + its ffmpeg stream index,
+        // and that's the signal to open the worker. See
+        // docs/native-video-pipeline.md Phase 3.
         currentStreamUrl = streamUrl
-        startBitmapSubWorker(url: streamUrl, startSeconds: options.startPositionSeconds ?? 0)
 
         // External subtitles BEFORE selection — each sub-add grows
         // the track list and mpv assigns the next sequential sid.
@@ -279,8 +279,11 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         // Reposition the sidecar PGS/VobSub decoder too; without it the
         // worker keeps emitting captions from the pre-seek position
         // until av_read_frame naturally catches up (can be tens of
-        // seconds between sparse sub packets).
-        restartBitmapSubWorker(at: positionSeconds)
+        // seconds between sparse sub packets). Skip when no bitmap
+        // track is active — nothing to reposition.
+        if currentBitmapStreamIndex >= 0 {
+            restartBitmapSubWorker(at: positionSeconds)
+        }
     }
 
     // MARK: Tracks / rate / volume (protocol)
@@ -866,7 +869,7 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         bitmapSubSubs.removeAll()
         bitmapSubClearSubs.removeAll()
         currentStreamUrl = nil
-        bitmapSubVisible = false
+        currentBitmapStreamIndex = -1
         nowPlayingBase = nil
         DispatchQueue.main.async { [weak self] in
             MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
@@ -1015,29 +1018,32 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
 
         case "sid":
             // Active subtitle track changed (or disabled via `sid=no`).
-            // Query the current codec lazily — it reflects the new
-            // selection at the moment of this observer fire.
+            // Query codec + avformat stream index lazily — they reflect
+            // the new selection at the moment of this observer fire.
             let sidValue = (try? getProperty(name: "sid")) ?? ""
             let codec = (try? getProperty(name: "current-tracks/sub/codec")) ?? ""
-            os_log("sid changed: sid=%{public}@ codec=%{public}@",
-                   log: npLog, type: .info, sidValue, codec)
-            updateBitmapSubVisibility(codec: codec)
+            let ffIndexStr = (try? getProperty(name: "current-tracks/sub/ff-index")) ?? ""
+            let ffIndex = Int32(ffIndexStr) ?? -1
+            os_log("sid changed: sid=%{public}@ codec=%{public}@ ff-index=%d",
+                   log: npLog, type: .info, sidValue, codec, Int(ffIndex))
+            handleSubTrackChange(codec: codec, ffIndex: ffIndex)
 
         default:
             break
         }
     }
 
-    /// Maps an mpv codec identifier to whether the bitmap-sub overlay
-    /// should render. Flips the gate used by `runBitmapSubLoop` and
-    /// emits a clear on the falling edge so any currently-visible PGS
-    /// caption disappears the moment the user picks a text track or
-    /// disables subs.
+    /// React to a subtitle track selection change. For bitmap codecs
+    /// (PGS / VobSub / DVB) we stop any previous worker and open a
+    /// fresh one on the new avformat stream so captions match the
+    /// language the user just picked. For text tracks (or `sid=no`)
+    /// we tear the worker down and emit a clear so the overlay hides
+    /// instantly — text rendering flows through mpv's `sub-text`
+    /// property, handled separately by `SubtitleOverlay`.
     ///
-    /// `bitmapSubVisible` is written + read exclusively on main to
-    /// avoid a data race with the loop's main-queue emissions (this
-    /// function is called from the mpv event thread).
-    private func updateBitmapSubVisibility(codec: String) {
+    /// Called from the mpv event thread; state mutations hop to main
+    /// so `currentBitmapStreamIndex` has a single writer.
+    private func handleSubTrackChange(codec: String, ffIndex: Int32) {
         let isBitmap: Bool
         switch codec {
         case "hdmv_pgs_subtitle", "dvd_subtitle", "dvb_subtitle":
@@ -1047,9 +1053,22 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         }
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            let wasVisible = self.bitmapSubVisible
-            self.bitmapSubVisible = isBitmap
-            if wasVisible && !isBitmap {
+            if isBitmap && ffIndex >= 0 {
+                if ffIndex == self.currentBitmapStreamIndex { return }
+                self.currentBitmapStreamIndex = ffIndex
+                guard let url = self.currentStreamUrl else { return }
+                // Hide any still-visible caption from the previous
+                // track before the new worker's first event lands.
+                for s in self.bitmapSubClearSubs { s.callback() }
+                self.startBitmapSubWorker(
+                    url: url,
+                    startSeconds: self.currentPosition,
+                    streamIndex: ffIndex
+                )
+            } else {
+                if self.currentBitmapStreamIndex < 0 { return }
+                self.currentBitmapStreamIndex = -1
+                self.stopBitmapSubWorker()
                 for s in self.bitmapSubClearSubs { s.callback() }
             }
         }
@@ -1143,11 +1162,13 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         return "data:image/png;base64,\(png.base64EncodedString())"
     }
 
-    private func startBitmapSubWorker(url: String, startSeconds: Double) {
+    private func startBitmapSubWorker(url: String, startSeconds: Double, streamIndex: Int32) {
         stopBitmapSubWorker()
         bitmapSubQueue.async { [weak self] in
             guard let self else { return }
-            guard let ctx = url.withCString({ jf_bitmap_sub_open($0, startSeconds) }) else {
+            guard let ctx = url.withCString({
+                jf_bitmap_sub_open($0, startSeconds, streamIndex)
+            }) else {
                 return
             }
             // Publish the handle so `stopBitmapSubWorker` can signal
@@ -1179,12 +1200,16 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
     /// before the seek would linger until the new worker emitted its
     /// first event.
     private func restartBitmapSubWorker(at seconds: Double) {
-        guard let url = currentStreamUrl else { return }
+        guard let url = currentStreamUrl, currentBitmapStreamIndex >= 0 else { return }
         let snap = bitmapSubClearSubs
         DispatchQueue.main.async {
             for s in snap { s.callback() }
         }
-        startBitmapSubWorker(url: url, startSeconds: max(0, seconds))
+        startBitmapSubWorker(
+            url: url,
+            startSeconds: max(0, seconds),
+            streamIndex: currentBitmapStreamIndex
+        )
     }
 
     private func runBitmapSubLoop(ctx: OpaquePointer) {
@@ -1234,7 +1259,7 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
 
             if numRects == 0 {
                 DispatchQueue.main.async { [weak self] in
-                    guard let self, self.bitmapSubVisible else { return }
+                    guard let self else { return }
                     for s in self.bitmapSubClearSubs { s.callback() }
                 }
             } else if let rgbaPtr = rgba, w > 0, h > 0 {
@@ -1258,7 +1283,7 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
                         imageUri: dataUri,
                     )
                     DispatchQueue.main.async { [weak self] in
-                        guard let self, self.bitmapSubVisible else { return }
+                        guard let self else { return }
                         for s in self.bitmapSubSubs { s.callback(event) }
                     }
                 }
