@@ -183,8 +183,16 @@ export function SeriesDetailScreen({ itemId }: Props) {
   const series = seriesQuery.data;
   const seasons = seasonsQuery.data ?? [];
   const episodes = episodesQuery.data ?? [];
-  const hasResume = (series.progress ?? 0) > 0.01;
   const resumeTarget = pickResumeTarget(episodes);
+  // hasResume / resumeProgress are per-episode, not series-aggregate.
+  // `series.progress` from Jellyfin is the whole-series PlayedPercentage,
+  // which is non-zero after a single episode finishes — but that doesn't
+  // mean the *next* episode is mid-watch. The button fill + label must
+  // reflect the target episode's own playback position, otherwise the
+  // resume UX lies (button says "Resume 50%" but tapping it starts
+  // episode N from 0, because that's all the server knows about).
+  const resumeProgress = resumeTarget?.progress ?? 0;
+  const hasResume = resumeProgress > 0.01 && resumeProgress < 0.99;
   const playTarget = resumeTarget ?? episodes[0];
   const playTargetHref = playTarget ? (`/player/${keyFor(playTarget)}` as const) : undefined;
   const playTargetPlayable = playTarget
@@ -213,7 +221,7 @@ export function SeriesDetailScreen({ itemId }: Props) {
           <DetailMetaRow item={series} />
           <DetailActionRow
             hasResume={hasResume}
-            resumeProgress={resumeTarget?.progress ?? series.progress ?? 0}
+            resumeProgress={resumeProgress}
             canPlay={canPlaySeries}
             onPlay={() => {
               if (playTargetHref) router.push(playTargetHref);
