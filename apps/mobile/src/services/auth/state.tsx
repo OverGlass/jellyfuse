@@ -3,6 +3,7 @@ import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tansta
 import { createContext, useContext, type ReactNode } from "react";
 import NitroCookies from "react-native-nitro-cookies";
 import { apiFetch } from "@/services/api/client";
+import { syncMetadataLanguage } from "@/services/i18n/sync";
 import {
   getSecureItem,
   removeSecureItem,
@@ -295,6 +296,15 @@ function useAuthActionsInternal(): AuthActions {
     },
     onSuccess: (data) => {
       queryClient.setQueryData(PERSISTED_AUTH_KEY, data);
+      const active = findActiveUser(data);
+      if (active && data.serverUrl) {
+        void syncMetadataLanguage({
+          baseUrl: data.serverUrl,
+          userId: active.userId,
+        }).catch((err: unknown) => {
+          console.warn("syncMetadataLanguage failed after sign-in", err);
+        });
+      }
     },
   });
 

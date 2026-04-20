@@ -44,6 +44,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     favicon: "./assets/images/favicon.png",
   },
   plugins: [
+    "expo-localization",
     "expo-router",
     "expo-secure-store",
     [
