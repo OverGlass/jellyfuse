@@ -101,6 +101,7 @@ export function MovieDetailScreen({ itemId }: Props) {
           <DetailMetaRow item={item} />
           <DetailActionRow
             hasResume={hasResume}
+            resumeProgress={item.progress ?? 0}
             canPlay={canPlay}
             onPlay={() => router.push(`/player/${itemId}`)}
             onDownload={handleDownloadPress}
