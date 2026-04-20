@@ -24,6 +24,7 @@ import {
 } from "@jellyfuse/theme";
 import type { DownloadRecord } from "@jellyfuse/models";
 import { Image } from "expo-image";
+import { useTranslation } from "react-i18next";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { NerdIcon } from "@/features/common/components/nerd-icon";
 
@@ -90,6 +91,7 @@ export function DownloadRow({
   onRetry,
   onPlay,
 }: Props) {
+  const { t } = useTranslation();
   const { id, state, bytesDownloaded, bytesTotal, metadata } = record;
   const fraction = bytesTotal > 0 ? bytesDownloaded / bytesTotal : 0;
   const ep = episodeLabel(record);
@@ -137,28 +139,53 @@ export function DownloadRow({
             {formatBytes(bytesTotal)} · {Math.round(metadata.durationSeconds / 60)}m
           </Text>
         ) : state === "failed" ? (
-          <Text style={styles.failedLabel}>Download failed</Text>
+          <Text style={styles.failedLabel}>{t("downloads.row.failedLabel")}</Text>
         ) : null}
 
         {/* Action buttons */}
         <View style={styles.actions}>
           {state === "downloading" ? (
-            <ActionButton icon="pause" label="Pause" onPress={() => onPause(id)} />
+            <ActionButton
+              icon="pause"
+              label={t("downloads.row.action.pause")}
+              onPress={() => onPause(id)}
+            />
           ) : null}
           {state === "paused" ? (
-            <ActionButton icon="play" label="Resume" onPress={() => onResume(id)} />
+            <ActionButton
+              icon="play"
+              label={t("downloads.row.action.resume")}
+              onPress={() => onResume(id)}
+            />
           ) : null}
           {state === "done" ? (
-            <ActionButton icon="play" label="Play" onPress={() => onPlay(record)} accent />
+            <ActionButton
+              icon="play"
+              label={t("downloads.row.action.play")}
+              onPress={() => onPlay(record)}
+              accent
+            />
           ) : null}
           {state === "failed" ? (
-            <ActionButton icon="refresh" label="Retry" onPress={() => onRetry(id)} />
+            <ActionButton
+              icon="refresh"
+              label={t("downloads.row.action.retry")}
+              onPress={() => onRetry(id)}
+            />
           ) : null}
           {state === "queued" || state === "downloading" || state === "paused" ? (
-            <ActionButton icon="close" label="Cancel" onPress={() => onCancel(id)} />
+            <ActionButton
+              icon="close"
+              label={t("downloads.row.action.cancel")}
+              onPress={() => onCancel(id)}
+            />
           ) : null}
           {state === "done" || state === "failed" ? (
-            <ActionButton icon="trash" label="Delete" onPress={() => onDelete(id)} />
+            <ActionButton
+              icon="trash"
+              label={t("downloads.row.action.delete")}
+              onPress={() => onDelete(id)}
+            />
           ) : null}
         </View>
       </View>

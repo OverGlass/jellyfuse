@@ -4,6 +4,7 @@ import { colors } from "@jellyfuse/theme";
 import { useKeepAwake } from "expo-keep-awake";
 import { router } from "expo-router";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { StyleSheet, Text, View } from "react-native";
 import { resolvePlayback } from "@/services/playback/resolver";
 import {
@@ -36,6 +37,7 @@ interface Props {
 
 export function PlayerScreen({ jellyfinId }: Props) {
   useKeepAwake();
+  const { t } = useTranslation();
 
   const { serverUrl } = useAuth();
   const resolverSettings = useResolverSettings();
@@ -149,11 +151,11 @@ export function PlayerScreen({ jellyfinId }: Props) {
     return (
       <View style={styles.container}>
         <View style={styles.errorOverlay}>
-          <Text style={styles.errorTitle}>Playback Error</Text>
+          <Text style={styles.errorTitle}>{t("player.error.title")}</Text>
           <Text style={styles.errorBody}>
             {playbackInfoQuery.error instanceof Error
               ? playbackInfoQuery.error.message
-              : "Failed to load playback info"}
+              : t("player.error.failedToLoad")}
           </Text>
         </View>
       </View>

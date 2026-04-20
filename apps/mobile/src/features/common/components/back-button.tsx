@@ -1,5 +1,6 @@
 import { colors, opacity, radius, withAlpha } from "@jellyfuse/theme";
 import { router } from "expo-router";
+import { useTranslation } from "react-i18next";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useScreenGutters } from "@/services/responsive";
@@ -15,6 +16,7 @@ import { NerdIcon } from "./nerd-icon";
  * user. Pure component: zero state, one callback path.
  */
 export function BackButton() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const gutters = useScreenGutters();
   return (
@@ -24,7 +26,7 @@ export function BackButton() {
     >
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Back"
+        accessibilityLabel={t("common.back")}
         hitSlop={12}
         onPress={() => {
           if (router.canGoBack()) {

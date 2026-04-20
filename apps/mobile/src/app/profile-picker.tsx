@@ -2,6 +2,7 @@ import type { AuthenticatedUser } from "@jellyfuse/api";
 import { colors, spacing } from "@jellyfuse/theme";
 import { FlashList } from "@shopify/flash-list";
 import { router } from "expo-router";
+import { useTranslation } from "react-i18next";
 import { Alert, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AuthScreenHeader } from "@/features/auth/components/auth-screen-header";
@@ -26,6 +27,7 @@ type PickerItem = { kind: "user"; user: AuthenticatedUser } | { kind: "add-user"
 
 export default function ProfilePickerScreen() {
   const { users, activeUser, serverUrl, serverVersion, switchUser, removeUser } = useAuth();
+  const { t } = useTranslation();
   const gutters = useScreenGutters();
 
   const items: PickerItem[] = [
@@ -70,12 +72,12 @@ export default function ProfilePickerScreen() {
 
   function handleRemove(user: AuthenticatedUser) {
     Alert.alert(
-      `Remove ${user.displayName}?`,
-      "This signs the account out of Jellyfuse but leaves the Jellyfin account itself untouched.",
+      t("auth.picker.remove.confirmTitle", { name: user.displayName }),
+      t("auth.picker.remove.confirmBody"),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("common.cancel"), style: "cancel" },
         {
-          text: "Remove",
+          text: t("auth.picker.remove.confirm"),
           style: "destructive",
           onPress: () => {
             void performRemove(user);
@@ -89,7 +91,7 @@ export default function ProfilePickerScreen() {
     <SafeAreaView style={styles.safe}>
       <View style={{ paddingLeft: gutters.left, paddingRight: gutters.right }}>
         <AuthScreenHeader
-          title="Who's watching?"
+          title={t("auth.picker.title")}
           subtitle={`${serverUrl ? serverUrl.replace(/^https?:\/\//, "") : "—"}${
             serverVersion ? ` · ${serverVersion}` : ""
           }`}

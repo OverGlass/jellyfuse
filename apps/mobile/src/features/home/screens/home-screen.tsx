@@ -27,6 +27,7 @@ import { FlashList } from "@shopify/flash-list";
 import { useKeepAwake } from "expo-keep-awake";
 import { router } from "expo-router";
 import { useDeferredValue, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import Animated, { useAnimatedScrollHandler } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -56,6 +57,7 @@ export function HomeScreen() {
 
   const insets = useSafeAreaInsets();
   const { jellyseerrStatus } = useAuth();
+  const { t } = useTranslation();
   const gutters = useScreenGutters();
   const connectionStatus = useConnectionStatus();
   const scrollRestore = useRestoredScroll("/home");
@@ -94,16 +96,31 @@ export function HomeScreen() {
   const shelves: HomeShelf[] = [
     {
       key: "continue-watching",
-      title: "Continue Watching",
+      title: t("home.shelf.continueWatching"),
       variant: "wide",
       query: continueWatching,
       onItemPress: handleContinueWatchingPress,
     },
-    { key: "next-up", title: "Next Up", variant: "poster", query: nextUp },
-    { key: "recently-added", title: "Recently Added", variant: "poster", query: recentlyAdded },
-    { key: "latest-movies", title: "Latest Movies", variant: "poster", query: latestMovies },
-    { key: "latest-tv", title: "Latest TV", variant: "poster", query: latestTv },
-    { key: "requests", title: "My Requests", variant: "poster", items: requestItems },
+    { key: "next-up", title: t("home.shelf.nextUp"), variant: "poster", query: nextUp },
+    {
+      key: "recently-added",
+      title: t("home.shelf.recentlyAdded"),
+      variant: "poster",
+      query: recentlyAdded,
+    },
+    {
+      key: "latest-movies",
+      title: t("home.shelf.latestMovies"),
+      variant: "poster",
+      query: latestMovies,
+    },
+    { key: "latest-tv", title: t("home.shelf.latestTv"), variant: "poster", query: latestTv },
+    {
+      key: "requests",
+      title: t("home.shelf.myRequests"),
+      variant: "poster",
+      items: requestItems,
+    },
   ];
 
   const visibleShelves = shelves.filter((shelf) => {
@@ -153,8 +170,8 @@ export function HomeScreen() {
               ) : null}
               {searchNoResults ? (
                 <View style={styles.centered}>
-                  <Text style={styles.emptyTitle}>No results</Text>
-                  <Text style={styles.emptyBody}>Try a different spelling or fewer words.</Text>
+                  <Text style={styles.emptyTitle}>{t("home.search.noResults.title")}</Text>
+                  <Text style={styles.emptyBody}>{t("home.search.noResults.body")}</Text>
                 </View>
               ) : null}
               {search.jellyseerrError ? (
@@ -165,7 +182,7 @@ export function HomeScreen() {
                   ]}
                 >
                   <Text style={styles.errorBannerLabel} numberOfLines={2}>
-                    Jellyseerr search failed — only library results are shown.
+                    {t("home.search.jellyseerrError")}
                   </Text>
                 </View>
               ) : null}
@@ -173,7 +190,7 @@ export function HomeScreen() {
           }
           renderItem={({ item }) => {
             if (item.kind === "header") {
-              return <SectionHeader title={item.title} />;
+              return <SectionHeader title={t(item.titleKey)} />;
             }
             return <SearchResultRow item={item.item} onPress={() => handleItemPress(item.item)} />;
           }}
@@ -201,10 +218,8 @@ export function HomeScreen() {
               ) : null}
               {allShelvesEmptyOnline ? (
                 <View style={styles.centered}>
-                  <Text style={styles.emptyTitle}>No items yet</Text>
-                  <Text style={styles.emptyBody}>
-                    Your library is empty or Jellyfin is still scanning.
-                  </Text>
+                  <Text style={styles.emptyTitle}>{t("home.empty.title")}</Text>
+                  <Text style={styles.emptyBody}>{t("home.empty.body")}</Text>
                 </View>
               ) : null}
             </View>
@@ -255,7 +270,11 @@ interface HomeShelf {
 // ──────────────────────────────────────────────────────────────────────
 
 type SearchRow =
-  | { kind: "header"; id: string; title: string }
+  | {
+      kind: "header";
+      id: string;
+      titleKey: "home.search.header.library" | "home.search.header.request";
+    }
   | { kind: "item"; id: string; item: MediaItem };
 
 function buildSearchRows(
@@ -264,13 +283,13 @@ function buildSearchRows(
   if (!data) return [];
   const rows: SearchRow[] = [];
   if (data.libraryItems.length > 0) {
-    rows.push({ kind: "header", id: "header:library", title: "In your library" });
+    rows.push({ kind: "header", id: "header:library", titleKey: "home.search.header.library" });
     for (const item of data.libraryItems) {
       rows.push({ kind: "item", id: `lib:${rowItemId(item)}`, item });
     }
   }
   if (data.requestableItems.length > 0) {
-    rows.push({ kind: "header", id: "header:request", title: "Request via Jellyseerr" });
+    rows.push({ kind: "header", id: "header:request", titleKey: "home.search.header.request" });
     for (const item of data.requestableItems) {
       rows.push({ kind: "item", id: `req:${rowItemId(item)}`, item });
     }

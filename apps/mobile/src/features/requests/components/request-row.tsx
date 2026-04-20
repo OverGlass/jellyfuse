@@ -1,6 +1,8 @@
 import type { DownloadProgress, MediaRequest } from "@jellyfuse/models";
 import { colors, fontSize, fontWeight, opacity, radius, spacing } from "@jellyfuse/theme";
 import { Image } from "expo-image";
+import type { TFunction } from "i18next";
+import { useTranslation } from "react-i18next";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 /**
@@ -25,7 +27,8 @@ const POSTER_WIDTH = 56;
 const POSTER_HEIGHT = 84;
 
 export function RequestRow({ request, progress, onPress }: Props) {
-  const subtitle = buildSubtitle(request);
+  const { t } = useTranslation();
+  const subtitle = buildSubtitle(request, t);
   return (
     <Pressable
       accessibilityRole="button"
@@ -64,15 +67,17 @@ export function RequestRow({ request, progress, onPress }: Props) {
   );
 }
 
-function buildSubtitle(request: MediaRequest): string {
+function buildSubtitle(request: MediaRequest, t: TFunction): string {
   const parts: string[] = [];
-  parts.push(request.mediaType === "tv" ? "Series" : "Movie");
+  parts.push(request.mediaType === "tv" ? t("requests.row.series") : t("requests.row.movie"));
   if (request.mediaType === "tv" && request.seasons.length > 0) {
     parts.push(
-      request.seasons.length === 1 ? `S${request.seasons[0]}` : `${request.seasons.length} seasons`,
+      request.seasons.length === 1
+        ? t("requests.row.seasonPrefix", { season: request.seasons[0] })
+        : t("requests.row.seasonsCount", { count: request.seasons.length }),
     );
   }
-  parts.push(`by ${request.requestedBy}`);
+  parts.push(t("requests.row.byUser", { user: request.requestedBy }));
   return parts.join(" · ");
 }
 
@@ -85,35 +90,44 @@ interface BadgeProps {
 }
 
 function StatusBadge({ status }: BadgeProps) {
+  const { t } = useTranslation();
   const config = STATUS_CONFIG[status];
   return (
     <View style={[styles.badge, { backgroundColor: config.background }]}>
-      <Text style={[styles.badgeLabel, { color: config.foreground }]}>{config.label}</Text>
+      <Text style={[styles.badgeLabel, { color: config.foreground }]}>{t(config.labelKey)}</Text>
     </View>
   );
 }
 
 const STATUS_CONFIG: Record<
   MediaRequest["status"],
-  { label: string; background: string; foreground: string }
+  {
+    labelKey:
+      | "requests.status.pending"
+      | "requests.status.approved"
+      | "requests.status.available"
+      | "requests.status.declined";
+    background: string;
+    foreground: string;
+  }
 > = {
   pending: {
-    label: "Pending",
+    labelKey: "requests.status.pending",
     background: colors.surfaceElevated,
     foreground: colors.warning,
   },
   approved: {
-    label: "Downloading",
+    labelKey: "requests.status.approved",
     background: colors.surfaceElevated,
     foreground: colors.accent,
   },
   available: {
-    label: "Available",
+    labelKey: "requests.status.available",
     background: colors.success,
     foreground: colors.background,
   },
   declined: {
-    label: "Declined",
+    labelKey: "requests.status.declined",
     background: colors.surfaceElevated,
     foreground: colors.danger,
   },
@@ -128,6 +142,7 @@ interface ProgressBarProps {
 }
 
 function ProgressBar({ progress }: ProgressBarProps) {
+  const { t } = useTranslation();
   const indeterminate = progress.fraction < 0;
   const pct = indeterminate ? 100 : Math.round(progress.fraction * 100);
   const fillWidth: `${number}%` = indeterminate ? "100%" : `${pct}%`;
@@ -144,7 +159,7 @@ function ProgressBar({ progress }: ProgressBarProps) {
       </View>
       <Text style={styles.progressLabel}>
         {indeterminate
-          ? "Queued…"
+          ? t("requests.row.progress.queued")
           : progress.timeLeft
             ? `${pct}% · ${progress.timeLeft}`
             : `${pct}%`}

@@ -5,6 +5,7 @@ import { colors, fontSize, layout, spacing } from "@jellyfuse/theme";
 import { FlashList } from "@shopify/flash-list";
 import { router } from "expo-router";
 import { useDeferredValue, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import Animated, { useAnimatedScrollHandler } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
@@ -61,14 +62,23 @@ const PAGEABLE_SHELVES: Record<ShelfKey, boolean> = {
   requests: false,
 };
 
-const SHELF_TITLE: Record<ShelfKey, string> = {
-  "continue-watching": "Continue Watching",
-  "next-up": "Next Up",
-  "recently-added": "Recently Added",
-  "latest-movies": "Latest Movies",
-  "latest-tv": "Latest TV",
-  suggestions: "Suggestions",
-  requests: "My Requests",
+const SHELF_TITLE_KEY: Record<
+  ShelfKey,
+  | "home.shelf.continueWatching"
+  | "home.shelf.nextUp"
+  | "home.shelf.recentlyAdded"
+  | "home.shelf.latestMovies"
+  | "home.shelf.latestTv"
+  | "home.shelf.suggestions"
+  | "home.shelf.myRequests"
+> = {
+  "continue-watching": "home.shelf.continueWatching",
+  "next-up": "home.shelf.nextUp",
+  "recently-added": "home.shelf.recentlyAdded",
+  "latest-movies": "home.shelf.latestMovies",
+  "latest-tv": "home.shelf.latestTv",
+  suggestions: "home.shelf.suggestions",
+  requests: "home.shelf.myRequests",
 };
 
 type ShelfSearchMode =
@@ -88,8 +98,9 @@ const SHELF_SEARCH_MODE: Record<ShelfKey, ShelfSearchMode> = {
 const MIN_SEARCH_LENGTH = 2;
 
 export function ShelfScreen({ shelfKey }: Props) {
+  const { t } = useTranslation();
   const pageable = PAGEABLE_SHELVES[shelfKey];
-  const title = SHELF_TITLE[shelfKey];
+  const title = t(SHELF_TITLE_KEY[shelfKey]);
   const searchMode = SHELF_SEARCH_MODE[shelfKey];
   const query = useShelfInfinite(pageable ? (shelfKey as ShelfPageKey) : undefined);
   const { values } = useBreakpoint();
@@ -126,7 +137,7 @@ export function ShelfScreen({ shelfKey }: Props) {
     return (
       <View style={styles.root}>
         <View style={[styles.centered, { paddingTop: headerHeight + spacing.xxl }]}>
-          <Text style={styles.empty}>Not yet available</Text>
+          <Text style={styles.empty}>{t("shelf.unavailable")}</Text>
         </View>
         <ScreenHeader
           showBack
@@ -196,7 +207,7 @@ export function ShelfScreen({ shelfKey }: Props) {
           !isInitialLoading && !isSearchLoading && !hasError ? (
             <View style={styles.centered}>
               <Text style={styles.empty}>
-                {isSearching ? "No results" : "No items in this shelf."}
+                {isSearching ? t("home.search.noResults.title") : t("shelf.empty")}
               </Text>
             </View>
           ) : null
@@ -215,7 +226,7 @@ export function ShelfScreen({ shelfKey }: Props) {
         bottomSlot={
           <SearchInput
             value={searchQuery}
-            placeholder={`Search ${title}`}
+            placeholder={t("shelf.search.placeholder", { title })}
             onChangeText={setSearchQuery}
             onClear={() => setSearchQuery("")}
           />
@@ -230,9 +241,9 @@ export function ShelfScreen({ shelfKey }: Props) {
       ) : null}
       {hasError ? (
         <View style={styles.overlay}>
-          <Text style={styles.errorTitle}>Couldn&apos;t load this shelf</Text>
+          <Text style={styles.errorTitle}>{t("shelf.error.title")}</Text>
           <Text style={styles.errorBody}>
-            {query.error instanceof Error ? query.error.message : "Unknown error"}
+            {query.error instanceof Error ? query.error.message : t("shelf.error.unknown")}
           </Text>
         </View>
       ) : null}

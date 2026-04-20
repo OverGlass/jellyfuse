@@ -1,6 +1,7 @@
 import { colors, fontSize, fontWeight, opacity, radius, spacing } from "@jellyfuse/theme";
 import { router } from "expo-router";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -32,6 +33,7 @@ import { useScreenGutters } from "@/services/responsive";
  */
 export default function ServerScreen() {
   const { setServer } = useAuth();
+  const { t } = useTranslation();
   const gutters = useScreenGutters();
   const [urlDraft, setUrlDraft] = useState("");
   const [jellyseerrDraft, setJellyseerrDraft] = useState("");
@@ -58,7 +60,7 @@ export default function ServerScreen() {
     router.replace("/(auth)/sign-in");
   }
 
-  const errorMessage = buildErrorMessage(systemInfo);
+  const errorMessage = buildErrorMessage(systemInfo, t);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -69,17 +71,14 @@ export default function ServerScreen() {
         <View
           style={[styles.container, { paddingLeft: gutters.left, paddingRight: gutters.right }]}
         >
-          <AuthScreenHeader
-            title="Connect to Jellyfin"
-            subtitle="Enter your Jellyfin server URL to get started."
-          />
+          <AuthScreenHeader title={t("auth.server.title")} subtitle={t("auth.server.subtitle")} />
 
           <View style={styles.inputBlock}>
-            <Text style={styles.label}>Server URL</Text>
+            <Text style={styles.label}>{t("auth.server.urlLabel")}</Text>
             <TextInput
               value={urlDraft}
               onChangeText={setUrlDraft}
-              placeholder="https://jellyfin.example.com"
+              placeholder={t("auth.server.placeholder")}
               placeholderTextColor={colors.textMuted}
               autoCapitalize="none"
               autoCorrect={false}
@@ -92,11 +91,11 @@ export default function ServerScreen() {
           </View>
 
           <View style={styles.inputBlock}>
-            <Text style={styles.label}>Jellyseerr URL (optional)</Text>
+            <Text style={styles.label}>{t("auth.server.jellyseerrLabel")}</Text>
             <TextInput
               value={jellyseerrDraft}
               onChangeText={setJellyseerrDraft}
-              placeholder="https://jellyseerr.example.com"
+              placeholder={t("auth.server.jellyseerrPlaceholder")}
               placeholderTextColor={colors.textMuted}
               autoCapitalize="none"
               autoCorrect={false}
@@ -106,9 +105,7 @@ export default function ServerScreen() {
               onSubmitEditing={handleCheck}
               style={styles.input}
             />
-            <Text style={styles.helper}>
-              Used for requests and suggestions. Leave empty if you don&apos;t use Jellyseerr.
-            </Text>
+            <Text style={styles.helper}>{t("auth.server.jellyseerrHelper")}</Text>
           </View>
 
           <Pressable
@@ -120,13 +117,13 @@ export default function ServerScreen() {
               (!urlDraft.trim() || pressed) && styles.buttonMuted,
             ]}
           >
-            <Text style={styles.buttonLabel}>Check server</Text>
+            <Text style={styles.buttonLabel}>{t("auth.server.check")}</Text>
           </Pressable>
 
           {submittedUrl && systemInfo.isLoading ? (
             <View style={styles.statusRow}>
               <ActivityIndicator color={colors.textSecondary} />
-              <Text style={styles.statusText}>Contacting server…</Text>
+              <Text style={styles.statusText}>{t("auth.server.contacting")}</Text>
             </View>
           ) : null}
 
@@ -144,7 +141,7 @@ export default function ServerScreen() {
                   pressed && styles.continueButtonPressed,
                 ]}
               >
-                <Text style={styles.continueLabel}>Continue</Text>
+                <Text style={styles.continueLabel}>{t("auth.server.submit")}</Text>
               </Pressable>
             </View>
           ) : null}
@@ -164,16 +161,22 @@ function normalizeUrl(raw: string): string | undefined {
   return withoutTrailingSlash;
 }
 
-function buildErrorMessage(query: ReturnType<typeof useSystemInfo>): string | undefined {
+type TFunction = ReturnType<typeof useTranslation>["t"];
+
+function buildErrorMessage(
+  query: ReturnType<typeof useSystemInfo>,
+  t: TFunction,
+): string | undefined {
   if (query.isError) {
     const err = query.error as Error;
     if (err.name === "SystemInfoHttpError") {
-      return `Server rejected the request (${(err as Error & { status?: number }).status ?? "HTTP error"}).`;
+      const status = (err as Error & { status?: number }).status ?? "HTTP error";
+      return t("auth.server.error.http", { status });
     }
     if (err.name === "SystemInfoParseError") {
-      return "The server responded but the data didn't look like a Jellyfin server.";
+      return t("auth.server.error.parse");
     }
-    return "Couldn't reach the server. Check the URL and your connection.";
+    return t("auth.server.error.network");
   }
   return undefined;
 }

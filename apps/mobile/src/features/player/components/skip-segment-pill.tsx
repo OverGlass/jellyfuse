@@ -10,6 +10,7 @@
 import type { IntroSkipperSegments } from "@jellyfuse/models";
 import { colors, fontSize, fontWeight, radius, spacing } from "@jellyfuse/theme";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Pressable, StyleSheet, Text } from "react-native";
 import Animated, { useAnimatedReaction, type SharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -30,8 +31,15 @@ interface ActiveSegment {
 }
 
 export function SkipSegmentPill({ positionShared, durationShared, segments, onSkip }: Props) {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const [active, setActive] = useState<ActiveSegment | null>(null);
+
+  const labels = {
+    intro: t("player.skip.intro"),
+    recap: t("player.skip.recap"),
+    credits: t("player.skip.credits"),
+  };
 
   useAnimatedReaction(
     () => {
@@ -47,13 +55,13 @@ export function SkipSegmentPill({ positionShared, durationShared, segments, onSk
         pos >= segments.introduction.start &&
         pos < segments.introduction.end
       ) {
-        return { label: "Skip Intro", end: segments.introduction.end };
+        return { label: labels.intro, end: segments.introduction.end };
       }
       if (segments.recap && pos >= segments.recap.start && pos < segments.recap.end) {
-        return { label: "Skip Recap", end: segments.recap.end };
+        return { label: labels.recap, end: segments.recap.end };
       }
       if (segments.credits && pos >= segments.credits.start && pos < segments.credits.end) {
-        return { label: "Skip Credits", end: segments.credits.end };
+        return { label: labels.credits, end: segments.credits.end };
       }
       return null;
     },
@@ -62,7 +70,7 @@ export function SkipSegmentPill({ positionShared, durationShared, segments, onSk
         scheduleOnRN(setActive, current);
       }
     },
-    [segments],
+    [segments, labels.intro, labels.recap, labels.credits],
   );
 
   const visible = active !== null;
