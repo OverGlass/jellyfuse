@@ -6,7 +6,12 @@ import { router } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { resolvePlayback } from "@/services/playback/resolver";
-import { resolveAudioAid, resolveSubtitleSid } from "@/services/playback/live-track-map";
+import {
+  currentAudioJellyfinIndex,
+  currentSubtitleJellyfinIndex,
+  resolveAudioAid,
+  resolveSubtitleSid,
+} from "@/services/playback/live-track-map";
 import { useResolverSettings } from "@/services/settings/use-resolver-settings";
 import { localTrickplayData, resolveLocalStream } from "@/services/downloads/local-stream";
 import { useDownloadForItem } from "@/services/downloads/use-local-downloads";
@@ -117,6 +122,22 @@ export function PlayerScreen({ jellyfinId }: Props) {
   });
 
   const [trackPickerOpen, setTrackPickerOpen] = useState(false);
+  // Currently-selected aid/sid read from mpv at picker-open time so the
+  // form sheet can render a checkmark next to the active track. Resolved
+  // back to Jellyfin stream indices via mpv's live track-list (inverse of
+  // `resolveAudioAid` / `resolveSubtitleSid`) — see project memory
+  // `mpv_subtitle_sid_mapping`.
+  const [currentTracks, setCurrentTracks] = useState<{
+    audio: number | undefined;
+    subtitle: number | undefined;
+  }>({ audio: undefined, subtitle: undefined });
+  const openTrackPicker = () => {
+    setCurrentTracks({
+      audio: currentAudioJellyfinIndex(player.mpv, resolved?.audioStreams ?? []),
+      subtitle: currentSubtitleJellyfinIndex(player.mpv, resolved?.subtitleTracks ?? []),
+    });
+    setTrackPickerOpen(true);
+  };
 
   // Buffering during initial load OR mid-playback — the overlay
   // shows the spinner in place of the play button while this is true.
@@ -179,7 +200,7 @@ export function PlayerScreen({ jellyfinId }: Props) {
         onDismiss={() => router.back()}
         onOpenTrackPicker={
           resolved?.audioStreams.length || resolved?.subtitleTracks.length
-            ? () => setTrackPickerOpen(true)
+            ? openTrackPicker
             : undefined
         }
       />
@@ -203,6 +224,8 @@ export function PlayerScreen({ jellyfinId }: Props) {
         visible={trackPickerOpen}
         audioStreams={resolved?.audioStreams ?? []}
         subtitleTracks={resolved?.subtitleTracks ?? []}
+        currentAudioIndex={currentTracks.audio}
+        currentSubtitleIndex={currentTracks.subtitle}
         onSelectAudio={(stream) => {
           const aid = resolveAudioAid(player.mpv, resolved?.audioStreams ?? [], stream);
           player.setAudioTrack(aid);
