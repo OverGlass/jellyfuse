@@ -11,6 +11,7 @@ export {
   useRecentlyAdded,
 } from "./hooks/use-home-shelves";
 export {
+  useAdjacentEpisode,
   useEpisodes,
   useMovieDetail,
   useSeasons,

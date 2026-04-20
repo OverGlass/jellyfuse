@@ -53,11 +53,18 @@ export interface UseMpvPlayerReturn extends MpvPlayerState {
  * unmount. All mpv event callbacks use `useEffectEvent` so they
  * always read latest state without being effect dependencies.
  */
+export interface UseMpvPlayerOptions {
+  startPositionSeconds?: number;
+  externalSubtitles?: MpvExternalSubtitle[];
+  /** Fires when mpv reports natural end-of-file (not user-initiated stop). */
+  onPlaybackEnded?: () => void;
+}
+
 export function useMpvPlayer(
   resolved: ResolvedStream | null,
-  startPositionSeconds?: number,
-  externalSubtitles?: MpvExternalSubtitle[],
+  options: UseMpvPlayerOptions = {},
 ): UseMpvPlayerReturn {
+  const { startPositionSeconds, externalSubtitles, onPlaybackEnded } = options;
   const mpvRef = useRef<NativeMpv | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
@@ -101,6 +108,7 @@ export function useMpvPlayer(
 
   const onEnded = useEffectEvent(() => {
     setIsPlaying(false);
+    onPlaybackEnded?.();
   });
 
   const onError = useEffectEvent((msg: string) => {

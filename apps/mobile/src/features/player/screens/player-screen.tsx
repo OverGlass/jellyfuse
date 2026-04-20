@@ -1,5 +1,5 @@
 import { MpvVideoView, callback, type MpvExternalSubtitle } from "@jellyfuse/native-mpv";
-import { ticksToSeconds } from "@jellyfuse/models";
+import { mediaIdJellyfin, ticksToSeconds } from "@jellyfuse/models";
 import { colors } from "@jellyfuse/theme";
 import { useKeepAwake } from "expo-keep-awake";
 import { router } from "expo-router";
@@ -16,10 +16,11 @@ import { useResolverSettings } from "@/services/settings/use-resolver-settings";
 import { localTrickplayData, resolveLocalStream } from "@/services/downloads/local-stream";
 import { useDownloadForItem } from "@/services/downloads/use-local-downloads";
 import { useConnectionStatus } from "@/services/connection/monitor";
-import { useMovieDetail } from "@/services/query";
+import { useAdjacentEpisode, useMovieDetail } from "@/services/query";
 import { ControlsOverlay } from "../components/controls-overlay";
 import { SkipSegmentPill } from "../components/skip-segment-pill";
 import { TrackPicker } from "../components/track-picker";
+import { UpNextOverlay } from "../components/up-next-overlay";
 import { useMpvPlayer } from "../hooks/use-mpv-player";
 import { useNowPlaying } from "../hooks/use-now-playing";
 import {
@@ -90,8 +91,37 @@ export function PlayerScreen({ jellyfinId }: Props) {
         }))
     : undefined;
 
+  // Pre-fetch the next episode (if any) so autoplay on EOF is a free
+  // navigation — the cache is already warm. Episodes only; the query
+  // self-disables for movies / non-episode items via `enabled`.
+  // Mirrors `JellyfinClient::get_adjacent_episode` in the Rust reference.
+  const isEpisode = detail.data?.mediaType === "episode";
+  const nextEpisodeQuery = useAdjacentEpisode(
+    isEpisode ? detail.data?.seriesId : undefined,
+    isEpisode ? jellyfinId : undefined,
+  );
+  const nextEpisode = nextEpisodeQuery.data ?? undefined;
+
+  // On natural end-of-file, navigate to the next episode's player. Use
+  // `router.replace` so back still returns to the detail page, not the
+  // previous episode. Non-episode items (movies) just fall through — the
+  // screen stays on the ended state until the user dismisses it.
+  const handlePlaybackEnded = () => {
+    const nextId = nextEpisode ? mediaIdJellyfin(nextEpisode.id) : undefined;
+    if (nextId) {
+      router.replace({
+        pathname: "/player/[jellyfinId]",
+        params: { jellyfinId: nextId },
+      });
+    }
+  };
+
   // mpv lifecycle — creates instance, subscribes to events, loads stream
-  const player = useMpvPlayer(resolved, startPosition, externalSubtitles);
+  const player = useMpvPlayer(resolved, {
+    startPositionSeconds: startPosition,
+    externalSubtitles,
+    onPlaybackEnded: handlePlaybackEnded,
+  });
 
   // Playback reporting — start/progress/stopped to Jellyfin
   useReportingSession({
@@ -214,6 +244,17 @@ export function PlayerScreen({ jellyfinId }: Props) {
         durationShared={player.durationShared}
         segments={resolved?.introSkipperSegments}
         onSkip={player.seek}
+      />
+
+      {/* Up Next countdown — appears in the final 30-40s of an episode
+          when the next one is known. Ports the near-end fallback path
+          from `PlayerView::render` in the Rust reference. */}
+      <UpNextOverlay
+        positionShared={player.positionShared}
+        durationShared={player.durationShared}
+        nextEpisode={nextEpisode}
+        isPlaying={player.isPlaying}
+        onAutoplay={handlePlaybackEnded}
       />
 
       {/* Track picker bottom sheet — picker hands the Jellyfin track up,
