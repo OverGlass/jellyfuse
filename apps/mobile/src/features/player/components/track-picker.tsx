@@ -1,10 +1,13 @@
 // Bottom-sheet track picker for audio + subtitle selection.
 // Pure component — tracks come from props, selection fires callbacks.
 //
-// Index mapping: mpv's `aid`/`sid` are 1-based per-type indices,
-// NOT Jellyfin's stream indices (which count all stream types).
-// We pass `position + 1` for each track — matches Rust fallback
-// when mpv's track-list isn't yet populated.
+// Picker callbacks hand the selected Jellyfin track object up to the
+// player screen, which resolves the real mpv `aid` / `sid` via
+// `resolveAudioAid` / `resolveSubtitleSid` against mpv's live
+// `track-list`. Position-derived ids are unsafe here: sub-add for
+// external HTTP sidecars is async, and a naïve `position+1` can land
+// on the wrong track mid-session (see project memory
+// `mpv_subtitle_sid_mapping`).
 //
 // Not a Modal — React Native Modal has orientation quirks under
 // landscape lock. Inline full-screen overlay instead.
@@ -29,10 +32,10 @@ interface Props {
   visible: boolean;
   audioStreams: AudioStream[];
   subtitleTracks: SubtitleTrack[];
-  /** Called with mpv track ID (1-based position in the audio list). */
-  onSelectAudio: (mpvTrackId: number) => void;
-  /** Called with mpv track ID (1-based position in the subtitle list). */
-  onSelectSubtitle: (mpvTrackId: number) => void;
+  /** Called with the picked Jellyfin audio stream — screen resolves the mpv aid. */
+  onSelectAudio: (stream: AudioStream) => void;
+  /** Called with the picked Jellyfin subtitle track — screen resolves the mpv sid. */
+  onSelectSubtitle: (track: SubtitleTrack) => void;
   onDisableSubtitles: () => void;
   onClose: () => void;
 }
@@ -88,25 +91,21 @@ export function TrackPicker({
         {/* Track list */}
         <ScrollView style={styles.list} bounces={false}>
           {tab === "audio"
-            ? audioStreams.map((stream, position) => {
-                // mpv aid is 1-based position in the audio list
-                const mpvTrackId = position + 1;
-                return (
-                  <Pressable
-                    key={stream.index}
-                    onPress={() => {
-                      onSelectAudio(mpvTrackId);
-                      onClose();
-                    }}
-                    style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-                  >
-                    <Text style={styles.rowTitle}>{stream.displayTitle}</Text>
-                    {stream.codec ? (
-                      <Text style={styles.rowMeta}>{stream.codec.toUpperCase()}</Text>
-                    ) : null}
-                  </Pressable>
-                );
-              })
+            ? audioStreams.map((stream) => (
+                <Pressable
+                  key={stream.index}
+                  onPress={() => {
+                    onSelectAudio(stream);
+                    onClose();
+                  }}
+                  style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+                >
+                  <Text style={styles.rowTitle}>{stream.displayTitle}</Text>
+                  {stream.codec ? (
+                    <Text style={styles.rowMeta}>{stream.codec.toUpperCase()}</Text>
+                  ) : null}
+                </Pressable>
+              ))
             : null}
 
           {tab === "subtitles" ? (
@@ -120,28 +119,24 @@ export function TrackPicker({
               >
                 <Text style={styles.rowTitle}>Off</Text>
               </Pressable>
-              {subtitleTracks.map((track, position) => {
-                // mpv sid is 1-based position in the subtitle list
-                const mpvTrackId = position + 1;
-                return (
-                  <Pressable
-                    key={track.index}
-                    onPress={() => {
-                      onSelectSubtitle(mpvTrackId);
-                      onClose();
-                    }}
-                    style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-                  >
-                    <Text style={styles.rowTitle}>
-                      {track.displayTitle}
-                      {track.isForced ? " (Forced)" : ""}
-                    </Text>
-                    {track.codec ? (
-                      <Text style={styles.rowMeta}>{track.codec.toUpperCase()}</Text>
-                    ) : null}
-                  </Pressable>
-                );
-              })}
+              {subtitleTracks.map((track) => (
+                <Pressable
+                  key={track.index}
+                  onPress={() => {
+                    onSelectSubtitle(track);
+                    onClose();
+                  }}
+                  style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+                >
+                  <Text style={styles.rowTitle}>
+                    {track.displayTitle}
+                    {track.isForced ? " (Forced)" : ""}
+                  </Text>
+                  {track.codec ? (
+                    <Text style={styles.rowMeta}>{track.codec.toUpperCase()}</Text>
+                  ) : null}
+                </Pressable>
+              ))}
             </>
           ) : null}
         </ScrollView>

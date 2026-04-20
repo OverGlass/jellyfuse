@@ -36,6 +36,7 @@
 import type { TrickplayData } from "@jellyfuse/api";
 import type { DownloadRecord, ResolvedStream, SubtitleTrack } from "@jellyfuse/models";
 import { Paths } from "expo-file-system";
+import { pickSubtitleTrack, type ResolverSettings } from "@/services/playback/resolver";
 
 function joinDoc(relative: string): string {
   const base = Paths.document.uri.replace(/\/$/, "");
@@ -88,17 +89,47 @@ function sidecarSubtitleTracks(record: DownloadRecord): SubtitleTrack[] {
   }));
 }
 
-export function resolveLocalStream(record: DownloadRecord): ResolvedStream {
+export function resolveLocalStream(
+  record: DownloadRecord,
+  settings?: ResolverSettings,
+): ResolvedStream {
+  const subtitleTracks = sidecarSubtitleTracks(record);
+
+  // Apply the user's preferred-subtitle-language preference over the
+  // offline sidecars. Originals have `subtitleTracks = []` (all tracks
+  // are embedded in the container — mpv auto-selects from there, we
+  // don't know what's inside), so this only runs for transcoded
+  // downloads. Transcoded downloads have NO embedded subtitle tracks,
+  // so sidecars are the only subs and their position+1 in this array
+  // matches mpv's sid after each sub-add.
+  const pick =
+    settings && subtitleTracks.length > 0
+      ? pickSubtitleTrack(
+          subtitleTracks,
+          settings.subtitleMode,
+          undefined,
+          settings.preferredSubtitleLanguage,
+        )
+      : { index: undefined, deliveryUrl: undefined };
+  const subtitleStreamIndex = pick.index;
+  const subtitlePosition =
+    subtitleStreamIndex !== undefined
+      ? subtitleTracks.findIndex((t) => t.index === subtitleStreamIndex)
+      : -1;
+  const subtitleMpvTrackId = subtitlePosition >= 0 ? subtitlePosition + 1 : undefined;
+
   return {
     streamUrl: localFileUrl(record),
     playMethod: "DirectPlay",
     mediaSourceId: record.mediaSourceId,
     playSessionId: record.playSessionId,
     audioStreamIndex: undefined,
-    subtitleStreamIndex: undefined,
-    subtitleDeliveryUrl: undefined,
+    subtitleStreamIndex,
+    audioMpvTrackId: undefined,
+    subtitleMpvTrackId,
+    subtitleDeliveryUrl: pick.deliveryUrl,
     audioStreams: [],
-    subtitleTracks: sidecarSubtitleTracks(record),
+    subtitleTracks,
     durationSeconds: record.metadata.durationSeconds,
     chapters: record.metadata.chapters,
     trickplay: record.metadata.trickplayInfo,

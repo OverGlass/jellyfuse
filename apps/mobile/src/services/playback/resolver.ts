@@ -66,6 +66,15 @@ export function resolvePlayback(input: ResolvePlaybackInput): ResolvedStream {
     settings.preferredSubtitleLanguage,
   );
 
+  // mpv assigns track IDs per kind in the order it discovers them:
+  // embedded tracks from the container come first (ordered as in the
+  // Jellyfin `MediaStreams` list), then externals are appended in the
+  // order they are `sub-add`'d. So an external track's sid must account
+  // for the number of embedded tracks that precede it, not just its
+  // position in the flat Jellyfin list.
+  const audioMpvTrackId = audioMpvId(playbackInfo.audioStreams, audioStreamIndex);
+  const subtitleMpvTrackId = subtitleMpvId(playbackInfo.subtitles, subtitleStreamIndex);
+
   return {
     streamUrl: playbackInfo.streamUrl,
     playMethod: playbackInfo.method,
@@ -73,6 +82,8 @@ export function resolvePlayback(input: ResolvePlaybackInput): ResolvedStream {
     playSessionId: playbackInfo.playSessionId,
     audioStreamIndex,
     subtitleStreamIndex,
+    audioMpvTrackId,
+    subtitleMpvTrackId,
     subtitleDeliveryUrl,
     audioStreams: playbackInfo.audioStreams,
     subtitleTracks: playbackInfo.subtitles,
@@ -81,6 +92,53 @@ export function resolvePlayback(input: ResolvePlaybackInput): ResolvedStream {
     trickplay: playbackInfo.trickplay,
     introSkipperSegments,
   };
+}
+
+/**
+ * 1-based mpv sid for a subtitle track — accounts for the fact that
+ * externals (tracks with a `deliveryUrl`) are appended AFTER embedded
+ * tracks in mpv's id space. `sub-add` order must match the order in
+ * which externals appear in `tracks` for this to hold.
+ */
+export function subtitleMpvId(
+  tracks: SubtitleTrack[],
+  pickedJellyfinIndex: number | undefined,
+): number | undefined {
+  if (pickedJellyfinIndex === undefined) return undefined;
+  const picked = tracks.find((t) => t.index === pickedJellyfinIndex);
+  if (!picked) return undefined;
+  return computeSubtitleSid(tracks, picked);
+}
+
+/**
+ * Given the `subtitleTracks` list and a specific track (identified by
+ * reference OR matched by `index`), return its 1-based mpv sid. Exported
+ * for the `TrackPicker` so user selections use the same mapping.
+ */
+export function computeSubtitleSid(tracks: SubtitleTrack[], picked: SubtitleTrack): number {
+  const isExternal = picked.deliveryUrl !== undefined;
+  if (!isExternal) {
+    const embedded = tracks.filter((t) => t.deliveryUrl === undefined);
+    const pos = embedded.findIndex((t) => t.index === picked.index);
+    return pos >= 0 ? pos + 1 : 1;
+  }
+  const embeddedCount = tracks.filter((t) => t.deliveryUrl === undefined).length;
+  const externals = tracks.filter((t) => t.deliveryUrl !== undefined);
+  const pos = externals.findIndex((t) => t.index === picked.index);
+  return pos >= 0 ? embeddedCount + pos + 1 : embeddedCount + 1;
+}
+
+/**
+ * 1-based mpv aid for an audio track. Audio streams are always embedded
+ * in the container (we never `audio-add`), so this is a plain position+1.
+ */
+function audioMpvId(
+  streams: AudioStream[],
+  pickedJellyfinIndex: number | undefined,
+): number | undefined {
+  if (pickedJellyfinIndex === undefined) return undefined;
+  const pos = streams.findIndex((s) => s.index === pickedJellyfinIndex);
+  return pos >= 0 ? pos + 1 : undefined;
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -129,7 +187,8 @@ interface SubtitlePick {
  *
  * - **None**: no subtitles.
  * - **OnlyForced**: pick first forced track (prefer default among forced).
- * - **Default** / **Always**: pick default track, else first track.
+ * - **Default** / **Always**: prefer a language-matched track (default
+ *   among matches), then the first default track, then the first track.
  * - **Smart**: pick a subtitle only when the picked audio language does
  *   not match `preferredSubtitleLanguage` (foreign-audio detection).
  *   Prefers a subtitle track matching `preferredSubtitleLanguage`,
@@ -160,14 +219,24 @@ export function pickSubtitleTrack(
   }
 
   // Smart — only pick when the audio language differs from the user's
-  // preferred subtitle language. Falls through to "Default" logic once
-  // we decide a subtitle is warranted.
+  // preferred subtitle language.
   if (mode === "Smart") {
     const audioLang = (pickedAudioLanguage ?? "").toLowerCase();
     const subLang = preferredSubtitleLanguage.toLowerCase();
     if (!subLang || audioLang === subLang) {
       return { index: undefined, deliveryUrl: undefined };
     }
+    // Fall through to the shared Default/Always logic below, which now
+    // applies the language preference too.
+  }
+
+  // Default / Always / Smart-with-foreign-audio — prefer a track whose
+  // language matches the user's `preferredSubtitleLanguage` before
+  // falling back to the Jellyfin-default or first track. This was
+  // previously Smart-only, which meant Default-mode users never got
+  // their preferred language (Jellyfin's default subtitle mode).
+  const subLang = preferredSubtitleLanguage.toLowerCase();
+  if (subLang) {
     const langMatches = tracks.filter(
       (t) => t.language !== undefined && t.language.toLowerCase() === subLang,
     );
@@ -176,8 +245,6 @@ export function pickSubtitleTrack(
       return { index: pick.index, deliveryUrl: pick.deliveryUrl };
     }
   }
-
-  // Default / Always
   const pick = tracks.find((t) => t.isDefault) ?? tracks[0];
   return { index: pick.index, deliveryUrl: pick.deliveryUrl };
 }
