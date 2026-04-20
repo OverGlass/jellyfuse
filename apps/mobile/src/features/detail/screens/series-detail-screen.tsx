@@ -213,6 +213,7 @@ export function SeriesDetailScreen({ itemId }: Props) {
           <DetailMetaRow item={series} />
           <DetailActionRow
             hasResume={hasResume}
+            resumeProgress={resumeTarget?.progress ?? series.progress ?? 0}
             canPlay={canPlaySeries}
             onPlay={() => {
               if (playTargetHref) router.push(playTargetHref);

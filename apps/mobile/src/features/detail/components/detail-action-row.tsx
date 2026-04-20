@@ -1,15 +1,19 @@
 import { colors, fontSize, fontWeight, opacity, radius, spacing } from "@jellyfuse/theme";
 import { type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { ProgressButton } from "@/features/common/components/progress-button";
 
 /**
- * Detail screen primary action row. `Play` uses the accent CTA style;
- * secondary actions use the surface background. `downloadSlot` accepts
- * a `DownloadButton` (Phase 5) that shows state-aware iconography and
- * a progress ring — the caller owns the interaction logic.
+ * Detail screen primary action row. The primary Play / Resume button is
+ * a `ProgressButton` so a partially-watched item shows how far through
+ * it you are, matching the Rust reference `play_button`. Secondary
+ * actions use the surface background; `downloadSlot` accepts a
+ * `DownloadButton` with state-aware iconography + progress ring.
  */
 interface Props {
   hasResume: boolean;
+  /** 0–1. Drives the resume fill on the Play button. Defaults to 0. */
+  resumeProgress?: number;
   onPlay: () => void;
   /** Called when the text "Download" label is tapped (legacy path). */
   onDownload?: () => void;
@@ -26,6 +30,7 @@ interface Props {
 
 export function DetailActionRow({
   hasResume,
+  resumeProgress = 0,
   onPlay,
   onDownload,
   downloadSlot,
@@ -35,20 +40,14 @@ export function DetailActionRow({
   const primaryLabel = !canPlay ? "Offline" : hasResume ? "Resume" : "Play";
   return (
     <View style={styles.root}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={primaryLabel}
-        accessibilityState={{ disabled: !canPlay }}
-        disabled={!canPlay}
-        onPress={onPlay}
-        style={({ pressed }) => [
-          styles.primary,
-          pressed && styles.primaryPressed,
-          !canPlay && styles.primaryDisabled,
-        ]}
-      >
-        <Text style={styles.primaryLabel}>{primaryLabel}</Text>
-      </Pressable>
+      <View style={styles.primarySlot}>
+        <ProgressButton
+          label={primaryLabel}
+          progress={canPlay && hasResume ? resumeProgress : 0}
+          onPress={onPlay}
+          disabled={!canPlay}
+        />
+      </View>
       {/* Prefer the slot (has state-aware progress ring) over the text button */}
       {downloadSlot ??
         (onDownload ? (
@@ -79,28 +78,13 @@ const styles = StyleSheet.create({
   root: {
     flexDirection: "row",
     flexWrap: "wrap",
+    alignItems: "center",
     gap: spacing.sm,
   },
-  primary: {
-    alignItems: "center",
-    backgroundColor: colors.accent,
-    borderRadius: radius.md,
+  primarySlot: {
     flexGrow: 1,
-    justifyContent: "center",
-    minHeight: 48,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-  },
-  primaryPressed: {
-    opacity: opacity.pressed,
-  },
-  primaryDisabled: {
-    opacity: opacity.disabled,
-  },
-  primaryLabel: {
-    color: colors.accentContrast,
-    fontSize: fontSize.bodyLarge,
-    fontWeight: fontWeight.semibold,
+    flexBasis: 0,
+    minWidth: 160,
   },
   secondary: {
     alignItems: "center",

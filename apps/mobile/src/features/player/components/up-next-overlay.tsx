@@ -30,10 +30,11 @@ import {
 } from "@jellyfuse/theme";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import Animated, { useAnimatedReaction, type SharedValue } from "react-native-reanimated";
+import { useAnimatedReaction, type SharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
 import { NerdIcon } from "@/features/common/components/nerd-icon";
+import { ProgressButton } from "@/features/common/components/progress-button";
 
 const COUNTDOWN_SECONDS = 10;
 const MIN_DURATION = 600; // 10 min — shorter items never get Up Next.
@@ -156,17 +157,16 @@ export function UpNextOverlay({
             <NerdIcon name="close" size={18} />
           </Pressable>
         </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Play ${nextEpisode.title} now`}
+        {/* Countdown progress is baked into the button itself via
+            ProgressButton — no separate track bar. Matches the Rust
+            reference `play_button` visual: a pill whose fill advances
+            as the countdown runs down. */}
+        <ProgressButton
+          label={`Play Now (${secondsLeft}s)`}
+          progress={progress}
           onPress={onAutoplay}
-          style={({ pressed }) => [styles.playBtn, pressed && styles.pressed]}
-        >
-          <Text style={styles.playBtnLabel}>Play Now ({secondsLeft}s)</Text>
-        </Pressable>
-        <View style={styles.progressTrack}>
-          <Animated.View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
-        </View>
+          accessibilityLabel={`Play ${nextEpisode.title} now`}
+        />
       </View>
     </View>
   );
@@ -217,28 +217,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  playBtn: {
-    backgroundColor: colors.accent,
-    borderRadius: radius.md,
-    paddingVertical: spacing.sm,
-    alignItems: "center",
-  },
-  playBtnLabel: {
-    color: colors.textPrimary,
-    fontSize: fontSize.body,
-    fontWeight: fontWeight.semibold,
-  },
   pressed: {
     opacity: opacity.pressed,
-  },
-  progressTrack: {
-    height: 3,
-    borderRadius: radius.sm,
-    backgroundColor: withAlpha(colors.white, opacity.alpha15),
-    overflow: "hidden",
-  },
-  progressFill: {
-    height: "100%",
-    backgroundColor: colors.accent,
   },
 });
