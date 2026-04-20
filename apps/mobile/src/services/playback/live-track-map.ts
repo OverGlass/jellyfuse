@@ -95,3 +95,66 @@ export function resolveAudioAid(
   }
   return fallback();
 }
+
+/**
+ * Read mpv's currently-playing aid (or sid) and map it back to the
+ * Jellyfin stream index the user sees in the picker. Returns undefined
+ * if nothing is selected (`"no"` / `"auto"` / empty) or if the live
+ * track-list isn't populated yet.
+ */
+export function currentAudioJellyfinIndex(
+  mpv: NativeMpv | null,
+  streams: AudioStream[],
+): number | undefined {
+  if (!mpv) return undefined;
+  const raw = mpv.getProperty("aid");
+  const aid = Number.parseInt(raw, 10);
+  if (!Number.isFinite(aid)) return undefined;
+  const live = readLiveMpvTracks(mpv).filter((t) => t.type === "audio");
+  if (live.length === 0) return undefined;
+  const pos = live.findIndex((t) => t.id === aid);
+  return pos >= 0 ? streams[pos]?.index : undefined;
+}
+
+export function currentSubtitleJellyfinIndex(
+  mpv: NativeMpv | null,
+  tracks: SubtitleTrack[],
+): number | undefined {
+  if (!mpv) return undefined;
+  const raw = mpv.getProperty("sid");
+  if (raw === "no" || raw === "" || raw === "auto") return undefined;
+  const sid = Number.parseInt(raw, 10);
+  if (!Number.isFinite(sid)) return undefined;
+  const live = readLiveMpvTracks(mpv).filter((t) => t.type === "sub");
+  if (live.length === 0) return undefined;
+  const match = live.find((t) => t.id === sid);
+  if (!match) return undefined;
+  // Walk the Jellyfin list in order, counting embeddeds vs externals
+  // until we've skipped `match`'s position within its own group. Mirrors
+  // the inverse of `resolveSubtitleSid` so selection highlighting stays
+  // in sync with the id we sent to mpv on pick.
+  const embedded = live.filter((t) => !t.external);
+  const external = live.filter((t) => t.external);
+  const targetPos = match.external
+    ? external.findIndex((t) => t.id === sid)
+    : embedded.findIndex((t) => t.id === sid);
+  if (targetPos < 0) return undefined;
+  let embIdx = 0;
+  let extIdx = 0;
+  for (const t of tracks) {
+    const isExt = t.deliveryUrl !== undefined;
+    if (isExt === match.external) {
+      if ((isExt ? extIdx : embIdx) === targetPos) return t.index;
+    }
+    if (isExt) extIdx++;
+    else embIdx++;
+  }
+  return undefined;
+}
+
+/** `true` when mpv is currently rendering a subtitle track. */
+export function subtitlesEnabled(mpv: NativeMpv | null): boolean {
+  if (!mpv) return false;
+  const raw = mpv.getProperty("sid");
+  return raw !== "no" && raw !== "" && raw !== "auto";
+}

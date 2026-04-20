@@ -1,4 +1,6 @@
-// Bottom-sheet track picker for audio + subtitle selection.
+// Native iOS form-sheet track picker for audio + subtitle selection.
+// Uses React Native's `Modal` with `presentationStyle="formSheet"` so
+// we get the system card presentation + swipe-down dismissal on iOS.
 // Pure component — tracks come from props, selection fires callbacks.
 //
 // Picker callbacks hand the selected Jellyfin track object up to the
@@ -8,23 +10,12 @@
 // external HTTP sidecars is async, and a naïve `position+1` can land
 // on the wrong track mid-session (see project memory
 // `mpv_subtitle_sid_mapping`).
-//
-// Not a Modal — React Native Modal has orientation quirks under
-// landscape lock. Inline full-screen overlay instead.
 
 import type { AudioStream, SubtitleTrack } from "@jellyfuse/models";
-import {
-  colors,
-  fontSize,
-  fontWeight,
-  opacity,
-  radius,
-  spacing,
-  withAlpha,
-} from "@jellyfuse/theme";
+import { colors, fontSize, fontWeight, opacity, radius, spacing } from "@jellyfuse/theme";
 import { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 
 type Tab = "audio" | "subtitles";
 
@@ -32,6 +23,10 @@ interface Props {
   visible: boolean;
   audioStreams: AudioStream[];
   subtitleTracks: SubtitleTrack[];
+  /** Jellyfin stream index of the currently-playing audio track. */
+  currentAudioIndex: number | undefined;
+  /** Jellyfin stream index of the currently-playing subtitle track, or `undefined` when subs are off. */
+  currentSubtitleIndex: number | undefined;
   /** Called with the picked Jellyfin audio stream — screen resolves the mpv aid. */
   onSelectAudio: (stream: AudioStream) => void;
   /** Called with the picked Jellyfin subtitle track — screen resolves the mpv sid. */
@@ -40,10 +35,31 @@ interface Props {
   onClose: () => void;
 }
 
-export function TrackPicker({
-  visible,
+export function TrackPicker(props: Props) {
+  // Modal mounts in a separate UIViewController, so the root
+  // SafeAreaProvider doesn't propagate in — `useSafeAreaInsets()` would
+  // return zeros and leave the header/content clipped by the notch or
+  // Dynamic Island in landscape. Wrap the modal's children in their own
+  // provider so its descendants read the modal's real insets.
+  return (
+    <Modal
+      visible={props.visible}
+      animationType="slide"
+      presentationStyle="formSheet"
+      onRequestClose={props.onClose}
+    >
+      <SafeAreaProvider>
+        <TrackPickerContent {...props} />
+      </SafeAreaProvider>
+    </Modal>
+  );
+}
+
+function TrackPickerContent({
   audioStreams,
   subtitleTracks,
+  currentAudioIndex,
+  currentSubtitleIndex,
   onSelectAudio,
   onSelectSubtitle,
   onDisableSubtitles,
@@ -52,120 +68,158 @@ export function TrackPicker({
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<Tab>("audio");
 
-  if (!visible) return null;
-
   return (
-    <View style={StyleSheet.absoluteFill}>
-      {/* Backdrop — tap to dismiss */}
-      <Pressable style={styles.backdrop} onPress={onClose} />
-
-      {/* Bottom sheet — inset horizontally to clear notch / Dynamic Island */}
+    <View style={styles.container}>
+      {/* Header — title + close button */}
       <View
         style={[
-          styles.sheet,
+          styles.header,
           {
-            paddingBottom: Math.max(insets.bottom, spacing.lg),
-            paddingLeft: Math.max(insets.left, 0),
-            paddingRight: Math.max(insets.right, 0),
+            paddingTop: Math.max(insets.top, spacing.md),
+            paddingLeft: Math.max(insets.left, spacing.lg),
+            paddingRight: Math.max(insets.right, spacing.lg),
           },
         ]}
       >
-        {/* Tab bar */}
-        <View style={styles.tabBar}>
-          <Pressable
-            onPress={() => setTab("audio")}
-            style={[styles.tab, tab === "audio" && styles.tabActive]}
-          >
-            <Text style={[styles.tabLabel, tab === "audio" && styles.tabLabelActive]}>Audio</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => setTab("subtitles")}
-            style={[styles.tab, tab === "subtitles" && styles.tabActive]}
-          >
-            <Text style={[styles.tabLabel, tab === "subtitles" && styles.tabLabelActive]}>
-              Subtitles
-            </Text>
-          </Pressable>
-        </View>
+        <Text style={styles.title}>Tracks</Text>
+        <Pressable
+          onPress={onClose}
+          hitSlop={12}
+          style={({ pressed }) => [styles.closeBtn, pressed && styles.rowPressed]}
+        >
+          <Text style={styles.closeLabel}>Done</Text>
+        </Pressable>
+      </View>
 
-        {/* Track list */}
-        <ScrollView style={styles.list} bounces={false}>
-          {tab === "audio"
-            ? audioStreams.map((stream) => (
-                <Pressable
-                  key={stream.index}
-                  onPress={() => {
-                    onSelectAudio(stream);
-                    onClose();
-                  }}
-                  style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-                >
-                  <Text style={styles.rowTitle}>{stream.displayTitle}</Text>
-                  {stream.codec ? (
-                    <Text style={styles.rowMeta}>{stream.codec.toUpperCase()}</Text>
-                  ) : null}
-                </Pressable>
-              ))
-            : null}
+      {/* Tab bar */}
+      <View
+        style={[
+          styles.tabBar,
+          {
+            paddingLeft: Math.max(insets.left, spacing.lg),
+            paddingRight: Math.max(insets.right, spacing.lg),
+          },
+        ]}
+      >
+        <Pressable
+          onPress={() => setTab("audio")}
+          style={[styles.tab, tab === "audio" && styles.tabActive]}
+        >
+          <Text style={[styles.tabLabel, tab === "audio" && styles.tabLabelActive]}>Audio</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => setTab("subtitles")}
+          style={[styles.tab, tab === "subtitles" && styles.tabActive]}
+        >
+          <Text style={[styles.tabLabel, tab === "subtitles" && styles.tabLabelActive]}>
+            Subtitles
+          </Text>
+        </Pressable>
+      </View>
 
-          {tab === "subtitles" ? (
-            <>
-              <Pressable
+      {/* Track list */}
+      <ScrollView
+        style={styles.list}
+        contentContainerStyle={{
+          paddingLeft: Math.max(insets.left, spacing.lg),
+          paddingRight: Math.max(insets.right, spacing.lg),
+          paddingBottom: Math.max(insets.bottom, spacing.lg),
+        }}
+      >
+        {tab === "audio"
+          ? audioStreams.map((stream) => (
+              <Row
+                key={stream.index}
+                title={stream.displayTitle}
+                meta={stream.codec ? stream.codec.toUpperCase() : undefined}
+                selected={stream.index === currentAudioIndex}
                 onPress={() => {
-                  onDisableSubtitles();
+                  onSelectAudio(stream);
                   onClose();
                 }}
-                style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-              >
-                <Text style={styles.rowTitle}>Off</Text>
-              </Pressable>
-              {subtitleTracks.map((track) => (
-                <Pressable
-                  key={track.index}
-                  onPress={() => {
-                    onSelectSubtitle(track);
-                    onClose();
-                  }}
-                  style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-                >
-                  <Text style={styles.rowTitle}>
-                    {track.displayTitle}
-                    {track.isForced ? " (Forced)" : ""}
-                  </Text>
-                  {track.codec ? (
-                    <Text style={styles.rowMeta}>{track.codec.toUpperCase()}</Text>
-                  ) : null}
-                </Pressable>
-              ))}
-            </>
-          ) : null}
-        </ScrollView>
-      </View>
+              />
+            ))
+          : null}
+
+        {tab === "subtitles" ? (
+          <>
+            <Row
+              title="Off"
+              selected={currentSubtitleIndex === undefined}
+              onPress={() => {
+                onDisableSubtitles();
+                onClose();
+              }}
+            />
+            {subtitleTracks.map((track) => (
+              <Row
+                key={track.index}
+                title={`${track.displayTitle}${track.isForced ? " (Forced)" : ""}`}
+                meta={track.codec ? track.codec.toUpperCase() : undefined}
+                selected={track.index === currentSubtitleIndex}
+                onPress={() => {
+                  onSelectSubtitle(track);
+                  onClose();
+                }}
+              />
+            ))}
+          </>
+        ) : null}
+      </ScrollView>
     </View>
   );
 }
 
+interface RowProps {
+  title: string;
+  meta?: string;
+  selected: boolean;
+  onPress: () => void;
+}
+
+function Row({ title, meta, selected, onPress }: RowProps) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+    >
+      <View style={styles.checkSlot}>{selected ? <Text style={styles.check}>✓</Text> : null}</View>
+      <Text style={styles.rowTitle}>{title}</Text>
+      {meta ? <Text style={styles.rowMeta}>{meta}</Text> : null}
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: withAlpha(colors.black, opacity.alpha50),
-  },
-  sheet: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
+  container: {
+    flex: 1,
     backgroundColor: colors.surface,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
-    paddingTop: spacing.md,
-    maxHeight: "60%",
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingBottom: spacing.md,
+  },
+  title: {
+    color: colors.textPrimary,
+    fontSize: fontSize.title,
+    fontWeight: fontWeight.bold,
+  },
+  closeBtn: {
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.md,
+  },
+  closeLabel: {
+    color: colors.accent,
+    fontSize: fontSize.body,
+    fontWeight: fontWeight.medium,
   },
   tabBar: {
     flexDirection: "row",
-    paddingHorizontal: spacing.lg,
     gap: spacing.md,
-    marginBottom: spacing.md,
+    paddingBottom: spacing.md,
   },
   tab: {
     paddingVertical: spacing.sm,
@@ -184,18 +238,27 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
   list: {
-    paddingHorizontal: spacing.lg,
+    flex: 1,
   },
   row: {
     paddingVertical: spacing.md,
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
   rowPressed: {
     opacity: opacity.pressed,
+  },
+  checkSlot: {
+    width: spacing.lg,
+    alignItems: "center",
+    marginRight: spacing.sm,
+  },
+  check: {
+    color: colors.accent,
+    fontSize: fontSize.body,
+    fontWeight: fontWeight.bold,
   },
   rowTitle: {
     color: colors.textPrimary,
