@@ -1,5 +1,6 @@
 import { colors, fontSize, layout, spacing } from "@jellyfuse/theme";
 import { router } from "expo-router";
+import { useTranslation } from "react-i18next";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import Animated, { useAnimatedScrollHandler, useSharedValue } from "react-native-reanimated";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -27,6 +28,7 @@ interface Props {
 }
 
 export function MovieDetailScreen({ itemId }: Props) {
+  const { t } = useTranslation();
   const query = useMovieDetail(itemId);
   const downloadRecord = useDownloadForItem(itemId);
   const handleItemDownload = useItemDownload();
@@ -71,9 +73,9 @@ export function MovieDetailScreen({ itemId }: Props) {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.centered}>
-          <Text style={styles.errorTitle}>Couldn&apos;t load this title</Text>
+          <Text style={styles.errorTitle}>{t("detail.error.movieTitle")}</Text>
           <Text style={styles.errorBody}>
-            {query.error instanceof Error ? query.error.message : "Unknown error"}
+            {query.error instanceof Error ? query.error.message : t("detail.error.unknown")}
           </Text>
         </View>
       </SafeAreaView>

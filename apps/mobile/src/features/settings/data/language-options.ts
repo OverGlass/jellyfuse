@@ -1,3 +1,4 @@
+import type { TFunction } from "i18next";
 import type { PickerOption } from "../components/settings-picker-modal";
 
 /**
@@ -12,37 +13,46 @@ import type { PickerOption } from "../components/settings-picker-modal";
  * Jellyfin's behaviour when the field is null/empty (mpv picks based
  * on the track's `isDefault` flag).
  */
-export const LANGUAGE_OPTIONS: PickerOption<string>[] = [
-  { label: "Auto (no preference)", value: "" },
-  { label: "English", value: "eng" },
-  { label: "French", value: "fre" },
-  { label: "Spanish", value: "spa" },
-  { label: "German", value: "ger" },
-  { label: "Italian", value: "ita" },
-  { label: "Portuguese", value: "por" },
-  { label: "Japanese", value: "jpn" },
-  { label: "Korean", value: "kor" },
-  { label: "Chinese (Mandarin)", value: "chi" },
-  { label: "Russian", value: "rus" },
-  { label: "Arabic", value: "ara" },
-  { label: "Dutch", value: "dut" },
-  { label: "Polish", value: "pol" },
-  { label: "Swedish", value: "swe" },
-  { label: "Norwegian", value: "nor" },
-  { label: "Danish", value: "dan" },
-  { label: "Finnish", value: "fin" },
-  { label: "Turkish", value: "tur" },
-  { label: "Hindi", value: "hin" },
+const LANGUAGE_VALUES: { key: string; value: string }[] = [
+  { key: "english", value: "eng" },
+  { key: "french", value: "fre" },
+  { key: "spanish", value: "spa" },
+  { key: "german", value: "ger" },
+  { key: "italian", value: "ita" },
+  { key: "portuguese", value: "por" },
+  { key: "japanese", value: "jpn" },
+  { key: "korean", value: "kor" },
+  { key: "chineseMandarin", value: "chi" },
+  { key: "russian", value: "rus" },
+  { key: "arabic", value: "ara" },
+  { key: "dutch", value: "dut" },
+  { key: "polish", value: "pol" },
+  { key: "swedish", value: "swe" },
+  { key: "norwegian", value: "nor" },
+  { key: "danish", value: "dan" },
+  { key: "finnish", value: "fin" },
+  { key: "turkish", value: "tur" },
+  { key: "hindi", value: "hin" },
 ];
+
+export function languageOptions(t: TFunction): PickerOption<string>[] {
+  return [
+    { label: t("settings.language.autoLabel"), value: "" },
+    ...LANGUAGE_VALUES.map(({ key, value }) => ({
+      label: t(`settings.language.${key}` as "settings.language.english"),
+      value,
+    })),
+  ];
+}
 
 /**
  * Return the human label for a code — falls back to the code itself
  * (uppercased) when not in our curated list, so foreign-authored
  * configs still render something sensible.
  */
-export function labelForLanguageCode(code: string | null | undefined): string {
-  if (!code) return "Auto";
-  const match = LANGUAGE_OPTIONS.find((o) => o.value === code);
-  if (match) return match.label;
+export function labelForLanguageCode(code: string | null | undefined, t: TFunction): string {
+  if (!code) return t("settings.language.auto");
+  const match = LANGUAGE_VALUES.find((o) => o.value === code);
+  if (match) return t(`settings.language.${match.key}` as "settings.language.english");
   return code.toUpperCase();
 }

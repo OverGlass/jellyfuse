@@ -14,6 +14,7 @@
 import type { AudioStream, SubtitleTrack } from "@jellyfuse/models";
 import { colors, fontSize, fontWeight, opacity, radius, spacing } from "@jellyfuse/theme";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -65,6 +66,7 @@ function TrackPickerContent({
   onDisableSubtitles,
   onClose,
 }: Props) {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<Tab>("audio");
 
@@ -81,13 +83,13 @@ function TrackPickerContent({
           },
         ]}
       >
-        <Text style={styles.title}>Tracks</Text>
+        <Text style={styles.title}>{t("player.tracks.title")}</Text>
         <Pressable
           onPress={onClose}
           hitSlop={12}
           style={({ pressed }) => [styles.closeBtn, pressed && styles.rowPressed]}
         >
-          <Text style={styles.closeLabel}>Done</Text>
+          <Text style={styles.closeLabel}>{t("common.done")}</Text>
         </Pressable>
       </View>
 
@@ -105,14 +107,16 @@ function TrackPickerContent({
           onPress={() => setTab("audio")}
           style={[styles.tab, tab === "audio" && styles.tabActive]}
         >
-          <Text style={[styles.tabLabel, tab === "audio" && styles.tabLabelActive]}>Audio</Text>
+          <Text style={[styles.tabLabel, tab === "audio" && styles.tabLabelActive]}>
+            {t("player.tracks.audio")}
+          </Text>
         </Pressable>
         <Pressable
           onPress={() => setTab("subtitles")}
           style={[styles.tab, tab === "subtitles" && styles.tabActive]}
         >
           <Text style={[styles.tabLabel, tab === "subtitles" && styles.tabLabelActive]}>
-            Subtitles
+            {t("player.tracks.subtitles")}
           </Text>
         </Pressable>
       </View>
@@ -144,7 +148,7 @@ function TrackPickerContent({
         {tab === "subtitles" ? (
           <>
             <Row
-              title="Off"
+              title={t("player.subtitle.off")}
               selected={currentSubtitleIndex === undefined}
               onPress={() => {
                 onDisableSubtitles();
@@ -154,7 +158,7 @@ function TrackPickerContent({
             {subtitleTracks.map((track) => (
               <Row
                 key={track.index}
-                title={`${track.displayTitle}${track.isForced ? " (Forced)" : ""}`}
+                title={`${track.displayTitle}${track.isForced ? ` (${t("player.tracks.forced")})` : ""}`}
                 meta={track.codec ? track.codec.toUpperCase() : undefined}
                 selected={track.index === currentSubtitleIndex}
                 onPress={() => {

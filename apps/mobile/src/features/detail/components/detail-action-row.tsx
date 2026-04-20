@@ -1,5 +1,6 @@
 import { colors, fontSize, fontWeight, opacity, radius, spacing } from "@jellyfuse/theme";
 import { type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 /**
@@ -32,7 +33,14 @@ export function DetailActionRow({
   onRequest,
   canPlay = true,
 }: Props) {
-  const primaryLabel = !canPlay ? "Offline" : hasResume ? "Resume" : "Play";
+  const { t } = useTranslation();
+  const primaryLabel = !canPlay
+    ? t("detail.action.offline")
+    : hasResume
+      ? t("detail.resume")
+      : t("detail.play");
+  const downloadLabel = t("detail.action.download");
+  const requestLabel = t("detail.action.request");
   return (
     <View style={styles.root}>
       <Pressable
@@ -54,21 +62,21 @@ export function DetailActionRow({
         (onDownload ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Download"
+            accessibilityLabel={downloadLabel}
             onPress={onDownload}
             style={({ pressed }) => [styles.secondary, pressed && styles.secondaryPressed]}
           >
-            <Text style={styles.secondaryLabel}>Download</Text>
+            <Text style={styles.secondaryLabel}>{downloadLabel}</Text>
           </Pressable>
         ) : null)}
       {onRequest ? (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Request"
+          accessibilityLabel={requestLabel}
           onPress={onRequest}
           style={({ pressed }) => [styles.secondary, pressed && styles.secondaryPressed]}
         >
-          <Text style={styles.secondaryLabel}>Request</Text>
+          <Text style={styles.secondaryLabel}>{requestLabel}</Text>
         </Pressable>
       ) : null}
     </View>

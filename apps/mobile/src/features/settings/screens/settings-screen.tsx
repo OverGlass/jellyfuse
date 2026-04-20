@@ -23,6 +23,7 @@
  * subscriptions (see memory: `feedback_no_async_useeffect`).
  */
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { useAnimatedScrollHandler } from "react-native-reanimated";
@@ -55,9 +56,9 @@ import { JellyseerrReconnectModal } from "../components/jellyseerr-reconnect-mod
 import { SettingsPickerModal } from "../components/settings-picker-modal";
 import { SettingsRow } from "../components/settings-row";
 import { SettingsSection } from "../components/settings-section";
-import { LANGUAGE_OPTIONS, labelForLanguageCode } from "../data/language-options";
-import { SUBTITLE_MODE_OPTIONS, labelForSubtitleMode } from "../data/subtitle-mode-options";
-import { STREAMING_BITRATE_OPTIONS, labelForBitrate } from "../data/bitrate-options";
+import { labelForLanguageCode, languageOptions } from "../data/language-options";
+import { labelForSubtitleMode, subtitleModeOptions } from "../data/subtitle-mode-options";
+import { labelForBitrate, streamingBitrateOptions } from "../data/bitrate-options";
 
 const AnimatedScrollView = Animated.createAnimatedComponent(ScrollView);
 
@@ -70,6 +71,7 @@ type PickerKind =
   | null;
 
 export function SettingsScreen() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const gutters = useScreenGutters();
   const queryClient = useQueryClient();
@@ -118,33 +120,37 @@ export function SettingsScreen() {
   }
 
   function handleSignOut(): void {
-    Alert.alert("Sign out of all profiles?", "This clears every user on this device.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Sign out",
-        style: "destructive",
-        onPress: () => {
-          // Run the mutation first — its onSuccess flips
-          // PERSISTED_AUTH_KEY to the signed-out shape, which triggers
-          // every useAuth observer (incl. the (app) layout guard) to
-          // redirect through the root. Firing router.replace("/")
-          // before the mutation would mount IndexRoute while still
-          // authenticated, bouncing back to (app) before the state
-          // flipped.
-          void signOutAll();
+    Alert.alert(
+      t("settings.account.signOut.confirmTitle"),
+      t("settings.account.signOut.confirmBody"),
+      [
+        { text: t("common.cancel"), style: "cancel" },
+        {
+          text: t("settings.account.signOut.confirm"),
+          style: "destructive",
+          onPress: () => {
+            // Run the mutation first — its onSuccess flips
+            // PERSISTED_AUTH_KEY to the signed-out shape, which triggers
+            // every useAuth observer (incl. the (app) layout guard) to
+            // redirect through the root. Firing router.replace("/")
+            // before the mutation would mount IndexRoute while still
+            // authenticated, bouncing back to (app) before the state
+            // flipped.
+            void signOutAll();
+          },
         },
-      },
-    ]);
+      ],
+    );
   }
 
   function handleChangeServer(): void {
     Alert.alert(
-      "Change server?",
-      "You'll be signed out of every profile on this device and redirected to pick a new server.",
+      t("settings.account.changeServer.confirmTitle"),
+      t("settings.account.changeServer.confirmBody"),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("common.cancel"), style: "cancel" },
         {
-          text: "Change server",
+          text: t("settings.account.changeServer.confirm"),
           style: "destructive",
           onPress: () => {
             // (auth) has no auth-based redirect, so we can navigate
@@ -178,7 +184,7 @@ export function SettingsScreen() {
         {activeUser ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Switch profile"
+            accessibilityLabel={t("settings.account.switchProfile.ariaLabel")}
             onPress={() => router.push("/profile-picker")}
             style={({ pressed }) => [styles.accountCard, pressed && { opacity: opacity.pressed }]}
           >
@@ -212,33 +218,33 @@ export function SettingsScreen() {
                 {serverVersion ? ` · v${serverVersion}` : ""}
               </Text>
             </View>
-            <Text style={styles.accountSwitch}>Switch</Text>
+            <Text style={styles.accountSwitch}>{t("settings.account.switchProfile.switch")}</Text>
           </Pressable>
         ) : null}
 
         <SettingsSection
-          title="Playback"
-          footer="Preferences are saved to your Jellyfin account and applied across every device signed in."
+          title={t("settings.playback.title")}
+          footer={t("settings.playback.footer")}
         >
           <SettingsRow
-            label="Audio language"
-            value={labelForLanguageCode(config.audioLanguagePreference)}
+            label={t("settings.playback.audioLanguage")}
+            value={labelForLanguageCode(config.audioLanguagePreference, t)}
             onPress={() => setPicker("audioLang")}
             hasDivider={false}
           />
           <SettingsRow
-            label="Subtitle language"
-            value={labelForLanguageCode(config.subtitleLanguagePreference)}
+            label={t("settings.playback.subtitleLanguage")}
+            value={labelForLanguageCode(config.subtitleLanguagePreference, t)}
             onPress={() => setPicker("subtitleLang")}
           />
           <SettingsRow
-            label="Subtitle mode"
-            value={labelForSubtitleMode(config.subtitleMode)}
+            label={t("settings.playback.subtitleMode")}
+            value={labelForSubtitleMode(config.subtitleMode, t)}
             onPress={() => setPicker("subtitleMode")}
           />
           <SettingsRow
-            label="Play default audio track"
-            sublabel="Use the track marked default regardless of language preference"
+            label={t("settings.playback.playDefaultAudio")}
+            sublabel={t("settings.playback.playDefaultAudioSub")}
             trailing={
               <Switch
                 value={config.playDefaultAudioTrack}
@@ -249,8 +255,8 @@ export function SettingsScreen() {
             }
           />
           <SettingsRow
-            label="Remember audio selections"
-            sublabel="Keep the audio track you pick across sessions"
+            label={t("settings.playback.rememberAudio")}
+            sublabel={t("settings.playback.rememberAudioSub")}
             trailing={
               <Switch
                 value={config.rememberAudioSelections}
@@ -261,8 +267,8 @@ export function SettingsScreen() {
             }
           />
           <SettingsRow
-            label="Remember subtitle selections"
-            sublabel="Keep the subtitle track you pick across sessions"
+            label={t("settings.playback.rememberSubtitles")}
+            sublabel={t("settings.playback.rememberSubtitlesSub")}
             trailing={
               <Switch
                 value={config.rememberSubtitleSelections}
@@ -273,7 +279,7 @@ export function SettingsScreen() {
             }
           />
           <SettingsRow
-            label="Auto-play next episode"
+            label={t("settings.playback.autoPlayNextEpisode")}
             trailing={
               <Switch
                 value={config.enableNextEpisodeAutoPlay}
@@ -286,12 +292,12 @@ export function SettingsScreen() {
         </SettingsSection>
 
         <SettingsSection
-          title="Streaming"
-          footer="Only applied on this device. The cap lets the server transcode down when your network is constrained."
+          title={t("settings.streaming.title")}
+          footer={t("settings.streaming.footer")}
         >
           <SettingsRow
-            label="Max streaming bitrate"
-            value={labelForBitrate(local.maxStreamingBitrateMbps)}
+            label={t("settings.streaming.maxBitrate")}
+            value={labelForBitrate(local.maxStreamingBitrateMbps, t)}
             onPress={() => setPicker("bitrate")}
             hasDivider={false}
           />
@@ -299,18 +305,21 @@ export function SettingsScreen() {
 
         {jellyseerrUrl ? (
           <SettingsSection
-            title="Requests"
+            title={t("settings.requests.title")}
             footer={
               jellyseerrStatus === "disconnected"
-                ? (jellyseerrLastError ??
-                  "Your Jellyseerr session expired. Reconnect with your Jellyfin password.")
+                ? (jellyseerrLastError ?? t("settings.jellyseerr.defaultError"))
                 : undefined
             }
           >
             <SettingsRow
-              label="Jellyseerr"
+              label={t("settings.jellyseerr.row.label")}
               sublabel={jellyseerrUrl}
-              value={jellyseerrStatus === "connected" ? "Connected" : "Disconnected"}
+              value={
+                jellyseerrStatus === "connected"
+                  ? t("settings.jellyseerr.connected")
+                  : t("settings.jellyseerr.disconnected")
+              }
               showChevron={jellyseerrStatus === "disconnected"}
               onPress={
                 jellyseerrStatus === "disconnected"
@@ -322,19 +331,19 @@ export function SettingsScreen() {
           </SettingsSection>
         ) : null}
 
-        <SettingsSection title="Account">
+        <SettingsSection title={t("settings.account.title")}>
           <SettingsRow
-            label="Switch profile"
+            label={t("settings.account.switchProfile")}
             onPress={() => router.push("/profile-picker")}
             hasDivider={false}
           />
-          <SettingsRow label="Change server" onPress={handleChangeServer} />
-          <SettingsRow label="Sign out of all profiles" destructive onPress={handleSignOut} />
+          <SettingsRow label={t("settings.account.changeServer")} onPress={handleChangeServer} />
+          <SettingsRow label={t("settings.account.signOut")} destructive onPress={handleSignOut} />
         </SettingsSection>
       </AnimatedScrollView>
 
       <ScreenHeader
-        title="Settings"
+        title={t("settings.title")}
         backdropStyle={backdropStyle}
         onTotalHeightChange={onHeaderHeightChange}
       />
@@ -342,8 +351,8 @@ export function SettingsScreen() {
 
       <SettingsPickerModal
         visible={picker === "audioLang"}
-        title="Audio language"
-        options={LANGUAGE_OPTIONS}
+        title={t("settings.playback.audioLanguage")}
+        options={languageOptions(t)}
         selectedValue={config.audioLanguagePreference ?? ""}
         onSelect={(code) => {
           patchConfig("audioLanguagePreference", code === "" ? null : code);
@@ -353,8 +362,8 @@ export function SettingsScreen() {
       />
       <SettingsPickerModal
         visible={picker === "subtitleLang"}
-        title="Subtitle language"
-        options={LANGUAGE_OPTIONS}
+        title={t("settings.playback.subtitleLanguage")}
+        options={languageOptions(t)}
         selectedValue={config.subtitleLanguagePreference ?? ""}
         onSelect={(code) => {
           patchConfig("subtitleLanguagePreference", code === "" ? null : code);
@@ -364,8 +373,8 @@ export function SettingsScreen() {
       />
       <SettingsPickerModal
         visible={picker === "subtitleMode"}
-        title="Subtitle mode"
-        options={SUBTITLE_MODE_OPTIONS}
+        title={t("settings.playback.subtitleMode")}
+        options={subtitleModeOptions(t)}
         selectedValue={config.subtitleMode}
         onSelect={(mode) => {
           patchConfig("subtitleMode", mode);
@@ -375,8 +384,8 @@ export function SettingsScreen() {
       />
       <SettingsPickerModal
         visible={picker === "bitrate"}
-        title="Max streaming bitrate"
-        options={STREAMING_BITRATE_OPTIONS}
+        title={t("settings.streaming.maxBitrate")}
+        options={streamingBitrateOptions(t)}
         selectedValue={local.maxStreamingBitrateMbps ?? 0}
         onSelect={handleSelectBitrate}
         onClose={() => setPicker(null)}

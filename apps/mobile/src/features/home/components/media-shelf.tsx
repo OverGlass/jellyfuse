@@ -1,6 +1,7 @@
 import type { MediaItem } from "@jellyfuse/api";
 import { colors, fontSize, fontWeight, opacity, spacing } from "@jellyfuse/theme";
 import { FlashList } from "@shopify/flash-list";
+import { useTranslation } from "react-i18next";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { NerdIcon } from "@/features/common/components/nerd-icon";
 import { MediaCard } from "@/features/home/components/media-card";
@@ -37,6 +38,7 @@ interface Props {
 }
 
 export function MediaShelf({ title, items, variant = "poster", onItemPress, onSeeAll }: Props) {
+  const { t } = useTranslation();
   const { values } = useBreakpoint();
   const gutters = useScreenGutters();
   return (
@@ -46,11 +48,11 @@ export function MediaShelf({ title, items, variant = "poster", onItemPress, onSe
         {onSeeAll ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`See all ${title}`}
+            accessibilityLabel={t("common.seeAllAriaLabel", { title })}
             onPress={onSeeAll}
             style={({ pressed }) => [styles.seeAll, pressed && styles.seeAllPressed]}
           >
-            <Text style={styles.seeAllLabel}>See all</Text>
+            <Text style={styles.seeAllLabel}>{t("common.seeAll")}</Text>
             <NerdIcon name="chevronRight" size={10} color={colors.accent} />
           </Pressable>
         ) : null}

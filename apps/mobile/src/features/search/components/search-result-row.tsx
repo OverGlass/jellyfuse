@@ -2,6 +2,7 @@ import type { MediaItem } from "@jellyfuse/api";
 import { mediaItemSubtitle } from "@jellyfuse/models";
 import { colors, fontSize, fontWeight, opacity, radius, spacing } from "@jellyfuse/theme";
 import { Image } from "expo-image";
+import { useTranslation } from "react-i18next";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 /**
@@ -73,8 +74,9 @@ interface BadgeProps {
 }
 
 function SourceBadge({ source }: BadgeProps) {
+  const { t } = useTranslation();
   const isRequest = source === "jellyseerr";
-  const label = isRequest ? "Request" : "Library";
+  const label = isRequest ? t("search.result.request") : t("search.result.library");
   return (
     <View style={[styles.badge, isRequest ? styles.badgeRequest : styles.badgeLibrary]}>
       <Text style={[styles.badgeLabel, isRequest && styles.badgeLabelRequest]}>{label}</Text>

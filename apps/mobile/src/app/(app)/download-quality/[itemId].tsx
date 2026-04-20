@@ -19,6 +19,7 @@ import { colors } from "@jellyfuse/theme";
 import { useQueryClient } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { Alert, StyleSheet, View } from "react-native";
 import { apiFetchAuthenticated } from "@/services/api/client";
 import { buildAuthContextForUser } from "@/services/auth/auth-context-builder";
@@ -35,6 +36,7 @@ import {
 } from "@/features/downloads/components/quality-picker";
 
 export default function DownloadQualityRoute() {
+  const { t } = useTranslation();
   const { itemId } = useLocalSearchParams<{ itemId: string }>();
   const queryClient = useQueryClient();
   const { serverUrl, activeUser } = useAuth();
@@ -100,10 +102,13 @@ export default function DownloadQualityRoute() {
           downloader,
         });
       } catch (e) {
-        Alert.alert("Download failed", e instanceof Error ? e.message : "Unknown error");
+        Alert.alert(
+          t("downloads.enqueue.error.title"),
+          e instanceof Error ? e.message : t("downloads.enqueue.error.unknown"),
+        );
       }
     },
-    [itemId, serverUrl, activeUser, queryClient, actions, downloader, resolverSettings],
+    [itemId, serverUrl, activeUser, queryClient, actions, downloader, resolverSettings, t],
   );
 
   return (

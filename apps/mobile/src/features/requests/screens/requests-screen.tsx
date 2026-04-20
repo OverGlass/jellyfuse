@@ -2,6 +2,7 @@ import type { MediaRequest } from "@jellyfuse/models";
 import { colors, fontSize, fontWeight, spacing } from "@jellyfuse/theme";
 import { FlashList } from "@shopify/flash-list";
 import { router } from "expo-router";
+import { useTranslation } from "react-i18next";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import Animated, { useAnimatedScrollHandler } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -41,6 +42,7 @@ const AnimatedFlashList = Animated.createAnimatedComponent(FlashList<MediaReques
  * - Empty list → friendly zero-state pointing at search.
  */
 export function RequestsScreen() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { jellyseerrStatus } = useAuth();
   const requestsQuery = useJellyseerrRequests();
@@ -60,14 +62,12 @@ export function RequestsScreen() {
     return (
       <View style={styles.root}>
         <View style={[styles.centered, { paddingTop: headerHeight + spacing.xxl }]}>
-          <Text style={styles.emptyTitle}>Jellyseerr not connected</Text>
-          <Text style={styles.emptyBody}>
-            Sign in to Jellyseerr from the auth flow to see your media requests here.
-          </Text>
+          <Text style={styles.emptyTitle}>{t("requests.notConnected.title")}</Text>
+          <Text style={styles.emptyBody}>{t("requests.notConnected.body")}</Text>
         </View>
         <ScreenHeader
           showBack
-          title="Requests"
+          title={t("requests.title")}
           backdropStyle={backdropStyle}
           onTotalHeightChange={onHeaderHeightChange}
         />
@@ -104,20 +104,18 @@ export function RequestsScreen() {
             ) : null}
             {hasError ? (
               <View style={styles.centered}>
-                <Text style={styles.emptyTitle}>Couldn&apos;t load requests</Text>
+                <Text style={styles.emptyTitle}>{t("requests.error.title")}</Text>
                 <Text style={styles.emptyBody}>
                   {requestsQuery.error instanceof Error
                     ? requestsQuery.error.message
-                    : "Unknown error"}
+                    : t("requests.error.unknown")}
                 </Text>
               </View>
             ) : null}
             {isEmpty ? (
               <View style={styles.centered}>
-                <Text style={styles.emptyTitle}>No requests yet</Text>
-                <Text style={styles.emptyBody}>
-                  Search for a movie or show and tap the Request badge to kick one off.
-                </Text>
+                <Text style={styles.emptyTitle}>{t("requests.empty.title")}</Text>
+                <Text style={styles.emptyBody}>{t("requests.empty.body")}</Text>
               </View>
             ) : null}
           </View>
@@ -132,7 +130,7 @@ export function RequestsScreen() {
       />
       <ScreenHeader
         showBack
-        title="Requests"
+        title={t("requests.title")}
         backdropStyle={backdropStyle}
         onTotalHeightChange={onHeaderHeightChange}
       />

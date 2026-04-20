@@ -1,6 +1,7 @@
 import { NerdIcon } from "@/features/common/components/nerd-icon";
 import { PillTabBar } from "@/features/common/components/pill-tab-bar";
 import { Tabs } from "expo-router";
+import { useTranslation } from "react-i18next";
 
 /**
  * Bottom tab bar layout for the main app. Uses the custom `PillTabBar`
@@ -14,6 +15,7 @@ import { Tabs } from "expo-router";
  * `PillTabBar` which skips routes named "index".
  */
 export default function TabsLayout() {
+  const { t } = useTranslation();
   return (
     <Tabs screenOptions={{ headerShown: false }} tabBar={(props) => <PillTabBar {...props} />}>
       {/* Redirect stub — skipped by PillTabBar. */}
@@ -22,21 +24,21 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="home"
         options={{
-          title: "Home",
+          title: t("tabs.home"),
           tabBarIcon: ({ color, size }) => <NerdIcon name="home" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="downloads"
         options={{
-          title: "Downloads",
+          title: t("tabs.downloads"),
           tabBarIcon: ({ color, size }) => <NerdIcon name="download" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
-          title: "Settings",
+          title: t("tabs.settings"),
           tabBarIcon: ({ color, size }) => <NerdIcon name="settings" size={size} color={color} />,
         }}
       />

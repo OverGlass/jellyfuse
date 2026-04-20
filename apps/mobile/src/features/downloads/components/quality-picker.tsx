@@ -6,21 +6,21 @@
 // MP4 via `/Videos/{id}/stream.mp4?Static=false&MaxStreamingBitrate=N`.
 
 import { colors, fontSize, fontWeight, opacity, spacing } from "@jellyfuse/theme";
+import { useTranslation } from "react-i18next";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 export interface DownloadQuality {
-  label: string;
+  /** Stable identifier passed back to the caller — not user-visible. */
+  key: "original" | "high" | "medium" | "low";
   /** Bitrate cap in bits per second. Undefined = Original (source file). */
   maxBitrate?: number;
-  /** Human-readable subtitle — shown under the label. */
-  hint: string;
 }
 
 export const DOWNLOAD_QUALITIES: DownloadQuality[] = [
-  { label: "Original", hint: "Source file · all tracks" },
-  { label: "High", maxBitrate: 20_000_000, hint: "Up to 20 Mbps · 1080p" },
-  { label: "Medium", maxBitrate: 8_000_000, hint: "Up to 8 Mbps · 720p" },
-  { label: "Low", maxBitrate: 3_000_000, hint: "Up to 3 Mbps · 480p" },
+  { key: "original" },
+  { key: "high", maxBitrate: 20_000_000 },
+  { key: "medium", maxBitrate: 8_000_000 },
+  { key: "low", maxBitrate: 3_000_000 },
 ];
 
 interface Props {
@@ -33,29 +33,28 @@ interface Props {
 }
 
 export function QualityPicker({ onSelect, durationSeconds }: Props) {
+  const { t } = useTranslation();
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Download quality</Text>
+      <Text style={styles.title}>{t("downloads.quality.title")}</Text>
       {DOWNLOAD_QUALITIES.map((quality) => {
         const sizeHint = qualitySizeHint(quality, durationSeconds);
+        const label = t(`downloads.quality.${quality.key}` as "downloads.quality.original");
+        const hint = t(`downloads.quality.${quality.key}Hint` as "downloads.quality.originalHint");
         return (
           <Pressable
-            key={quality.label}
+            key={quality.key}
             onPress={() => onSelect(quality)}
             style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
           >
             <View style={styles.rowText}>
-              <Text style={styles.rowLabel}>{quality.label}</Text>
-              <Text style={styles.rowHint}>
-                {sizeHint ? `${quality.hint} · ≈ ${sizeHint}` : quality.hint}
-              </Text>
+              <Text style={styles.rowLabel}>{label}</Text>
+              <Text style={styles.rowHint}>{sizeHint ? `${hint} · ≈ ${sizeHint}` : hint}</Text>
             </View>
           </Pressable>
         );
       })}
-      <Text style={styles.footnote}>
-        Non-Original qualities transcode on the server at ~1× playback speed.
-      </Text>
+      <Text style={styles.footnote}>{t("downloads.quality.footnote")}</Text>
     </View>
   );
 }

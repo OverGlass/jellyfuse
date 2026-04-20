@@ -17,6 +17,8 @@ import { colors, fontSize, fontWeight, spacing } from "@jellyfuse/theme";
 import type { DownloadRecord } from "@jellyfuse/models";
 import { FlashList } from "@shopify/flash-list";
 import { router } from "expo-router";
+import type { TFunction } from "i18next";
+import { useTranslation } from "react-i18next";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { useAnimatedScrollHandler } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -34,12 +36,12 @@ type Section = { type: "header"; label: string } | { type: "row"; record: Downlo
 
 const AnimatedFlashList = Animated.createAnimatedComponent(FlashList<Section>);
 
-function buildSections(records: DownloadRecord[]): Section[] {
+function buildSections(records: DownloadRecord[], t: TFunction): Section[] {
   const groups: { label: string; states: DownloadRecord["state"][] }[] = [
-    { label: "In Progress", states: ["downloading"] },
-    { label: "Paused", states: ["paused", "queued"] },
-    { label: "Completed", states: ["done"] },
-    { label: "Failed", states: ["failed"] },
+    { label: t("downloads.section.inProgress"), states: ["downloading"] },
+    { label: t("downloads.section.paused"), states: ["paused", "queued"] },
+    { label: t("downloads.section.completed"), states: ["done"] },
+    { label: t("downloads.section.failed"), states: ["failed"] },
   ];
 
   const sections: Section[] = [];
@@ -57,11 +59,12 @@ function buildSections(records: DownloadRecord[]): Section[] {
 }
 
 export function DownloadsScreen() {
+  const { t } = useTranslation();
   const actions = useDownloaderActions();
   const records = useLocalDownloads();
   const insets = useSafeAreaInsets();
 
-  const sections = buildSections(records);
+  const sections = buildSections(records, t);
   const { headerHeight, onHeaderHeightChange, scrollY, backdropStyle } = useFloatingHeaderScroll();
   const scrollRestore = useRestoredScroll("/downloads");
   const scrollHandler = useAnimatedScrollHandler({
@@ -76,15 +79,23 @@ export function DownloadsScreen() {
     onPause: (id) => actions.pause(id),
     onResume: (id) => actions.resume(id),
     onCancel: (id) => {
-      Alert.alert("Cancel Download", "Cancel and discard this download?", [
-        { text: "Keep", style: "cancel" },
-        { text: "Cancel Download", style: "destructive", onPress: () => actions.cancel(id) },
+      Alert.alert(t("downloads.cancel.confirmTitle"), t("downloads.cancel.confirmBody"), [
+        { text: t("downloads.cancel.confirmKeep"), style: "cancel" },
+        {
+          text: t("downloads.cancel.confirm"),
+          style: "destructive",
+          onPress: () => actions.cancel(id),
+        },
       ]);
     },
     onDelete: (id) => {
-      Alert.alert("Delete Download", "Remove this downloaded file?", [
-        { text: "Keep", style: "cancel" },
-        { text: "Delete", style: "destructive", onPress: () => actions.remove(id) },
+      Alert.alert(t("downloads.delete.confirmTitle"), t("downloads.delete.confirmBody"), [
+        { text: t("downloads.delete.confirmKeep"), style: "cancel" },
+        {
+          text: t("downloads.delete.confirm"),
+          style: "destructive",
+          onPress: () => actions.remove(id),
+        },
       ]);
     },
     onRetry: (id) => {
@@ -100,10 +111,10 @@ export function DownloadsScreen() {
   };
 
   function handleClearAll() {
-    Alert.alert("Clear All Downloads", "Delete all downloaded files? This cannot be undone.", [
-      { text: "Cancel", style: "cancel" },
+    Alert.alert(t("downloads.clearAll.confirmTitle"), t("downloads.clearAll.confirmBody"), [
+      { text: t("common.cancel"), style: "cancel" },
       {
-        text: "Delete All",
+        text: t("downloads.clearAll.confirm"),
         style: "destructive",
         onPress: () => actions.clearAll(),
       },
@@ -120,10 +131,8 @@ export function DownloadsScreen() {
       {isEmpty ? (
         <View style={[styles.empty, { paddingTop: headerHeight + spacing.xxl }]}>
           <NerdIcon name="download" size={48} color={colors.textMuted} />
-          <Text style={styles.emptyTitle}>No downloads yet</Text>
-          <Text style={styles.emptyBody}>
-            Tap the download button on any movie or episode to save it for offline viewing.
-          </Text>
+          <Text style={styles.emptyTitle}>{t("downloads.empty.title")}</Text>
+          <Text style={styles.emptyBody}>{t("downloads.empty.body")}</Text>
         </View>
       ) : (
         <AnimatedFlashList
@@ -150,14 +159,14 @@ export function DownloadsScreen() {
       )}
 
       <ScreenHeader
-        title="Downloads"
+        title={t("tabs.downloads")}
         backdropStyle={backdropStyle}
         onTotalHeightChange={onHeaderHeightChange}
         rightSlot={
           records.length > 0 ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Clear all downloads"
+              accessibilityLabel={t("downloads.clearAll.ariaLabel")}
               onPress={handleClearAll}
               style={styles.clearBtn}
             >

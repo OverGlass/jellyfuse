@@ -1,3 +1,4 @@
+import type { TFunction } from "i18next";
 import type { PickerOption } from "../components/settings-picker-modal";
 
 /**
@@ -10,8 +11,7 @@ import type { PickerOption } from "../components/settings-picker-modal";
  * 1_000_000 → bits per second) so the server picks transcode vs
  * DirectPlay against the user's network ceiling.
  */
-export const STREAMING_BITRATE_OPTIONS: PickerOption<number>[] = [
-  { label: "Auto", sublabel: "Let Jellyfin decide", value: 0 },
+const BITRATE_VALUES: { value: number; label: string }[] = [
   { label: "Highest (120 Mbps)", value: 120 },
   { label: "40 Mbps", value: 40 },
   { label: "20 Mbps", value: 20 },
@@ -28,9 +28,16 @@ export const STREAMING_BITRATE_OPTIONS: PickerOption<number>[] = [
   { label: "420 Kbps", value: 0.42 },
 ];
 
-export function labelForBitrate(mbps: number | undefined): string {
-  if (mbps === undefined) return "Auto";
-  const match = STREAMING_BITRATE_OPTIONS.find((o) => o.value === mbps);
+export function streamingBitrateOptions(t: TFunction): PickerOption<number>[] {
+  return [
+    { label: t("settings.bitrate.auto"), sublabel: t("settings.bitrate.autoHint"), value: 0 },
+    ...BITRATE_VALUES,
+  ];
+}
+
+export function labelForBitrate(mbps: number | undefined, t: TFunction): string {
+  if (mbps === undefined) return t("settings.bitrate.auto");
+  const match = BITRATE_VALUES.find((o) => o.value === mbps);
   if (match) return match.label;
   return `${mbps} Mbps`;
 }
