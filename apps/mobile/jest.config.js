@@ -2,6 +2,7 @@
 module.exports = {
   preset: "jest-expo",
   testMatch: ["**/__tests__/**/*.{ts,tsx}", "**/*.test.{ts,tsx}"],
+  setupFiles: ["<rootDir>/jest.setup.ts"],
   // jest-expo's transformIgnorePatterns already covers the usual RN packages;
   // we extend it here for the extras we use (nitro, mmkv, flash-list, tanstack).
   transformIgnorePatterns: [
