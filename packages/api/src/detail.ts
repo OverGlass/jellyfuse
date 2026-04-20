@@ -116,6 +116,41 @@ export async function fetchEpisodes(
   return mapItemsResponse(args.baseUrl, raw, "episodes");
 }
 
+export interface AdjacentEpisodeFetchArgs {
+  baseUrl: string;
+  userId: string;
+  seriesId: string;
+  episodeId: string;
+}
+
+/**
+ * `GET /Shows/{seriesId}/Episodes?StartItemId=…&Limit=2` — fetch the
+ * current episode + the next one, return the next (or `null` at the
+ * end of the series). Mirrors `JellyfinClient::get_adjacent_episode`
+ * in `crates/jf-api/src/jellyfin.rs` — one API call, handles
+ * end-of-season boundaries by walking the full episode order the
+ * server returns.
+ */
+export async function fetchAdjacentEpisode(
+  args: AdjacentEpisodeFetchArgs,
+  fetcher: FetchLike,
+  signal?: AbortSignal,
+): Promise<MediaItem | null> {
+  const url = buildUrl(args.baseUrl, `/Shows/${args.seriesId}/Episodes`, {
+    UserId: args.userId,
+    StartItemId: args.episodeId,
+    Limit: "2",
+    Fields: "Overview,UserData,ImageTags,ParentIndexNumber,IndexNumber,RunTimeTicks",
+  });
+  const response = await fetcher(url, signal ? { signal } : undefined);
+  if (!response.ok) throw new DetailHttpError(args.episodeId, response.status);
+  const raw = await response.json();
+  const items = mapItemsResponse(args.baseUrl, raw, "adjacent-episode");
+  // Jellyfin returns [current, next]; drop the current and take the
+  // second, or null when we're on the series finale.
+  return items[1] ?? null;
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Local helpers
 // ──────────────────────────────────────────────────────────────────────────────

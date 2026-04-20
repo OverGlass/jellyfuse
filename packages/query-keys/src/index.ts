@@ -94,6 +94,9 @@ export const queryKeys = {
     ["detail", userId, "tmdb", tmdbId, mediaType] as const,
   seasonEpisodes: (userId: string, seasonId: string) =>
     ["detail", userId, "season-episodes", seasonId] as const,
+  /** Next episode after a given episode — used by player autoplay. */
+  adjacentEpisode: (userId: string, seriesId: string, episodeId: string) =>
+    ["detail", userId, "adjacent-episode", seriesId, episodeId] as const,
   seasonInfo: (userId: string, tmdbId: number) =>
     ["detail", userId, "season-info", tmdbId] as const,
 

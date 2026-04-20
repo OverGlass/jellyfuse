@@ -1,4 +1,5 @@
 import {
+  fetchAdjacentEpisode,
   fetchEpisodes,
   fetchItemDetail,
   fetchJellyseerrMediaDetail,
@@ -103,6 +104,36 @@ export function useEpisodes(
       );
     },
     enabled: Boolean(serverUrl && userId && seriesId && seasonId),
+    staleTime: STALE_TIMES.seasonEpisodes,
+  });
+}
+
+/**
+ * Fetch the episode that plays after `episodeId` within `seriesId`, or
+ * `null` at the end of the series. One API call via `StartItemId` —
+ * mirrors `JellyfinClient::get_adjacent_episode` in the Rust reference.
+ * Used by the player to pre-fetch the next-episode metadata so autoplay
+ * on EOF can navigate without an extra round-trip.
+ */
+export function useAdjacentEpisode(
+  seriesId: string | undefined,
+  episodeId: string | undefined,
+): UseQueryResult<MediaItem | null> {
+  const { serverUrl, activeUser } = useAuth();
+  const userId = activeUser?.userId;
+  return useQuery({
+    queryKey: queryKeys.adjacentEpisode(userId ?? "", seriesId ?? "", episodeId ?? ""),
+    queryFn: ({ signal }) => {
+      if (!serverUrl || !userId || !seriesId || !episodeId) {
+        throw new Error("useAdjacentEpisode called without full auth context");
+      }
+      return fetchAdjacentEpisode(
+        { baseUrl: serverUrl, userId, seriesId, episodeId },
+        apiFetchAuthenticated,
+        signal,
+      );
+    },
+    enabled: Boolean(serverUrl && userId && seriesId && episodeId),
     staleTime: STALE_TIMES.seasonEpisodes,
   });
 }
