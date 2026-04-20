@@ -65,6 +65,13 @@ export function useMpvPlayer(
   const [error, setError] = useState<string | null>(null);
   const positionShared = useSharedValue(0);
   const durationShared = useSharedValue(0);
+  // Plain JS refs mirror the shared values for callers that run on
+  // the JS thread (skipForward/Backward, lock-screen remotes). Reading
+  // `positionShared.value` right after a JS-thread write has been flaky
+  // since the zero-re-render refactor — Reanimated's JS shadow isn't
+  // guaranteed to be synchronously updated across all runtime versions.
+  // The ref is synchronous, full stop.
+  const positionRef = useRef(0);
   const durationRef = useRef(0);
 
   // ── Event handlers via useEffectEvent ──────────────────────────────
@@ -77,6 +84,8 @@ export function useMpvPlayer(
     // these on the UI thread with zero React work.
     positionShared.value = pos;
     durationShared.value = dur;
+    // JS-thread mirror for skip math — see positionRef declaration.
+    positionRef.current = pos;
     // Duration effectively only changes once per load. Guarding the
     // setState means the player tree re-renders zero times during
     // steady-state playback.
@@ -131,6 +140,8 @@ export function useMpvPlayer(
   // cause an infinite load loop.
 
   const streamUrl = resolved?.streamUrl;
+  const audioTrackIndex = resolved?.audioMpvTrackId;
+  const subtitleTrackIndex = resolved?.subtitleMpvTrackId;
   // Stable-by-content signature so a new array reference per render
   // doesn't retrigger the load effect. Subtitles are identified by URI.
   const externalSubsKey = externalSubtitles?.map((s) => s.uri).join("|") ?? "";
@@ -141,6 +152,8 @@ export function useMpvPlayer(
     try {
       mpvRef.current.load(streamUrl, {
         startPositionSeconds,
+        audioTrackIndex,
+        subtitleTrackIndex,
         externalSubtitles,
       });
     } catch (e) {
@@ -148,7 +161,7 @@ export function useMpvPlayer(
       onError(e instanceof Error ? e.message : String(e));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [streamUrl, startPositionSeconds, externalSubsKey]); // onError is stable via useEffectEvent
+  }, [streamUrl, startPositionSeconds, audioTrackIndex, subtitleTrackIndex, externalSubsKey]); // onError is stable via useEffectEvent
 
   // ── Imperative controls ───────────────────────────────────────────
 
@@ -166,18 +179,19 @@ export function useMpvPlayer(
     // seek feels instant, even though the next mpv progress tick is
     // up to ~100 ms away.
     positionShared.value = seconds;
+    positionRef.current = seconds;
   }
 
   function skipForward() {
-    // Read from the shared value so rapid skips compose from the
-    // live position, not the 1 Hz-throttled React state.
-    const pos = positionShared.value;
-    const dur = durationShared.value;
+    // Refs beat shared values for JS-thread reads — see comment at
+    // the positionRef declaration.
+    const pos = positionRef.current;
+    const dur = durationRef.current;
     seek(Math.min(pos + 10, dur > 0 ? dur : pos + 10));
   }
 
   function skipBackward() {
-    const pos = positionShared.value;
+    const pos = positionRef.current;
     seek(Math.max(pos - 10, 0));
   }
 

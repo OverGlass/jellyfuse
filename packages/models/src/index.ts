@@ -410,10 +410,23 @@ export interface ResolvedStream {
   playMethod: PlayMethod;
   mediaSourceId: string;
   playSessionId: string;
-  /** Selected audio stream index, or undefined for mpv auto-select. */
+  /** Selected Jellyfin audio stream index, or undefined for mpv auto-select. */
   audioStreamIndex: number | undefined;
-  /** Selected subtitle stream index, or undefined for none. */
+  /** Selected Jellyfin subtitle stream index, or undefined for none. */
   subtitleStreamIndex: number | undefined;
+  /**
+   * 1-based position of the picked audio track inside `audioStreams`.
+   * This is what mpv expects for `aid=N` — distinct from the Jellyfin
+   * `audioStreamIndex` (which counts all stream kinds in one list).
+   * `undefined` = let mpv auto-select.
+   */
+  audioMpvTrackId: number | undefined;
+  /**
+   * 1-based position of the picked subtitle track inside `subtitleTracks`.
+   * Distinct from `subtitleStreamIndex` — same rationale as audio.
+   * `undefined` = no subtitle track selected.
+   */
+  subtitleMpvTrackId: number | undefined;
   /** External subtitle URL if applicable. */
   subtitleDeliveryUrl: string | undefined;
   /** All available audio streams for the track picker UI. */

@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { AudioStream, PlaybackInfo, SubtitleTrack } from "@jellyfuse/models";
-import { pickAudioStream, pickSubtitleTrack, resolvePlayback } from "./resolver";
+import {
+  computeSubtitleSid,
+  pickAudioStream,
+  pickSubtitleTrack,
+  resolvePlayback,
+  subtitleMpvId,
+} from "./resolver";
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -136,6 +142,29 @@ describe("pickSubtitleTrack", () => {
     expect(result.index).toBe(4);
   });
 
+  it("Default mode picks preferred-language track even when another track is isDefault", () => {
+    // User prefers French subs — French track exists but isn't the server default.
+    // Expect the French track over the English default.
+    const result = pickSubtitleTrack(basePlaybackInfo.subtitles, "Default", "eng", "fra");
+    expect(result.index).toBe(5); // French
+    expect(result.deliveryUrl).toBe("https://jf.test/sub/5");
+  });
+
+  it("Always mode picks preferred-language track over the default track", () => {
+    const result = pickSubtitleTrack(basePlaybackInfo.subtitles, "Always", "eng", "fra");
+    expect(result.index).toBe(5);
+  });
+
+  it("Default mode falls back to default when preferred language absent", () => {
+    const result = pickSubtitleTrack(basePlaybackInfo.subtitles, "Default", "eng", "kor");
+    expect(result.index).toBe(4); // English default
+  });
+
+  it("Default mode with empty preferred language picks default", () => {
+    const result = pickSubtitleTrack(basePlaybackInfo.subtitles, "Default", "eng", "");
+    expect(result.index).toBe(4);
+  });
+
   it("picks first track when Always and no default", () => {
     const tracks = [
       makeSub({ index: 10, language: "spa" }),
@@ -187,6 +216,49 @@ describe("pickSubtitleTrack", () => {
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
+// computeSubtitleSid / subtitleMpvId — group-aware sid mapping
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe("computeSubtitleSid", () => {
+  const embeddedEng = makeSub({ index: 3, language: "eng" });
+  const embeddedEngForced = makeSub({ index: 4, language: "eng", isForced: true });
+  const externalFra = makeSub({ index: 5, language: "fra", deliveryUrl: "https://ex/fra" });
+  const externalSpa = makeSub({ index: 6, language: "spa", deliveryUrl: "https://ex/spa" });
+
+  it("embedded tracks get sequential sids starting at 1", () => {
+    const tracks = [embeddedEng, embeddedEngForced];
+    expect(computeSubtitleSid(tracks, embeddedEng)).toBe(1);
+    expect(computeSubtitleSid(tracks, embeddedEngForced)).toBe(2);
+  });
+
+  it("externals are appended after all embedded in sid space", () => {
+    const tracks = [embeddedEng, embeddedEngForced, externalFra, externalSpa];
+    expect(computeSubtitleSid(tracks, externalFra)).toBe(3); // 2 embedded + 1
+    expect(computeSubtitleSid(tracks, externalSpa)).toBe(4);
+  });
+
+  it("external sid is stable even when Jellyfin interleaves the list", () => {
+    // Jellyfin lists in order: embedded, external, embedded-forced
+    const tracks = [embeddedEng, externalFra, embeddedEngForced];
+    // mpv sees 2 embedded + 1 external → sid 1, 2 for embedded, 3 for external
+    expect(computeSubtitleSid(tracks, embeddedEng)).toBe(1);
+    expect(computeSubtitleSid(tracks, embeddedEngForced)).toBe(2);
+    expect(computeSubtitleSid(tracks, externalFra)).toBe(3);
+  });
+});
+
+describe("subtitleMpvId", () => {
+  it("routes a picked Jellyfin index through group-aware sid logic", () => {
+    const tracks = [
+      makeSub({ index: 3, language: "eng" }),
+      makeSub({ index: 5, language: "fra", deliveryUrl: "https://ex/fra" }),
+    ];
+    expect(subtitleMpvId(tracks, 3)).toBe(1); // embedded English
+    expect(subtitleMpvId(tracks, 5)).toBe(2); // 1 embedded + 1 external
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
 // resolvePlayback (integration)
 // ──────────────────────────────────────────────────────────────────────────────
 
@@ -205,6 +277,10 @@ describe("resolvePlayback", () => {
     expect(result.streamUrl).toBe(basePlaybackInfo.streamUrl);
     expect(result.audioStreamIndex).toBe(1); // eng default
     expect(result.subtitleStreamIndex).toBe(4); // eng default sub
+    expect(result.audioMpvTrackId).toBe(1); // English audio is position 0 → mpv aid 1
+    // Fixture has 1 embedded sub (idx 6) + 2 externals (idx 4, 5). English
+    // default (idx 4) is the first external → mpv sid 1 embedded + 0 + 1 = 2.
+    expect(result.subtitleMpvTrackId).toBe(2);
     expect(result.subtitleDeliveryUrl).toBe("https://jf.test/sub/4");
     expect(result.durationSeconds).toBeCloseTo(7200, 0); // 72B ticks = 7200s
     expect(result.chapters).toHaveLength(2);
@@ -242,6 +318,24 @@ describe("resolvePlayback", () => {
     });
 
     expect(result.audioStreamIndex).toBe(2); // French
+    expect(result.audioMpvTrackId).toBe(2); // French is position 1 → mpv aid 2
+    expect(result.subtitleMpvTrackId).toBeUndefined();
+  });
+
+  it("applies preferred subtitle language in Default mode", () => {
+    const result = resolvePlayback({
+      playbackInfo: basePlaybackInfo,
+      settings: {
+        preferredAudioLanguage: "eng",
+        preferredSubtitleLanguage: "fra",
+        subtitleMode: "Default",
+      },
+    });
+
+    expect(result.subtitleStreamIndex).toBe(5); // French
+    // 1 embedded + French is the 2nd external → sid = 1 + 1 + 1 = 3
+    expect(result.subtitleMpvTrackId).toBe(3);
+    expect(result.subtitleDeliveryUrl).toBe("https://jf.test/sub/5");
   });
 
   it("passes through intro-skipper segments", () => {

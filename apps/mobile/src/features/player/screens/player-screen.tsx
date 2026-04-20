@@ -6,6 +6,7 @@ import { router } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { resolvePlayback } from "@/services/playback/resolver";
+import { resolveAudioAid, resolveSubtitleSid } from "@/services/playback/live-track-map";
 import { useResolverSettings } from "@/services/settings/use-resolver-settings";
 import { localTrickplayData, resolveLocalStream } from "@/services/downloads/local-stream";
 import { useDownloadForItem } from "@/services/downloads/use-local-downloads";
@@ -53,7 +54,7 @@ export function PlayerScreen({ jellyfinId }: Props) {
   // Pure derivation — resolvePlayback is a pure function, not async
   const resolved =
     hasLocal && localRecord
-      ? resolveLocalStream(localRecord)
+      ? resolveLocalStream(localRecord, resolverSettings)
       : playbackInfoQuery.data
         ? resolvePlayback({
             playbackInfo: playbackInfoQuery.data,
@@ -67,21 +68,22 @@ export function PlayerScreen({ jellyfinId }: Props) {
     ? ticksToSeconds(detail.data.userData.playbackPositionTicks)
     : undefined;
 
-  // External subtitle sidecars for offline transcoded playback. For
-  // Originals and online streams this is empty: the server-side tracks
-  // already live in the container (Original) or are handled via HLS
-  // manifest (transcoded stream). Order must match resolved.subtitleTracks
-  // so the UI's position+1 → mpv sid mapping holds.
-  const externalSubtitles: MpvExternalSubtitle[] | undefined =
-    hasLocal && resolved
-      ? resolved.subtitleTracks
-          .filter((t): t is typeof t & { deliveryUrl: string } => t.deliveryUrl !== undefined)
-          .map((t) => ({
-            uri: t.deliveryUrl,
-            title: t.displayTitle,
-            language: t.language,
-          }))
-      : undefined;
+  // Every subtitle with a `deliveryUrl` is loaded as an external track
+  // via mpv's `sub-add`. This applies to ONLINE playback too — mpv sees
+  // only the container's embedded tracks after `loadfile`, so external
+  // .srt / .vtt sidecars that Jellyfin exposes with a `DeliveryUrl` must
+  // be attached explicitly, otherwise `sid=N` for that track points at
+  // nothing and mpv silently falls back to the embedded default.
+  // Mirrors the Rust reference `PlayerView::new` in jf-ui-kit.
+  const externalSubtitles: MpvExternalSubtitle[] | undefined = resolved
+    ? resolved.subtitleTracks
+        .filter((t): t is typeof t & { deliveryUrl: string } => t.deliveryUrl !== undefined)
+        .map((t) => ({
+          uri: t.deliveryUrl,
+          title: t.displayTitle,
+          language: t.language,
+        }))
+    : undefined;
 
   // mpv lifecycle — creates instance, subscribes to events, loads stream
   const player = useMpvPlayer(resolved, startPosition, externalSubtitles);
@@ -155,14 +157,6 @@ export function PlayerScreen({ jellyfinId }: Props) {
         />
       ) : null}
 
-      {/* Intro/recap/credits skip pill */}
-      <SkipSegmentPill
-        positionShared={player.positionShared}
-        durationShared={player.durationShared}
-        segments={resolved?.introSkipperSegments}
-        onSkip={player.seek}
-      />
-
       {/* Controls overlay — uses safe area insets internally */}
       <ControlsOverlay
         title={detail.data?.title ?? ""}
@@ -190,13 +184,33 @@ export function PlayerScreen({ jellyfinId }: Props) {
         }
       />
 
-      {/* Track picker bottom sheet */}
+      {/* Intro/recap/credits skip pill — rendered AFTER the controls
+          overlay so its Pressable sits above the overlay's full-screen
+          backgroundGesture detector; otherwise double-tap seek would
+          eat every tap on the pill. */}
+      <SkipSegmentPill
+        positionShared={player.positionShared}
+        durationShared={player.durationShared}
+        segments={resolved?.introSkipperSegments}
+        onSkip={player.seek}
+      />
+
+      {/* Track picker bottom sheet — picker hands the Jellyfin track up,
+          the screen queries mpv's live track-list to resolve the real
+          aid/sid. Ports the `resolve_track_map` pattern from
+          `crates/jf-ui-kit/src/views/player/mod.rs`. */}
       <TrackPicker
         visible={trackPickerOpen}
         audioStreams={resolved?.audioStreams ?? []}
         subtitleTracks={resolved?.subtitleTracks ?? []}
-        onSelectAudio={player.setAudioTrack}
-        onSelectSubtitle={player.setSubtitleTrack}
+        onSelectAudio={(stream) => {
+          const aid = resolveAudioAid(player.mpv, resolved?.audioStreams ?? [], stream);
+          player.setAudioTrack(aid);
+        }}
+        onSelectSubtitle={(track) => {
+          const sid = resolveSubtitleSid(player.mpv, resolved?.subtitleTracks ?? [], track);
+          player.setSubtitleTrack(sid);
+        }}
         onDisableSubtitles={player.disableSubtitles}
         onClose={() => setTrackPickerOpen(false)}
       />
