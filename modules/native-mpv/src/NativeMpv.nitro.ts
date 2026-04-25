@@ -9,7 +9,7 @@ import type { HybridObject } from "react-native-nitro-modules";
  * via a ref.
  *
  * Spec mirrors the high-level API of `jf-module-player::backend.rs`
- * in the Rust reference (see `../fusion`).
+ * in the private Rust reference repo (sibling checkout at `../fusion`).
  * Type names use Jellyfuse's camelCase conventions; the underlying
  * mpv property and command names live inside the Swift impl.
  *
