@@ -23,13 +23,20 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   backgroundColor: "#1e2227",
   ios: {
     bundleIdentifier: "com.jellyfusion.app",
-    supportsTablet: false,
+    supportsTablet: true,
+    requireFullScreen: false,
     appleTeamId: "39TMVBW2CY",
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
       UIBackgroundModes: ["audio", "picture-in-picture"],
       NSLocalNetworkUsageDescription:
         "Jellyfuse uses your local network to discover and connect to Jellyfin servers running on your LAN.",
+      "UISupportedInterfaceOrientations~ipad": [
+        "UIInterfaceOrientationPortrait",
+        "UIInterfaceOrientationPortraitUpsideDown",
+        "UIInterfaceOrientationLandscapeLeft",
+        "UIInterfaceOrientationLandscapeRight",
+      ],
       ...(isProduction
         ? {
             NSBonjourServices: [],

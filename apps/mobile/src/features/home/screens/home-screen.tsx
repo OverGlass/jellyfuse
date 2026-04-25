@@ -4,6 +4,7 @@ import { PILL_TAB_CLEARANCE } from "@/features/common/components/pill-tab-bar";
 import { StatusBarScrim } from "@/features/common/components/status-bar-scrim";
 import { useFloatingHeaderScroll } from "@/features/common/hooks/use-floating-header-scroll";
 import { useRestoredScroll } from "@/features/common/hooks/use-restored-scroll";
+import { HomeHero } from "@/features/home/components/home-hero";
 import { MediaShelf, type MediaShelfVariant } from "@/features/home/components/media-shelf";
 import { SearchInput } from "@/features/search/components/search-input";
 import { SearchResultRow } from "@/features/search/components/search-result-row";
@@ -18,7 +19,7 @@ import {
 } from "@/services/query";
 import { useJellyseerrRequests } from "@/services/query/hooks/use-requests";
 import { useSearchBlended } from "@/services/query/hooks/use-search-blended";
-import { useScreenGutters } from "@/services/responsive";
+import { useBreakpoint, useScreenGutters } from "@/services/responsive";
 import type { MediaItem } from "@jellyfuse/api";
 import { activeRequestItems, mediaIdJellyfin, mediaRequestToMediaItem } from "@jellyfuse/models";
 import type { ShelfKey } from "@jellyfuse/query-keys";
@@ -28,7 +29,7 @@ import { useKeepAwake } from "expo-keep-awake";
 import { router } from "expo-router";
 import { useDeferredValue, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import Animated, { useAnimatedScrollHandler } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
@@ -61,6 +62,13 @@ export function HomeScreen() {
   const gutters = useScreenGutters();
   const connectionStatus = useConnectionStatus();
   const scrollRestore = useRestoredScroll("/home");
+  const { breakpoint } = useBreakpoint();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const isTabletPlus = breakpoint !== "phone";
+  // Hero only renders on tablet+ (per design handoff); promotes the top
+  // continue-watching item without adding new functionality.
+  const isLandscape = windowWidth > windowHeight;
+  const heroHeight = isTabletPlus ? (isLandscape ? 440 : 520) : 0;
 
   const [query, setQuery] = useState("");
   const { headerHeight, onHeaderHeightChange, scrollY, backdropStyle } = useFloatingHeaderScroll();
@@ -86,6 +94,12 @@ export function HomeScreen() {
   const recentlyAdded = useRecentlyAdded();
   const latestMovies = useLatestMovies();
   const latestTv = useLatestTv();
+
+  // Tablet+ promotes the top continue-watching item into the hero.
+  const heroItem =
+    isTabletPlus && continueWatching.data && continueWatching.data.length > 0
+      ? continueWatching.data[0]
+      : undefined;
 
   const requestsQuery = useJellyseerrRequests();
   const requestItems =
@@ -138,11 +152,13 @@ export function HomeScreen() {
   const searchInitialLoading = isSearching && search.isLoading && searchRows.length === 0;
   const searchNoResults = isSearching && !search.isLoading && searchRows.length === 0;
 
-  // Bottom padding keeps the last item above the floating pill tab bar.
-  // Pill sits at `(insets.bottom > 0 ? insets.bottom - 8 : 8)` from the
-  // screen edge; PILL_TAB_CLEARANCE covers the pill height + breathing room.
+  // Bottom padding keeps the last item above the floating pill tab bar
+  // on phone. On tablet+ the sidebar is on the left edge, so the bottom
+  // is unobstructed — only the safe-area inset matters.
   const pillBottom = insets.bottom > 0 ? insets.bottom - 8 : 8;
-  const listPaddingBottom = pillBottom + PILL_TAB_CLEARANCE;
+  const listPaddingBottom = isTabletPlus
+    ? insets.bottom + spacing.md
+    : pillBottom + PILL_TAB_CLEARANCE;
 
   return (
     <View style={styles.root}>
@@ -210,6 +226,20 @@ export function HomeScreen() {
           scrollEventThrottle={16}
           ListHeaderComponent={
             <View>
+              {heroItem ? (
+                <View style={{ marginTop: -headerHeight, marginBottom: spacing.lg }}>
+                  <HomeHero
+                    item={heroItem}
+                    height={heroHeight}
+                    paddingHorizontal={gutters.left}
+                    topInset={headerHeight + spacing.md}
+                    density={isLandscape ? "wide" : "compact"}
+                    scrollY={scrollY}
+                    onPressResume={handleContinueWatchingPress}
+                    onPressOpen={handleItemPress}
+                  />
+                </View>
+              ) : null}
               <ConnectionBanner status={connectionStatus} />
               {anyShelfLoading && visibleShelves.length === 0 ? (
                 <View style={styles.centered}>

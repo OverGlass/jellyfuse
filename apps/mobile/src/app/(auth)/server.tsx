@@ -10,13 +10,15 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AuthScreenHeader } from "@/features/auth/components/auth-screen-header";
+import { LoginDecorativePanel } from "@/features/auth/components/login-decorative-panel";
 import { useAuth } from "@/services/auth/state";
 import { useSystemInfo } from "@/services/query";
-import { useScreenGutters } from "@/services/responsive";
+import { useBreakpoint, useScreenGutters } from "@/services/responsive";
 
 /**
  * Phase 1b.3 server-connect screen. First step of the two-step sign-in
@@ -35,6 +37,11 @@ export default function ServerScreen() {
   const { setServer } = useAuth();
   const { t } = useTranslation();
   const gutters = useScreenGutters();
+  const { breakpoint } = useBreakpoint();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  // Same split-layout treatment as sign-in: tablet+ landscape gets the
+  // decorative panel on the left and a 460w form on the right.
+  const useSplitLayout = breakpoint !== "phone" && windowWidth > windowHeight;
   const [urlDraft, setUrlDraft] = useState("");
   const [jellyseerrDraft, setJellyseerrDraft] = useState("");
   const [submittedUrl, setSubmittedUrl] = useState<string | undefined>(undefined);
@@ -68,85 +75,98 @@ export default function ServerScreen() {
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <View
-          style={[styles.container, { paddingLeft: gutters.left, paddingRight: gutters.right }]}
-        >
-          <AuthScreenHeader title={t("auth.server.title")} subtitle={t("auth.server.subtitle")} />
-
-          <View style={styles.inputBlock}>
-            <Text style={styles.label}>{t("auth.server.urlLabel")}</Text>
-            <TextInput
-              value={urlDraft}
-              onChangeText={setUrlDraft}
-              placeholder={t("auth.server.placeholder")}
-              placeholderTextColor={colors.textMuted}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-              textContentType="URL"
-              returnKeyType="go"
-              onSubmitEditing={handleCheck}
-              style={styles.input}
-            />
-          </View>
-
-          <View style={styles.inputBlock}>
-            <Text style={styles.label}>{t("auth.server.jellyseerrLabel")}</Text>
-            <TextInput
-              value={jellyseerrDraft}
-              onChangeText={setJellyseerrDraft}
-              placeholder={t("auth.server.jellyseerrPlaceholder")}
-              placeholderTextColor={colors.textMuted}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-              textContentType="URL"
-              returnKeyType="go"
-              onSubmitEditing={handleCheck}
-              style={styles.input}
-            />
-            <Text style={styles.helper}>{t("auth.server.jellyseerrHelper")}</Text>
-          </View>
-
-          <Pressable
-            accessibilityRole="button"
-            onPress={handleCheck}
-            disabled={!urlDraft.trim()}
-            style={({ pressed }) => [
-              styles.button,
-              (!urlDraft.trim() || pressed) && styles.buttonMuted,
+        <View style={useSplitLayout ? styles.split : styles.flex}>
+          {useSplitLayout ? (
+            <View style={styles.splitArt}>
+              <LoginDecorativePanel />
+            </View>
+          ) : null}
+          <View
+            style={[
+              useSplitLayout ? styles.splitForm : styles.container,
+              !useSplitLayout && {
+                paddingLeft: gutters.left,
+                paddingRight: gutters.right,
+              },
             ]}
           >
-            <Text style={styles.buttonLabel}>{t("auth.server.check")}</Text>
-          </Pressable>
+            <AuthScreenHeader title={t("auth.server.title")} subtitle={t("auth.server.subtitle")} />
 
-          {submittedUrl && systemInfo.isLoading ? (
-            <View style={styles.statusRow}>
-              <ActivityIndicator color={colors.textSecondary} />
-              <Text style={styles.statusText}>{t("auth.server.contacting")}</Text>
+            <View style={styles.inputBlock}>
+              <Text style={styles.label}>{t("auth.server.urlLabel")}</Text>
+              <TextInput
+                value={urlDraft}
+                onChangeText={setUrlDraft}
+                placeholder={t("auth.server.placeholder")}
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+                textContentType="URL"
+                returnKeyType="go"
+                onSubmitEditing={handleCheck}
+                style={styles.input}
+              />
             </View>
-          ) : null}
 
-          {systemInfo.data ? (
-            <View style={styles.resultBlock}>
-              <Text style={styles.resultName}>{systemInfo.data.serverName}</Text>
-              <Text style={styles.resultMeta}>
-                {systemInfo.data.productName} · {systemInfo.data.version}
-              </Text>
-              <Pressable
-                accessibilityRole="button"
-                onPress={handleContinue}
-                style={({ pressed }) => [
-                  styles.continueButton,
-                  pressed && styles.continueButtonPressed,
-                ]}
-              >
-                <Text style={styles.continueLabel}>{t("auth.server.submit")}</Text>
-              </Pressable>
+            <View style={styles.inputBlock}>
+              <Text style={styles.label}>{t("auth.server.jellyseerrLabel")}</Text>
+              <TextInput
+                value={jellyseerrDraft}
+                onChangeText={setJellyseerrDraft}
+                placeholder={t("auth.server.jellyseerrPlaceholder")}
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+                textContentType="URL"
+                returnKeyType="go"
+                onSubmitEditing={handleCheck}
+                style={styles.input}
+              />
+              <Text style={styles.helper}>{t("auth.server.jellyseerrHelper")}</Text>
             </View>
-          ) : null}
 
-          {errorMessage ? <Text style={styles.error}>{errorMessage}</Text> : null}
+            <Pressable
+              accessibilityRole="button"
+              onPress={handleCheck}
+              disabled={!urlDraft.trim()}
+              style={({ pressed }) => [
+                styles.button,
+                (!urlDraft.trim() || pressed) && styles.buttonMuted,
+              ]}
+            >
+              <Text style={styles.buttonLabel}>{t("auth.server.check")}</Text>
+            </Pressable>
+
+            {submittedUrl && systemInfo.isLoading ? (
+              <View style={styles.statusRow}>
+                <ActivityIndicator color={colors.textSecondary} />
+                <Text style={styles.statusText}>{t("auth.server.contacting")}</Text>
+              </View>
+            ) : null}
+
+            {systemInfo.data ? (
+              <View style={styles.resultBlock}>
+                <Text style={styles.resultName}>{systemInfo.data.serverName}</Text>
+                <Text style={styles.resultMeta}>
+                  {systemInfo.data.productName} · {systemInfo.data.version}
+                </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={handleContinue}
+                  style={({ pressed }) => [
+                    styles.continueButton,
+                    pressed && styles.continueButtonPressed,
+                  ]}
+                >
+                  <Text style={styles.continueLabel}>{t("auth.server.submit")}</Text>
+                </Pressable>
+              </View>
+            ) : null}
+
+            {errorMessage ? <Text style={styles.error}>{errorMessage}</Text> : null}
+          </View>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -193,6 +213,22 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: spacing.lg,
     paddingBottom: spacing.lg,
+  },
+  split: {
+    flex: 1,
+    flexDirection: "row",
+  },
+  splitArt: {
+    flex: 1,
+  },
+  splitForm: {
+    width: 460,
+    paddingHorizontal: 56,
+    paddingVertical: 64,
+    gap: spacing.lg,
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderLeftColor: colors.border,
+    backgroundColor: colors.background,
   },
   inputBlock: {
     gap: spacing.xs,

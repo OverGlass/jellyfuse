@@ -82,6 +82,11 @@ export const icons = {
   user: "\u{F007}", // nf-fa-user
   trash: "\u{F1F8}", // nf-fa-trash
   refresh: "\u{F021}", // nf-fa-refresh
+  bell: "\u{F0F3}", // nf-fa-bell
+  cast: "\u{F1B2}", // nf-fa-chromecast (cube glyph; closest to cast in this font)
+  share: "\u{F1E0}", // nf-fa-share_alt
+  ellipsisVertical: "\u{F142}", // nf-fa-ellipsis_v
+  info: "\u{F129}", // nf-fa-info
 } as const;
 export type IconName = keyof typeof icons;
 
