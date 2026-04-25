@@ -4,7 +4,7 @@ How to ship an iOS release of Jellyfuse to the App Store. Long-lived; per-releas
 
 ## One-time setup (done for v1)
 
-- App Store Connect record exists for `com.jellyfuse.app` (Apple Team `39TMVBW2CY`, ASC app ID `6761692584`).
+- App Store Connect record exists for `com.jellyfusion.app` (Apple Team `39TMVBW2CY`, ASC app ID `6761692584`).
 - Apple agreements signed.
 - 1Password vault `Jellyfuse CI` contains:
   - `AppleID/email`
