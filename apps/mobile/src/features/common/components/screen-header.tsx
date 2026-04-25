@@ -3,6 +3,7 @@ import { useScreenGutters } from "@/services/responsive";
 import { colors, fontSize, fontWeight, opacity, spacing } from "@jellyfuse/theme";
 import { router } from "expo-router";
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { Pressable, StyleSheet, Text, View, type ViewStyle } from "react-native";
 import type { AnimatedStyle } from "react-native-reanimated";
 import { FloatingBlurHeader } from "./floating-blur-header";
@@ -74,6 +75,7 @@ export function ScreenHeader({
   backdropStyle,
   onTotalHeightChange,
 }: Props) {
+  const { t } = useTranslation();
   const gutters = useScreenGutters();
   return (
     <FloatingBlurHeader backdropStyle={backdropStyle} onTotalHeightChange={onTotalHeightChange}>
@@ -82,7 +84,7 @@ export function ScreenHeader({
           {showBack ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Back"
+              accessibilityLabel={t("common.back")}
               hitSlop={12}
               onPress={() => {
                 if (router.canGoBack()) {

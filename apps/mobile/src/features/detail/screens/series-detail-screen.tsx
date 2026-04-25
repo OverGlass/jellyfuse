@@ -3,6 +3,7 @@ import type { DownloadRecord } from "@jellyfuse/models";
 import { colors, fontSize, layout, spacing } from "@jellyfuse/theme";
 import { router } from "expo-router";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ActivityIndicator, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
 import Animated, {
   Extrapolation,
@@ -53,6 +54,7 @@ interface Props {
 const ESTIMATED_EPISODE_ROW_HEIGHT = 110;
 
 export function SeriesDetailScreen({ itemId }: Props) {
+  const { t } = useTranslation();
   const seriesQuery = useSeriesDetail(itemId);
   const seasonsQuery = useSeasons(itemId);
 
@@ -171,9 +173,11 @@ export function SeriesDetailScreen({ itemId }: Props) {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.centered}>
-          <Text style={styles.errorTitle}>Couldn&apos;t load this series</Text>
+          <Text style={styles.errorTitle}>{t("detail.error.seriesTitle")}</Text>
           <Text style={styles.errorBody}>
-            {seriesQuery.error instanceof Error ? seriesQuery.error.message : "Unknown error"}
+            {seriesQuery.error instanceof Error
+              ? seriesQuery.error.message
+              : t("detail.error.unknown")}
           </Text>
         </View>
       </SafeAreaView>

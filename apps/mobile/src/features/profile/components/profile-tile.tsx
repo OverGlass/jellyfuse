@@ -9,6 +9,7 @@ import {
   spacing,
 } from "@jellyfuse/theme";
 import { Image } from "expo-image";
+import { useTranslation } from "react-i18next";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { NerdIcon } from "@/features/common/components/nerd-icon";
 
@@ -84,17 +85,19 @@ interface AddTileProps {
 }
 
 export function AddUserTile({ onPress }: AddTileProps) {
+  const { t } = useTranslation();
+  const label = t("profile.addUser");
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel="Add user"
+      accessibilityLabel={label}
       onPress={onPress}
       style={({ pressed }) => [styles.root, pressed && styles.rootPressed]}
     >
       <View style={[styles.avatarFallback, styles.addAvatar]}>
         <NerdIcon name="plus" size={40} color={colors.textSecondary} />
       </View>
-      <Text style={styles.name}>Add user</Text>
+      <Text style={styles.name}>{label}</Text>
     </Pressable>
   );
 }

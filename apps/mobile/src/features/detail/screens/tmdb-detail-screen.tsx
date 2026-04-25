@@ -1,6 +1,7 @@
 import type { MediaItem } from "@jellyfuse/api";
 import { colors, fontSize, fontWeight, layout, opacity, radius, spacing } from "@jellyfuse/theme";
 import { router } from "expo-router";
+import { useTranslation } from "react-i18next";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { useAnimatedScrollHandler, useSharedValue } from "react-native-reanimated";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -33,6 +34,7 @@ interface Props {
 }
 
 export function TmdbDetailScreen({ tmdbId, mediaType }: Props) {
+  const { t } = useTranslation();
   const query = useTmdbDetail(tmdbId, mediaType);
   const gutters = useScreenGutters();
   const insets = useSafeAreaInsets();
@@ -61,9 +63,9 @@ export function TmdbDetailScreen({ tmdbId, mediaType }: Props) {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.centered}>
-          <Text style={styles.errorTitle}>Couldn&apos;t load this title</Text>
+          <Text style={styles.errorTitle}>{t("detail.error.tmdbTitle")}</Text>
           <Text style={styles.errorBody}>
-            {query.error instanceof Error ? query.error.message : "Unknown error"}
+            {query.error instanceof Error ? query.error.message : t("detail.error.unknown")}
           </Text>
         </View>
         <BackButton />
@@ -110,13 +112,14 @@ interface ActionRowProps {
 }
 
 function TmdbActionRow({ item, tmdbId, mediaType }: ActionRowProps) {
+  const { t } = useTranslation();
   const availability = item.availability;
 
   if (availability.kind === "available") {
     return (
       <View style={styles.actionRow}>
         <View style={[styles.badge, styles.badgeAvailable]}>
-          <Text style={styles.badgeLabel}>Available in Library</Text>
+          <Text style={styles.badgeLabel}>{t("detail.tmdb.availableInLibrary")}</Text>
         </View>
       </View>
     );
@@ -125,10 +128,10 @@ function TmdbActionRow({ item, tmdbId, mediaType }: ActionRowProps) {
   if (availability.kind === "requested") {
     const statusLabel =
       availability.status === "pending"
-        ? "Pending"
+        ? t("detail.tmdb.status.pending")
         : availability.status === "approved"
-          ? "Approved"
-          : "Declined";
+          ? t("detail.tmdb.status.approved")
+          : t("detail.tmdb.status.declined");
     return (
       <View style={styles.actionRow}>
         <View style={[styles.badge, styles.badgeRequested]}>
@@ -143,7 +146,7 @@ function TmdbActionRow({ item, tmdbId, mediaType }: ActionRowProps) {
     <View style={styles.actionRow}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Request"
+        accessibilityLabel={t("detail.action.request")}
         onPress={() =>
           router.push({
             pathname: "/request/[tmdbId]",
@@ -152,7 +155,7 @@ function TmdbActionRow({ item, tmdbId, mediaType }: ActionRowProps) {
         }
         style={({ pressed }) => [styles.requestButton, pressed && styles.requestButtonPressed]}
       >
-        <Text style={styles.requestButtonLabel}>Request</Text>
+        <Text style={styles.requestButtonLabel}>{t("detail.action.request")}</Text>
       </Pressable>
     </View>
   );

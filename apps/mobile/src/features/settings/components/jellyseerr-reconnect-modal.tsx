@@ -8,7 +8,9 @@ import {
   spacing,
   withAlpha,
 } from "@jellyfuse/theme";
+import type { TFunction } from "i18next";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -52,6 +54,7 @@ export function JellyseerrReconnectModal({
   onSubmit,
   onClose,
 }: Props) {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -68,7 +71,7 @@ export function JellyseerrReconnectModal({
       setPassword("");
       onClose();
     } catch (err: unknown) {
-      setError(buildErrorMessage(err));
+      setError(buildErrorMessage(err, t));
     } finally {
       setBusy(false);
     }
@@ -101,7 +104,7 @@ export function JellyseerrReconnectModal({
             accessibilityRole="none"
           >
             <View style={styles.header}>
-              <Text style={styles.title}>Reconnect to Jellyseerr</Text>
+              <Text style={styles.title}>{t("settings.jellyseerr.reconnect.title")}</Text>
               <Text style={styles.subtitle} numberOfLines={1}>
                 {baseUrl.replace(/^https?:\/\//, "")}
               </Text>
@@ -109,7 +112,7 @@ export function JellyseerrReconnectModal({
 
             <View style={styles.body}>
               <View style={styles.inputBlock}>
-                <Text style={styles.label}>Username</Text>
+                <Text style={styles.label}>{t("settings.jellyseerr.reconnect.username")}</Text>
                 <View style={[styles.input, styles.inputDisabled]}>
                   <Text style={styles.inputDisabledText} numberOfLines={1}>
                     {username}
@@ -118,7 +121,7 @@ export function JellyseerrReconnectModal({
               </View>
 
               <View style={styles.inputBlock}>
-                <Text style={styles.label}>Password</Text>
+                <Text style={styles.label}>{t("settings.jellyseerr.reconnect.password")}</Text>
                 <TextInput
                   value={password}
                   onChangeText={setPassword}
@@ -151,7 +154,9 @@ export function JellyseerrReconnectModal({
                 {busy ? (
                   <ActivityIndicator color={colors.accentContrast} />
                 ) : (
-                  <Text style={styles.submitLabel}>Reconnect</Text>
+                  <Text style={styles.submitLabel}>
+                    {t("settings.jellyseerr.reconnect.submit")}
+                  </Text>
                 )}
               </Pressable>
 
@@ -164,7 +169,7 @@ export function JellyseerrReconnectModal({
                   pressed && { opacity: opacity.pressed },
                 ]}
               >
-                <Text style={styles.cancelLabel}>Cancel</Text>
+                <Text style={styles.cancelLabel}>{t("common.cancel")}</Text>
               </Pressable>
             </View>
           </Pressable>
@@ -174,16 +179,17 @@ export function JellyseerrReconnectModal({
   );
 }
 
-function buildErrorMessage(err: unknown): string {
+function buildErrorMessage(err: unknown, t: TFunction): string {
   if (err instanceof Error) {
     if (err.name === "JellyseerrHttpError") {
       const status = (err as Error & { status?: number }).status;
-      if (status === 401 || status === 403) return "Wrong password.";
-      return `Jellyseerr rejected the request (HTTP ${status ?? "error"}).`;
+      if (status === 401 || status === 403)
+        return t("settings.jellyseerr.reconnect.error.wrongPassword");
+      return t("settings.jellyseerr.reconnect.error.http", { status: status ?? "error" });
     }
     return err.message;
   }
-  return "Reconnect failed.";
+  return t("settings.jellyseerr.reconnect.error.generic");
 }
 
 const styles = StyleSheet.create({

@@ -1,4 +1,5 @@
 import { colors, opacity, radius, spacing } from "@jellyfuse/theme";
+import { useTranslation } from "react-i18next";
 import { Pressable, StyleSheet } from "react-native";
 import { NerdIcon } from "@/features/common/components/nerd-icon";
 
@@ -12,10 +13,11 @@ interface Props {
 }
 
 export function CloseButton({ onPress }: Props) {
+  const { t } = useTranslation();
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel="Close"
+      accessibilityLabel={t("common.close")}
       onPress={onPress}
       hitSlop={12}
       style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}

@@ -1,6 +1,7 @@
 import { NerdIcon } from "@/features/common/components/nerd-icon";
 import { colors, fontSize, opacity, radius, spacing, withAlpha } from "@jellyfuse/theme";
 import { useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { Pressable, StyleSheet, TextInput, View } from "react-native";
 
 /**
@@ -23,15 +24,14 @@ interface Props {
   autoFocus?: boolean;
 }
 
-const PLACEHOLDER_DEFAULT = "Search movies and TV shows";
-
 export function SearchInput({
   value,
-  placeholder = PLACEHOLDER_DEFAULT,
+  placeholder,
   onChangeText,
   onClear,
   autoFocus = false,
 }: Props) {
+  const { t } = useTranslation();
   const showClear = value.length > 0;
   const inputRef = useRef<TextInput>(null);
 
@@ -45,13 +45,13 @@ export function SearchInput({
       <NerdIcon name="search" size={16} color={colors.textMuted} />
       <TextInput
         ref={inputRef}
-        accessibilityLabel="Search"
+        accessibilityLabel={t("search.input.ariaLabel")}
         autoCapitalize="none"
         autoCorrect={false}
         autoFocus={autoFocus}
         keyboardAppearance="dark"
         onChangeText={onChangeText}
-        placeholder={placeholder}
+        placeholder={placeholder ?? t("search.input.placeholder")}
         placeholderTextColor={colors.textMuted}
         returnKeyType="search"
         selectionColor={colors.accent}
@@ -61,7 +61,7 @@ export function SearchInput({
       {showClear ? (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Clear search"
+          accessibilityLabel={t("search.input.clearAriaLabel")}
           hitSlop={12}
           onPress={handleClearPress}
           style={({ pressed }) => [styles.clear, pressed && styles.clearPressed]}

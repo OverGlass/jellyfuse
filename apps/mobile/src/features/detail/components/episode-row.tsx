@@ -2,6 +2,7 @@ import type { MediaItem } from "@jellyfuse/api";
 import { colors, duration, fontSize, fontWeight, opacity, radius, spacing } from "@jellyfuse/theme";
 import { Image } from "expo-image";
 import { type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 /**
@@ -26,6 +27,7 @@ const THUMB_WIDTH = 140;
 const THUMB_HEIGHT = 80; // 16:9-ish
 
 export function EpisodeRow({ item, onPress, rightSlot, disabled = false }: Props) {
+  const { t } = useTranslation();
   const indexLabel = item.episodeNumber !== undefined ? `${item.episodeNumber}.` : "";
   const runtime = item.runtimeMinutes !== undefined ? `${item.runtimeMinutes}m` : undefined;
   const progress = item.progress ?? 0;
@@ -33,7 +35,10 @@ export function EpisodeRow({ item, onPress, rightSlot, disabled = false }: Props
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Episode ${item.episodeNumber ?? ""} ${item.title}`}
+      accessibilityLabel={t("detail.episode.ariaLabel", {
+        number: item.episodeNumber ?? "",
+        title: item.title,
+      })}
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
