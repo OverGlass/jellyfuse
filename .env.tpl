@@ -24,9 +24,3 @@ SENTRY_DSN=op://Jellyfuse Dev/sentry/dsn
 # Run as: op run --env-file=.env.tpl -- eas submit --platform ios --profile production --latest
 EXPO_APPLE_ID=op://Jellyfuse CI/AppleID/email
 EXPO_APPLE_APP_SPECIFIC_PASSWORD=op://Jellyfuse CI/AppleID/app-specific-password
-
-# Self-hosted Privacy Policy deploy target.
-# Public URL: https://jellyfuse-privacy.tailba6a9d.ts.net/privacy.html
-# Run as: op run --env-file=.env.tpl -- bun run privacy:deploy
-JELLYFUSE_PRIVACY_HOST=op://Jellyfuse Dev/privacy/ssh-host
-JELLYFUSE_PRIVACY_PATH=op://Jellyfuse Dev/privacy/ssh-path
