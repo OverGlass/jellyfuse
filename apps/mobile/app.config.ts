@@ -6,7 +6,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: "Jellyfuse",
   slug: "jellyfuse",
-  owner: "arkbase",
+  // Owner and projectId are env-driven so a fork can ship to its own EAS
+  // project without editing this file. Set EAS_OWNER and EAS_PROJECT_ID
+  // in your .env (op:// references are wired in .env.tpl).
+  owner: process.env.EAS_OWNER,
   version: "1.0.0",
   orientation: "default",
   scheme: "jellyfuse",
@@ -87,7 +90,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   extra: {
     router: {},
     eas: {
-      projectId: "39dc1c25-4366-41f4-bcc8-1257afc85d72",
+      projectId: process.env.EAS_PROJECT_ID,
     },
   },
 });

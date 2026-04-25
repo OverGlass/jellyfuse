@@ -42,7 +42,7 @@ bun run format:check
 bun run --filter @jellyfuse/mobile ios
 ```
 
-To produce a signed `.ipa` for the App Store you need an Apple Developer account and EAS credentials of your own; the [submission runbook](docs/store-submission.md) walks through it. The Apple Team ID (`39TMVBW2CY`) and ASC App ID (`6761692584`) committed to this repo are the maintainer's — replace them with your own if you want to ship to your own App Store record.
+To produce a signed `.ipa` for the App Store you need an Apple Developer account and EAS credentials of your own; the [submission runbook](docs/store-submission.md) walks through it. The Apple Team ID (`39TMVBW2CY`) and ASC App ID (`6761692584`) committed to this repo are the maintainer's — replace them with your own (in `apps/mobile/eas.json`) if you want to ship to your own App Store record. The EAS owner and project ID are env-driven; set `EAS_OWNER` and `EAS_PROJECT_ID` in your `.env` (see `.env.tpl`).
 
 ### Stack
 

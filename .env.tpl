@@ -17,6 +17,11 @@ JELLYSEERR_DEV_PASSWORD=op://Jellyfuse Dev/jellyseerr/password
 
 SENTRY_DSN=op://Jellyfuse Dev/sentry/dsn
 
+# EAS project (read by apps/mobile/app.config.ts). Env-driven so a fork
+# can ship to its own EAS project without editing committed files.
+EAS_OWNER=op://Jellyfuse CI/EAS/owner
+EAS_PROJECT_ID=op://Jellyfuse CI/EAS/project-id
+
 # App Store submission (used by `eas submit`).
 # Apple Team ID and ASC App ID live in eas.json (public values, not secrets).
 # Only the Apple ID + app-specific password need to be kept out of git.
