@@ -91,4 +91,20 @@ Never commit secrets. The repo uses [1Password](https://1password.com) for every
 
 ## License
 
-_TBD — see issue [#TBD]._ Until a license is added, all rights are reserved by the maintainer; contributions are accepted under the assumption that they will be relicensed once the project picks a license.
+[GNU General Public License v3.0](LICENSE) — see [`LICENSE`](LICENSE) for the full text.
+
+```
+Jellyfuse — native Jellyfin client for iOS
+Copyright (C) 2026 Antonin Carlin
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, version 3.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU General Public License for more details.
+```
+
+Note: Jellyfuse is GPL-3.0; Jellyfin itself is GPL-2.0. Both are GPL-family but the licenses are not directly compatible — Jellyfuse only talks to Jellyfin over its public HTTP API, so this is a normal cross-license consumer/server relationship, not derivative work.

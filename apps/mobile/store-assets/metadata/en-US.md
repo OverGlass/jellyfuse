@@ -67,7 +67,7 @@ jellyfin,media,player,server,stream,video,movie,tv,jellyseerr,mpv
 ## Copyright
 
 ```
-© 2026 Antonin Carlin
+© 2026 Antonin Carlin · Licensed under GPL-3.0
 ```
 
 ## App Review Information
