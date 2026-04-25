@@ -4,13 +4,12 @@ How to ship an iOS release of Jellyfuse to the App Store. Long-lived; per-releas
 
 ## One-time setup (done for v1)
 
-- App Store Connect record exists for `com.jellyfuse.app` with Apple Team `39TMVBW2CY`.
+- App Store Connect record exists for `com.jellyfuse.app` (Apple Team `39TMVBW2CY`, ASC app ID `6761692584`).
 - Apple agreements signed.
 - 1Password vault `Jellyfuse CI` contains:
   - `AppleID/email`
   - `AppleID/app-specific-password` ([generate at appleid.apple.com](https://appleid.apple.com/account/manage))
 - GitHub Pages enabled on the repo serving `docs/` (Privacy Policy lives at `/privacy.html`).
-- `eas.json` `submit.production.ios.ascAppId` filled with the numeric ASC app ID.
 - `eas credentials` has registered the iOS distribution certificate and App Store provisioning profile.
 
 ## Per-release flow
