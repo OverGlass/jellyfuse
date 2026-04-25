@@ -102,11 +102,11 @@ First public release. Native MPV playback on iPhone, offline downloads, search, 
 
 ## Screenshots checklist
 
-Required: 6.9" iPhone (iPhone 16 Pro Max class). Resolution: **1290 × 2796** portrait.
+Both iPhone and iPad are required (the app declares `supportsTablet: true`). Capture from `https://demo.jellyfin.org/stable` so library content is real and reviewers see the same data.
 
-Capture from `https://demo.jellyfin.org/stable` so library content is real and reviewers see the same data:
+**iPhone 6.5" Display** — `1284 × 2778` portrait (iPhone 14 Pro Max simulator):
 
-- [ ] Sign-in screen (clean, with the demo URL pre-filled if possible)
+- [ ] Sign-in
 - [ ] Home with shelves populated
 - [ ] Item detail (Movie)
 - [ ] Item detail (TV episode list)
@@ -115,4 +115,17 @@ Capture from `https://demo.jellyfin.org/stable` so library content is real and r
 - [ ] Downloads
 - [ ] Settings
 
-Save to `apps/mobile/store-assets/screenshots/en-US/iphone-69/<NN>-<name>.png`.
+Save to `apps/mobile/store-assets/screenshots/en-US/iphone-65/<NN>-<name>.png`.
+
+**iPad 13" Display** — `2064 × 2752` portrait (iPad Pro 13" M4 simulator) or `2048 × 2732` (iPad Pro 12.9"):
+
+- [ ] Sign-in
+- [ ] Home with shelves populated (iPad layout)
+- [ ] Item detail (Movie, iPad layout)
+- [ ] Item detail (TV episode list, iPad layout)
+- [ ] Player with on-screen controls
+- [ ] Search results
+- [ ] Downloads
+- [ ] Settings
+
+Save to `apps/mobile/store-assets/screenshots/en-US/ipad-13/<NN>-<name>.png`.
