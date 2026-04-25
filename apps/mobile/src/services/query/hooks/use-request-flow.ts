@@ -8,8 +8,8 @@ import {
 import type { MediaServer, SeasonInfo } from "@jellyfuse/models";
 import { queryKeys, STALE_TIMES } from "@jellyfuse/query-keys";
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
-import { apiFetch } from "@/services/api/client";
 import { useAuth } from "@/services/auth/state";
+import { jellyseerrFetch } from "@/services/jellyseerr/client";
 
 /**
  * Hooks behind the request flow modal.
@@ -41,7 +41,7 @@ export function useQualityProfiles(service: JellyseerrServiceType): UseQueryResu
       if (!jellyseerrUrl) {
         throw new Error("useQualityProfiles called without jellyseerrUrl");
       }
-      return fetchQualityProfiles({ baseUrl: jellyseerrUrl, service }, apiFetch, signal);
+      return fetchQualityProfiles({ baseUrl: jellyseerrUrl, service }, jellyseerrFetch, signal);
     },
     enabled,
     staleTime: STALE_TIMES.qualityProfiles,
@@ -59,7 +59,7 @@ export function useTmdbTvSeasons(tmdbId: number | undefined): UseQueryResult<Sea
       if (!jellyseerrUrl || tmdbId === undefined) {
         throw new Error("useTmdbTvSeasons called without auth context");
       }
-      return fetchTmdbTvSeasons({ baseUrl: jellyseerrUrl, tmdbId }, apiFetch, signal);
+      return fetchTmdbTvSeasons({ baseUrl: jellyseerrUrl, tmdbId }, jellyseerrFetch, signal);
     },
     enabled,
     staleTime: STALE_TIMES.tmdbTvSeasons,
@@ -83,7 +83,7 @@ export function useCreateRequestMutation() {
       if (jellyseerrStatus !== "connected" || !jellyseerrUrl) {
         throw new Error("Jellyseerr is not connected — sign in to request media.");
       }
-      return createJellyseerrRequest({ ...input, baseUrl: jellyseerrUrl }, apiFetch);
+      return createJellyseerrRequest({ ...input, baseUrl: jellyseerrUrl }, jellyseerrFetch);
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.tmdbTvSeasons(variables.tmdbId) });

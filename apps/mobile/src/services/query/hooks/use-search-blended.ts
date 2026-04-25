@@ -8,8 +8,14 @@ import {
 import type { BlendedSearchResults } from "@jellyfuse/models";
 import { queryKeys, STALE_TIMES } from "@jellyfuse/query-keys";
 import { useQueries } from "@tanstack/react-query";
-import { apiFetch, apiFetchAuthenticated } from "@/services/api/client";
+import { apiFetchAuthenticated } from "@/services/api/client";
 import { useAuth } from "@/services/auth/state";
+// Jellyseerr-side fetcher injects the `connect.sid` cookie from the
+// active user and maps 401 → `JellyseerrSessionExpiredError`, which the
+// disconnect monitor catches to flip jellyseerrStatus to "disconnected".
+// Plain `apiFetch` would relay 401 as a generic error and leave the
+// cookie marker stale.
+import { jellyseerrFetch } from "@/services/jellyseerr/client";
 
 /**
  * Blended Jellyfin + Jellyseerr search. Fans the two sources out
@@ -108,7 +114,7 @@ export function useSearchBlended(
           }
           return fetchJellyseerrSearch(
             { baseUrl: jellyseerrUrl, query: trimmedQuery },
-            apiFetch,
+            jellyseerrFetch,
             signal,
           );
         },
@@ -122,9 +128,16 @@ export function useSearchBlended(
       const jellyfinData = jellyfinResult?.data;
       const jellyseerrData = jellyseerrEnabled ? jellyseerrResult?.data : [];
       const hasJellyfin = jellyfinData !== undefined;
-      const hasJellyseerr = jellyseerrEnabled ? jellyseerrData !== undefined : true;
+      // Treat a Jellyseerr error as "settled with no items" — the
+      // hook's contract is that a failed Jellyseerr call surfaces
+      // separately via `jellyseerrError` without blocking the
+      // library-only blend. Without this, errored Jellyseerr leaves
+      // `data` permanently null and the user sees "no results" even
+      // though Jellyfin returned matches.
+      const jellyseerrSettled =
+        !jellyseerrEnabled || jellyseerrData !== undefined || Boolean(jellyseerrResult?.isError);
       const data: BlendedSearchResults | null =
-        hasJellyfin && hasJellyseerr
+        hasJellyfin && jellyseerrSettled
           ? blendSearchResults(jellyfinData ?? [], jellyseerrData ?? [], typeFilter)
           : null;
       return {

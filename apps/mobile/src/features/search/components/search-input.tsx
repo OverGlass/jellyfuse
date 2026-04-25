@@ -2,7 +2,7 @@ import { NerdIcon } from "@/features/common/components/nerd-icon";
 import { colors, fontSize, opacity, radius, spacing, withAlpha } from "@jellyfuse/theme";
 import { useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Pressable, StyleSheet, TextInput, View } from "react-native";
+import { Keyboard, Pressable, StyleSheet, TextInput, View } from "react-native";
 
 /**
  * Search input field used on the home screen and shelf grid screens.
@@ -37,6 +37,10 @@ export function SearchInput({
 
   function handleClearPress() {
     inputRef.current?.clear();
+    // Tapping the clear chip should fully reset the search affordance,
+    // including dismissing the keyboard. `TextInput.clear()` only wipes
+    // the value — focus and the IME stay up otherwise.
+    Keyboard.dismiss();
     onClear();
   }
 

@@ -109,7 +109,69 @@ async function loadPersistedAuth(): Promise<PersistedAuth> {
   };
 }
 
-const JELLYSEERR_LAST_ERROR_KEY = ["auth", "jellyseerrLastError"] as const;
+export const JELLYSEERR_LAST_ERROR_KEY = ["auth", "jellyseerrLastError"] as const;
+
+/**
+ * Mark the active user's Jellyseerr session as expired. Called by the
+ * disconnect monitor when any Jellyseerr query throws
+ * `JellyseerrSessionExpiredError`. Mirrors the cookie-clearing the
+ * `setServerMutation` does on URL change: strip `jellyseerrCookie`
+ * from the active user, save to secure storage, write back to the
+ * persisted-auth cache. The next render of `useAuth()` sees
+ * `jellyseerrStatus === "disconnected"`, gating downstream Jellyseerr
+ * queries off and surfacing the reconnect banner. The reason string
+ * seeds the reconnect modal so the user gets a recognisable hint.
+ */
+export async function handleJellyseerrSessionExpired(
+  queryClient: QueryClient,
+  reason: string,
+): Promise<void> {
+  const persisted = queryClient.getQueryData<PersistedAuth>(PERSISTED_AUTH_KEY);
+  if (!persisted) return;
+  const activeUser = findActiveUser(persisted);
+  if (!activeUser?.jellyseerrCookie) return; // Already disconnected.
+
+  const { jellyseerrCookie: _drop, ...rest } = activeUser;
+  const nextUsers = persisted.users.map((u) => (u.userId === activeUser.userId ? rest : u));
+  await secureUserStorage.saveUsers(nextUsers);
+
+  // Native cookie jar gets cleared too — leftover entries would survive
+  // the in-memory wipe and re-attach via URLSession's shared store on
+  // the next request, masking the disconnected state.
+  if (persisted.jellyseerrUrl) {
+    try {
+      await NitroCookies.clearByName(persisted.jellyseerrUrl, "connect.sid");
+    } catch (err: unknown) {
+      console.warn("clearByName failed during jellyseerr disconnect", err);
+    }
+  }
+
+  queryClient.setQueryData<PersistedAuth>(PERSISTED_AUTH_KEY, {
+    ...persisted,
+    users: nextUsers,
+  });
+  queryClient.setQueryData(JELLYSEERR_LAST_ERROR_KEY, reason);
+  // Cancel in-flight Jellyseerr fetches so we don't keep firing 401s
+  // until the user reconnects. Predicate matches the
+  // `[..., "jellyseerr"]` and `["jellyseerrRequests"]` / `["downloadProgress"]`
+  // / `["qualityProfiles"]` / `["tmdbTvSeasons"]` namespaces.
+  void queryClient.cancelQueries({
+    predicate: (q) => isJellyseerrQueryKey(q.queryKey),
+  });
+}
+
+// Predicate matching every Jellyseerr-backed query key. Mirrors the
+// shapes built in `packages/query-keys/src/index.ts`. Jellyfin-side
+// search keys (ending in `"jellyfin"`) are NOT matched, so library
+// search keeps running through the disconnect.
+function isJellyseerrQueryKey(key: readonly unknown[]): boolean {
+  if (key[0] === "jellyseerr-requests") return true;
+  if (key[0] === "download-progress") return true;
+  if (key[0] === "quality-profiles") return true;
+  if (key[0] === "tmdb-tv-seasons") return true;
+  if (key[0] === "search" && key.includes("jellyseerr")) return true;
+  return false;
+}
 
 /**
  * Drop every cached query except the `auth` namespace. Used on user
