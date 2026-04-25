@@ -28,7 +28,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     appleTeamId: "39TMVBW2CY",
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
-      UIBackgroundModes: ["audio", "picture-in-picture"],
+      UIBackgroundModes: ["audio"],
       NSLocalNetworkUsageDescription:
         "Jellyfuse uses your local network to discover and connect to Jellyfin servers running on your LAN.",
       "UISupportedInterfaceOrientations~ipad": [
