@@ -3,6 +3,13 @@
   "version": "0.0.0",
   "private": true,
   "description": "Jellyfuse — native Jellyfin + Jellyseerr client (React Native, cross-platform).",
+  "bugs": "https://github.com/OverGlass/jellyfuse/issues",
+  "license": "GPL-3.0-only",
+  "author": "Antonin Carlin",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/OverGlass/jellyfuse"
+  },
   "workspaces": [
     "apps/*",
     "packages/*",
@@ -15,6 +22,7 @@
     "test": "bun run --filter '*' test",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
+    "privacy:deploy": "bash scripts/deploy-privacy.sh",
     "prepare": "lefthook install || true"
   },
   "devDependencies": {

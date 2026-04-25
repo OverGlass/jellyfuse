@@ -1,21 +1,13 @@
 import type { ExpoConfig, ConfigContext } from "expo/config";
 
-/**
- * Dynamic Expo config.
- *
- * Migrated from app.json in Phase 0b.3 so we can express environment
- * branches (EXPO_TV, production vs dev bundle id, Mac Catalyst) without
- * shelling to multiple json files. Phase 7 adds the tvOS / Android TV
- * branch via `process.env.EXPO_TV === "1"`, and Phase 8 adds the Mac
- * Catalyst branch. For Phase 0b.3 the config is a straight port of
- * app.json with no branching yet.
- */
+const isProduction = process.env.EXPO_PUBLIC_ENV === "production";
+
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: "Jellyfuse",
   slug: "jellyfuse",
   owner: "arkbase",
-  version: "0.0.0",
+  version: "1.0.0",
   orientation: "default",
   scheme: "jellyfuse",
   userInterfaceStyle: "automatic",
@@ -28,11 +20,23 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   backgroundColor: "#1e2227",
   ios: {
     bundleIdentifier: "com.jellyfuse.app",
-    supportsTablet: true,
+    supportsTablet: false,
     appleTeamId: "39TMVBW2CY",
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
       UIBackgroundModes: ["audio", "picture-in-picture"],
+      NSLocalNetworkUsageDescription:
+        "Jellyfuse uses your local network to discover and connect to Jellyfin servers running on your LAN.",
+      ...(isProduction
+        ? {
+            NSBonjourServices: [],
+            CFBundleURLTypes: [
+              {
+                CFBundleURLSchemes: ["jellyfuse", "com.jellyfuse.app"],
+              },
+            ],
+          }
+        : {}),
     },
   },
   android: {
@@ -52,7 +56,14 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   plugins: [
     "expo-localization",
     "expo-router",
-    "expo-secure-store",
+    [
+      "expo-secure-store",
+      {
+        // No flow uses biometric-gated SecureStore, so we drop the Face ID
+        // usage description rather than ship a placeholder reviewers can flag.
+        faceIDPermission: false,
+      },
+    ],
     [
       "expo-splash-screen",
       {

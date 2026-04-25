@@ -16,3 +16,11 @@ JELLYSEERR_DEV_EMAIL=op://Jellyfuse Dev/jellyseerr/email
 JELLYSEERR_DEV_PASSWORD=op://Jellyfuse Dev/jellyseerr/password
 
 SENTRY_DSN=op://Jellyfuse Dev/sentry/dsn
+
+# App Store submission (used by `eas submit`).
+# Apple Team ID and ASC App ID live in eas.json (public values, not secrets).
+# Only the Apple ID + app-specific password need to be kept out of git.
+#
+# Run as: op run --env-file=.env.tpl -- eas submit --platform ios --profile production --latest
+EXPO_APPLE_ID=op://Jellyfuse CI/AppleID/email
+EXPO_APPLE_APP_SPECIFIC_PASSWORD=op://Jellyfuse CI/AppleID/app-specific-password
