@@ -1,6 +1,7 @@
 import { colors, fontSize, fontWeight, layout, opacity, radius, spacing } from "@jellyfuse/theme";
 import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -29,6 +30,7 @@ import { useScreenGutters } from "@/services/responsive";
  */
 export default function SignInScreen() {
   const { serverUrl, serverVersion, signInWithCredentials } = useAuth();
+  const { t } = useTranslation();
   const gutters = useScreenGutters();
   const params = useLocalSearchParams<{ mode?: string }>();
   const isAddUserMode = params.mode === "add-user";
@@ -56,7 +58,7 @@ export default function SignInScreen() {
       // pushed (auth) stack so the newly added user lands back on home.
       router.replace("/");
     } catch (err: unknown) {
-      setError(buildErrorMessage(err));
+      setError(buildErrorMessage(err, t));
     } finally {
       setBusy(false);
     }
@@ -92,7 +94,7 @@ export default function SignInScreen() {
           style={[styles.container, { paddingLeft: gutters.left, paddingRight: gutters.right }]}
         >
           <AuthScreenHeader
-            title={isAddUserMode ? "Add another account" : "Sign in"}
+            title={isAddUserMode ? t("auth.signIn.addUser") : t("auth.signIn.title")}
             rightAction={isAddUserMode ? <CloseButton onPress={handleCancel} /> : null}
             extras={
               isAddUserMode ? (
@@ -106,18 +108,18 @@ export default function SignInScreen() {
                     {serverUrl ? serverUrl.replace(/^https?:\/\//, "") : "—"}
                     {serverVersion ? ` · ${serverVersion}` : ""}
                   </Text>
-                  <Text style={styles.changeServer}>Change server</Text>
+                  <Text style={styles.changeServer}>{t("auth.signIn.changeServer")}</Text>
                 </Pressable>
               )
             }
           />
 
           <View style={styles.inputBlock}>
-            <Text style={styles.label}>Username</Text>
+            <Text style={styles.label}>{t("auth.signIn.username")}</Text>
             <TextInput
               value={username}
               onChangeText={setUsername}
-              placeholder="alice"
+              placeholder={t("auth.signIn.usernamePlaceholder")}
               placeholderTextColor={colors.textMuted}
               autoCapitalize="none"
               autoCorrect={false}
@@ -130,11 +132,11 @@ export default function SignInScreen() {
           </View>
 
           <View style={styles.inputBlock}>
-            <Text style={styles.label}>Password</Text>
+            <Text style={styles.label}>{t("auth.signIn.password")}</Text>
             <TextInput
               value={password}
               onChangeText={setPassword}
-              placeholder="••••••••"
+              placeholder={t("auth.signIn.passwordPlaceholder")}
               placeholderTextColor={colors.textMuted}
               autoCapitalize="none"
               autoCorrect={false}
@@ -157,7 +159,7 @@ export default function SignInScreen() {
             {busy ? (
               <ActivityIndicator color={colors.textPrimary} />
             ) : (
-              <Text style={styles.buttonLabel}>Sign in</Text>
+              <Text style={styles.buttonLabel}>{t("auth.signIn.submit")}</Text>
             )}
           </Pressable>
 
@@ -168,22 +170,24 @@ export default function SignInScreen() {
   );
 }
 
-function buildErrorMessage(err: unknown): string {
+type TFunction = ReturnType<typeof useTranslation>["t"];
+
+function buildErrorMessage(err: unknown, t: TFunction): string {
   if (err instanceof AuthServerNotConfiguredError) {
-    return "No server configured. Go back to the server step.";
+    return t("auth.signIn.error.noServer");
   }
   if (err instanceof Error) {
     if (err.name === "AuthenticateHttpError") {
       const status = (err as Error & { status?: number }).status;
-      if (status === 401) return "Wrong username or password.";
-      return `Sign-in failed (HTTP ${status ?? "error"}).`;
+      if (status === 401) return t("auth.signIn.error.invalid");
+      return t("auth.signIn.error.http", { status: status ?? "error" });
     }
     if (err.name === "AuthenticateParseError") {
-      return "The server responded but the data didn't look right.";
+      return t("auth.signIn.error.parse");
     }
     return err.message;
   }
-  return "Sign in failed.";
+  return t("auth.signIn.error.generic");
 }
 
 const styles = StyleSheet.create({

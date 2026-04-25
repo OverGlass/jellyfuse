@@ -10,7 +10,11 @@
 import type { IntroSkipperSegments } from "@jellyfuse/models";
 import { colors, fontSize, fontWeight, radius, spacing } from "@jellyfuse/theme";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { StyleSheet, Text } from "react-native";
+// gesture-handler Pressable instead of RN's so the pill plays nicely
+// with the player overlay's gesture handlers (taps don't get swallowed
+// by the swipe-to-seek / tap-to-toggle-controls layer above).
 import { Pressable } from "react-native-gesture-handler";
 import Animated, { useAnimatedReaction, type SharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -43,8 +47,15 @@ export function SkipSegmentPill({
   hasNext,
   onSkip,
 }: Props) {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const [active, setActive] = useState<ActiveSegment | null>(null);
+
+  const labels = {
+    intro: t("player.skip.intro"),
+    recap: t("player.skip.recap"),
+    credits: t("player.skip.credits"),
+  };
 
   useAnimatedReaction(
     () => {
@@ -60,10 +71,10 @@ export function SkipSegmentPill({
         pos >= segments.introduction.start &&
         pos < segments.introduction.end
       ) {
-        return { label: "Skip Intro", end: segments.introduction.end };
+        return { label: labels.intro, end: segments.introduction.end };
       }
       if (segments.recap && pos >= segments.recap.start && pos < segments.recap.end) {
-        return { label: "Skip Recap", end: segments.recap.end };
+        return { label: labels.recap, end: segments.recap.end };
       }
       // Credits branch is suppressed when a next episode is queued —
       // those flows get the Watch Credits + Up Next pair via
@@ -75,7 +86,7 @@ export function SkipSegmentPill({
         pos >= segments.credits.start &&
         pos < segments.credits.end
       ) {
-        return { label: "Skip Credits", end: segments.credits.end };
+        return { label: labels.credits, end: segments.credits.end };
       }
       return null;
     },
@@ -84,7 +95,7 @@ export function SkipSegmentPill({
         scheduleOnRN(setActive, current);
       }
     },
-    [segments, hasNext],
+    [segments, hasNext, labels.intro, labels.recap, labels.credits],
   );
 
   const visible = active !== null;

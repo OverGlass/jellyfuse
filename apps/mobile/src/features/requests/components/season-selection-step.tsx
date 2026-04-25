@@ -1,5 +1,6 @@
 import type { SeasonInfo } from "@jellyfuse/models";
 import { colors, fontSize, fontWeight, opacity, radius, spacing } from "@jellyfuse/theme";
+import { useTranslation } from "react-i18next";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { NerdIcon } from "@/features/common/components/nerd-icon";
 
@@ -22,6 +23,7 @@ interface Props {
 }
 
 export function SeasonSelectionStep({ seasons, selected, onToggle, onSelectAll, onClear }: Props) {
+  const { t } = useTranslation();
   const requestable = seasons.filter((s) => s.availability === "missing");
   const allRequestableSelected =
     requestable.length > 0 && requestable.every((s) => selected.includes(s.seasonNumber));
@@ -29,14 +31,18 @@ export function SeasonSelectionStep({ seasons, selected, onToggle, onSelectAll, 
   return (
     <View style={styles.root}>
       <View style={styles.headerRow}>
-        <Text style={styles.headerTitle}>Pick seasons to request</Text>
+        <Text style={styles.headerTitle}>{t("requests.flow.seasons.title")}</Text>
         {requestable.length > 0 ? (
           <Pressable
             accessibilityRole="button"
             onPress={allRequestableSelected ? onClear : onSelectAll}
             style={({ pressed }) => [styles.bulkButton, pressed && styles.pressed]}
           >
-            <Text style={styles.bulkLabel}>{allRequestableSelected ? "Clear" : "Select all"}</Text>
+            <Text style={styles.bulkLabel}>
+              {allRequestableSelected
+                ? t("requests.flow.seasons.clear")
+                : t("requests.flow.seasons.selectAll")}
+            </Text>
           </Pressable>
         ) : null}
       </View>
@@ -46,9 +52,9 @@ export function SeasonSelectionStep({ seasons, selected, onToggle, onSelectAll, 
           const isDisabled = season.availability !== "missing";
           const statusLabel =
             season.availability === "available"
-              ? "Available"
+              ? t("requests.flow.seasons.status.available")
               : season.availability === "requested"
-                ? "Requested"
+                ? t("requests.flow.seasons.status.requested")
                 : undefined;
           return (
             <Pressable
@@ -83,7 +89,7 @@ export function SeasonSelectionStep({ seasons, selected, onToggle, onSelectAll, 
           );
         })}
         {seasons.length === 0 ? (
-          <Text style={styles.empty}>Jellyseerr returned no seasons for this show.</Text>
+          <Text style={styles.empty}>{t("requests.flow.empty.noSeasons")}</Text>
         ) : null}
       </View>
     </View>

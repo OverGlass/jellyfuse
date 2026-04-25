@@ -8,6 +8,7 @@ import type { TrickplayData } from "@jellyfuse/api";
 import type { AudioStream, Chapter, SubtitleTrack } from "@jellyfuse/models";
 import { colors, fontSize, opacity, radius, spacing, withAlpha } from "@jellyfuse/theme";
 import { Activity, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ActivityIndicator, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { Gesture, GestureDetector, Pressable } from "react-native-gesture-handler";
 import Animated, { type SharedValue } from "react-native-reanimated";
@@ -56,6 +57,7 @@ export function ControlsOverlay({
   onDismiss,
   onOpenTrackPicker,
 }: Props) {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { width: screenWidth } = useWindowDimensions();
   const [userDismissed, setUserDismissed] = useState(false);
@@ -160,7 +162,7 @@ export function ControlsOverlay({
           <View style={styles.topRow} pointerEvents="box-none">
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Close player"
+              accessibilityLabel={t("player.closePlayer")}
               onPress={onDismiss}
               hitSlop={12}
               style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
@@ -180,7 +182,7 @@ export function ControlsOverlay({
             {onOpenTrackPicker ? (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Audio and subtitle tracks"
+                accessibilityLabel={t("player.tracks.ariaLabel")}
                 onPress={onOpenTrackPicker}
                 hitSlop={12}
                 style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
@@ -199,7 +201,7 @@ export function ControlsOverlay({
             ) : (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={isPlaying ? "Pause" : "Play"}
+                accessibilityLabel={isPlaying ? t("player.pause") : t("player.play")}
                 onPress={() => {
                   onPlayPause();
                   handleInteraction();

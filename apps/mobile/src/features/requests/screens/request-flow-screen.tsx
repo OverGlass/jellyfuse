@@ -1,6 +1,7 @@
 import { colors, fontSize, fontWeight, opacity, radius, spacing } from "@jellyfuse/theme";
 import { router } from "expo-router";
 import { type ReactNode, useReducer, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { NerdIcon } from "@/features/common/components/nerd-icon";
 import { QualitySelectionStep } from "@/features/requests/components/quality-selection-step";
@@ -61,6 +62,7 @@ interface Props {
 const SUCCESS_DISMISS_MS = 1500;
 
 export function RequestFlowScreen({ tmdbId, mediaType, title }: Props) {
+  const { t } = useTranslation();
   const { jellyseerrStatus } = useAuth();
 
   const isTv = mediaType === "tv";
@@ -117,7 +119,7 @@ export function RequestFlowScreen({ tmdbId, mediaType, title }: Props) {
   function handleSubmit() {
     if (state.step !== "quality") return;
     if (jellyseerrStatus !== "connected") {
-      dispatch({ type: "SUBMIT_ERROR", message: "Jellyseerr is not connected." });
+      dispatch({ type: "SUBMIT_ERROR", message: t("requests.flow.error.notConnected") });
       return;
     }
     dispatch({ type: "SUBMIT" });
@@ -137,7 +139,8 @@ export function RequestFlowScreen({ tmdbId, mediaType, title }: Props) {
       {
         onSuccess: () => dispatch({ type: "SUBMIT_SUCCESS" }),
         onError: (error) => {
-          const message = error instanceof Error ? error.message : "Couldn&apos;t submit request.";
+          const message =
+            error instanceof Error ? error.message : t("requests.flow.error.submitFailed");
           dispatch({ type: "SUBMIT_ERROR", message });
         },
       },
@@ -147,12 +150,10 @@ export function RequestFlowScreen({ tmdbId, mediaType, title }: Props) {
   // ── Render ────────────────────────────────────────────────────────
   if (jellyseerrStatus !== "connected") {
     return (
-      <SheetShell title={title} subtitle="Request media">
+      <SheetShell title={title} subtitle={t("requests.flow.subtitle")}>
         <View style={styles.centered}>
-          <Text style={styles.emptyTitle}>Jellyseerr not connected</Text>
-          <Text style={styles.emptyBody}>
-            Sign in to Jellyseerr from the auth flow to request new media.
-          </Text>
+          <Text style={styles.emptyTitle}>{t("requests.flow.notConnected.title")}</Text>
+          <Text style={styles.emptyBody}>{t("requests.flow.notConnected.body")}</Text>
         </View>
       </SheetShell>
     );
@@ -166,14 +167,14 @@ export function RequestFlowScreen({ tmdbId, mediaType, title }: Props) {
     state.step === "done" ? (
       <View style={styles.centered}>
         <NerdIcon name="check" size={32} color={colors.success} />
-        <Text style={styles.successTitle}>Request submitted</Text>
-        <Text style={styles.emptyBody}>Jellyseerr will start downloading shortly.</Text>
+        <Text style={styles.successTitle}>{t("requests.flow.success.title")}</Text>
+        <Text style={styles.emptyBody}>{t("requests.flow.success.body")}</Text>
       </View>
     ) : state.step === "error" ? (
       <View style={styles.centered}>
         <NerdIcon name="warning" size={28} color={colors.danger} />
-        <Text style={styles.errorTitle}>Couldn&apos;t submit request</Text>
-        <Text style={styles.emptyBody}>{state.errorMessage ?? "Unknown error"}</Text>
+        <Text style={styles.errorTitle}>{t("requests.flow.error.title")}</Text>
+        <Text style={styles.emptyBody}>{state.errorMessage ?? t("requests.error.unknown")}</Text>
       </View>
     ) : isLoadingFirstFetch ? (
       <View style={styles.centered}>
@@ -200,7 +201,7 @@ export function RequestFlowScreen({ tmdbId, mediaType, title }: Props) {
   return (
     <SheetShell
       title={title}
-      subtitle="Request media"
+      subtitle={t("requests.flow.subtitle")}
       footer={
         <Footer
           state={state}
@@ -248,6 +249,7 @@ interface ShellProps {
 }
 
 function SheetShell({ title, subtitle, footer, children }: ShellProps) {
+  const { t } = useTranslation();
   return (
     <View collapsable={false} style={styles.root}>
       <View collapsable={false} style={styles.headerRow}>
@@ -259,7 +261,7 @@ function SheetShell({ title, subtitle, footer, children }: ShellProps) {
         </View>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Close"
+          accessibilityLabel={t("requests.flow.close")}
           hitSlop={12}
           onPress={() => router.back()}
           style={({ pressed }) => [styles.closeButton, pressed && styles.pressed]}
@@ -305,6 +307,7 @@ function Footer({
   onSubmit,
   onRetry,
 }: FooterProps) {
+  const { t } = useTranslation();
   if (state.step === "done") return null;
 
   if (state.step === "submitting") {
@@ -325,14 +328,14 @@ function Footer({
           onPress={onCancel}
           style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}
         >
-          <Text style={styles.secondaryLabel}>Cancel</Text>
+          <Text style={styles.secondaryLabel}>{t("requests.flow.cancel")}</Text>
         </Pressable>
         <Pressable
           accessibilityRole="button"
           onPress={onRetry}
           style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}
         >
-          <Text style={styles.primaryLabel}>Retry</Text>
+          <Text style={styles.primaryLabel}>{t("requests.flow.retry")}</Text>
         </Pressable>
       </View>
     );
@@ -347,7 +350,7 @@ function Footer({
           onPress={onCancel}
           style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}
         >
-          <Text style={styles.secondaryLabel}>Cancel</Text>
+          <Text style={styles.secondaryLabel}>{t("requests.flow.cancel")}</Text>
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -360,7 +363,7 @@ function Footer({
             pressed && hasSelection && styles.pressed,
           ]}
         >
-          <Text style={styles.primaryLabel}>Next</Text>
+          <Text style={styles.primaryLabel}>{t("requests.flow.next")}</Text>
         </Pressable>
       </View>
     );
@@ -374,7 +377,9 @@ function Footer({
         onPress={hasSeasonStep ? onBack : onCancel}
         style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}
       >
-        <Text style={styles.secondaryLabel}>{hasSeasonStep ? "Back" : "Cancel"}</Text>
+        <Text style={styles.secondaryLabel}>
+          {hasSeasonStep ? t("requests.flow.back") : t("requests.flow.cancel")}
+        </Text>
       </Pressable>
       <Pressable
         accessibilityRole="button"
@@ -387,7 +392,7 @@ function Footer({
           pressed && canSubmit && styles.pressed,
         ]}
       >
-        <Text style={styles.primaryLabel}>Request</Text>
+        <Text style={styles.primaryLabel}>{t("requests.flow.request")}</Text>
       </Pressable>
     </View>
   );

@@ -1,5 +1,6 @@
 import type { MediaServer } from "@jellyfuse/models";
 import { colors, fontSize, fontWeight, opacity, radius, spacing } from "@jellyfuse/theme";
+import { useTranslation } from "react-i18next";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 /**
@@ -20,20 +21,19 @@ interface Props {
 }
 
 export function QualitySelectionStep({ servers, selected, onSelect }: Props) {
+  const { t } = useTranslation();
   const showServerNames = servers.length > 1;
   return (
     <View style={styles.root}>
-      <Text style={styles.headerTitle}>Choose a quality profile</Text>
+      <Text style={styles.headerTitle}>{t("requests.flow.quality.title")}</Text>
       {servers.length === 0 ? (
-        <Text style={styles.empty}>
-          Jellyseerr has no quality profiles configured for this media type.
-        </Text>
+        <Text style={styles.empty}>{t("requests.flow.empty.noProfiles")}</Text>
       ) : null}
       {servers.map((server) => (
         <View key={server.id} style={styles.serverGroup}>
           {showServerNames ? <Text style={styles.serverLabel}>{server.name}</Text> : null}
           {server.profiles.length === 0 ? (
-            <Text style={styles.empty}>No profiles on this server.</Text>
+            <Text style={styles.empty}>{t("requests.flow.empty.noServerProfiles")}</Text>
           ) : (
             <View style={styles.list}>
               {server.profiles.map((profile) => {
