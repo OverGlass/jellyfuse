@@ -14,9 +14,24 @@ interface UseReportingSessionArgs {
   mpvRef: NativeMpv | null;
   resolved: ResolvedStream | null;
   baseUrl: string | undefined;
+  /**
+   * The Jellyfin item id from the route. Distinct from
+   * `resolved.mediaSourceId` — for movies and episodes Jellyfin
+   * happens to set them equal, but the item id is the canonical
+   * `BaseItem.Id` and is what the cache uses to key per-item state.
+   */
+  jellyfinId: string;
+  /** Active Jellyfin user — needed for the optimistic cache update. */
+  userId: string | undefined;
 }
 
-export function useReportingSession({ mpvRef, resolved, baseUrl }: UseReportingSessionArgs): void {
+export function useReportingSession({
+  mpvRef,
+  resolved,
+  baseUrl,
+  jellyfinId,
+  userId,
+}: UseReportingSessionArgs): void {
   const reportedStartRef = useRef(false);
   const positionRef = useRef(0);
   const isPlayingRef = useRef(false);
@@ -35,7 +50,7 @@ export function useReportingSession({ mpvRef, resolved, baseUrl }: UseReportingS
     reportedStartRef.current = true;
     reportStart({
       baseUrl,
-      itemId: resolved.mediaSourceId,
+      itemId: jellyfinId,
       mediaSourceId: resolved.mediaSourceId,
       playSessionId: resolved.playSessionId,
       positionTicks: 0,
@@ -44,13 +59,15 @@ export function useReportingSession({ mpvRef, resolved, baseUrl }: UseReportingS
   });
 
   const doReportStopped = useEffectEvent(() => {
-    if (!resolved || !baseUrl) return;
+    if (!resolved || !baseUrl || !userId) return;
     reportStopped({
       baseUrl,
-      itemId: resolved.mediaSourceId,
+      itemId: jellyfinId,
       mediaSourceId: resolved.mediaSourceId,
       playSessionId: resolved.playSessionId,
       positionTicks: secondsToTicks(positionRef.current),
+      runtimeTicks: secondsToTicks(resolved.durationSeconds),
+      userId,
     });
   });
 
@@ -58,7 +75,7 @@ export function useReportingSession({ mpvRef, resolved, baseUrl }: UseReportingS
     if (!resolved || !baseUrl) return;
     reportProgress({
       baseUrl,
-      itemId: resolved.mediaSourceId,
+      itemId: jellyfinId,
       mediaSourceId: resolved.mediaSourceId,
       playSessionId: resolved.playSessionId,
       positionTicks: secondsToTicks(positionRef.current),

@@ -456,6 +456,19 @@ export interface PendingReport {
   kind: PendingReportKind;
   /** Unix milliseconds — used as sort key for FIFO ordering. */
   occurredAtMs: number;
+  /**
+   * Item runtime in Jellyfin ticks at the time of reporting. Carried
+   * on stopped reports so the drainer can re-run the optimistic cache
+   * patch (`applyStopReportLocally`) when flushing offline-queued
+   * reports on reconnect. Optional for back-compat with reports
+   * persisted by an older app version.
+   */
+  runtimeTicks?: number;
+  /**
+   * Active Jellyfin user at the time of reporting. Same purpose as
+   * `runtimeTicks` — needed by the drainer's cache-update walk.
+   */
+  userId?: string;
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
