@@ -2,8 +2,8 @@ import { fetchJellyseerrDownloadProgress, fetchJellyseerrRequests } from "@jelly
 import type { DownloadProgress, MediaRequest } from "@jellyfuse/models";
 import { queryKeys, STALE_TIMES } from "@jellyfuse/query-keys";
 import { useQueries, useQuery, type UseQueryResult } from "@tanstack/react-query";
-import { apiFetch } from "@/services/api/client";
 import { useAuth } from "@/services/auth/state";
+import { jellyseerrFetch } from "@/services/jellyseerr/client";
 
 /**
  * Hooks for the Jellyseerr requests tab.
@@ -39,7 +39,7 @@ export function useJellyseerrRequests(): UseQueryResult<MediaRequest[]> {
     queryKey: queryKeys.jellyseerrRequests(userId),
     queryFn: ({ signal }) => {
       if (!jellyseerrUrl) throw new Error("useJellyseerrRequests called without jellyseerrUrl");
-      return fetchJellyseerrRequests({ baseUrl: jellyseerrUrl }, apiFetch, signal);
+      return fetchJellyseerrRequests({ baseUrl: jellyseerrUrl }, jellyseerrFetch, signal);
     },
     enabled,
     staleTime: STALE_TIMES.requests,
@@ -81,7 +81,7 @@ export function useDownloadProgressMap(
             tmdbId: request.tmdbId,
             mediaType: request.mediaType,
           },
-          apiFetch,
+          jellyseerrFetch,
         );
       },
       enabled,

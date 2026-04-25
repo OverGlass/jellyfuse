@@ -129,7 +129,14 @@ export function DownloadsScreen() {
   return (
     <View style={styles.container}>
       {isEmpty ? (
-        <View style={[styles.empty, { paddingTop: headerHeight + spacing.xxl }]}>
+        // Symmetric padding (header on top, pill tab bar on bottom)
+        // so `justifyContent: "center"` lands the empty state in the
+        // visible viewport — without the bottom inset, content
+        // anchors below true centre because the tab bar steals space
+        // we never compensated for.
+        <View
+          style={[styles.empty, { paddingTop: headerHeight, paddingBottom: listPaddingBottom }]}
+        >
           <NerdIcon name="download" size={48} color={colors.textMuted} />
           <Text style={styles.emptyTitle}>{t("downloads.empty.title")}</Text>
           <Text style={styles.emptyBody}>{t("downloads.empty.body")}</Text>
