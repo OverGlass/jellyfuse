@@ -122,9 +122,16 @@ export function useSearchBlended(
       const jellyfinData = jellyfinResult?.data;
       const jellyseerrData = jellyseerrEnabled ? jellyseerrResult?.data : [];
       const hasJellyfin = jellyfinData !== undefined;
-      const hasJellyseerr = jellyseerrEnabled ? jellyseerrData !== undefined : true;
+      // Treat a Jellyseerr error as "settled with no items" — the
+      // hook's contract is that a failed Jellyseerr call surfaces
+      // separately via `jellyseerrError` without blocking the
+      // library-only blend. Without this, errored Jellyseerr leaves
+      // `data` permanently null and the user sees "no results" even
+      // though Jellyfin returned matches.
+      const jellyseerrSettled =
+        !jellyseerrEnabled || jellyseerrData !== undefined || Boolean(jellyseerrResult?.isError);
       const data: BlendedSearchResults | null =
-        hasJellyfin && hasJellyseerr
+        hasJellyfin && jellyseerrSettled
           ? blendSearchResults(jellyfinData ?? [], jellyseerrData ?? [], typeFilter)
           : null;
       return {
