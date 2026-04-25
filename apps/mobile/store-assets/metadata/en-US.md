@@ -62,7 +62,7 @@ jellyfin,media,player,server,stream,video,movie,tv,jellyseerr,mpv
 
 - **Support URL**: `https://github.com/arkbase/jellyfuse/issues`
 - **Marketing URL**: `https://github.com/arkbase/jellyfuse`
-- **Privacy Policy URL**: `https://arkbase.github.io/jellyfuse/privacy.html` _(set after Phase 2 GitHub Pages deploy — verify URL resolves before submitting)_
+- **Privacy Policy URL**: `https://jellyfuse-privacy.tailba6a9d.ts.net/privacy.html`
 
 ## Copyright
 
@@ -86,7 +86,7 @@ Jellyseerr is an optional integration. To keep the review focused, please leave 
 
 There are no in-app purchases, subscriptions, or accounts created by the app itself — credentials live in the iOS Keychain and only authenticate to the user-supplied server.
 
-Privacy policy: https://arkbase.github.io/jellyfuse/privacy.html
+Privacy policy: https://jellyfuse-privacy.tailba6a9d.ts.net/privacy.html
 ```
 
 ## What's New in this Version (max 4000)
