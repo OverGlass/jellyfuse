@@ -15,6 +15,7 @@ import {
 import { useResolverSettings } from "@/services/settings/use-resolver-settings";
 import { localTrickplayData, resolveLocalStream } from "@/services/downloads/local-stream";
 import { useDownloadForItem } from "@/services/downloads/use-local-downloads";
+import { useNextLocalEpisode } from "@/services/downloads/use-next-local-episode";
 import { useConnectionStatus } from "@/services/connection/monitor";
 import { useAdjacentEpisode, useMovieDetail } from "@/services/query";
 import { ControlsOverlay } from "../components/controls-overlay";
@@ -100,7 +101,14 @@ export function PlayerScreen({ jellyfinId }: Props) {
     isEpisode ? detail.data?.seriesId : undefined,
     isEpisode ? jellyfinId : undefined,
   );
-  const nextEpisode = nextEpisodeQuery.data ?? undefined;
+  // Offline fallback: walk the downloads list for the next completed
+  // episode in the same series. Used as the source of truth when
+  // offline — the network query is unreachable and we can only play
+  // episodes that are on disk anyway. Online stays network-only:
+  // server is authoritative when reachable.
+  const localNextEpisode = useNextLocalEpisode(jellyfinId);
+  const nextEpisode =
+    connection === "offline" ? localNextEpisode : (nextEpisodeQuery.data ?? undefined);
 
   // On natural end-of-file, navigate to the next episode's player. Use
   // `router.replace` so back still returns to the detail page, not the
