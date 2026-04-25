@@ -1,9 +1,3 @@
----
-layout: default
-title: Privacy Policy
-permalink: /privacy.html
----
-
 # Jellyfuse Privacy Policy
 
 _Last updated: 2026-04-25_
@@ -55,7 +49,7 @@ If this policy changes, the updated version is committed to the Jellyfuse reposi
 
 ## Contact
 
-Issues, questions, or data-deletion requests: open an issue at the [Jellyfuse GitHub repository](https://github.com/arkbase/jellyfuse) or contact the maintainer at antonin.carlin@icloud.com.
+Issues, questions, or data-deletion requests: open an issue at the [Jellyfuse GitHub repository](https://github.com/OverGlass/jellyfuse) or contact the maintainer at antonin.carlin@icloud.com.
 
 ---
 

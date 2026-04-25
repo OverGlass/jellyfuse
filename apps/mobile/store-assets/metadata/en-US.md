@@ -60,8 +60,8 @@ jellyfin,media,player,server,stream,video,movie,tv,jellyseerr,mpv
 
 ## URLs
 
-- **Support URL**: `https://github.com/arkbase/jellyfuse/issues`
-- **Marketing URL**: `https://github.com/arkbase/jellyfuse`
+- **Support URL**: `https://github.com/OverGlass/jellyfuse/issues`
+- **Marketing URL**: `https://github.com/OverGlass/jellyfuse`
 - **Privacy Policy URL**: `https://jellyfuse-privacy.tailba6a9d.ts.net/privacy.html`
 
 ## Copyright
