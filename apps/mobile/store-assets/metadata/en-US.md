@@ -8,7 +8,7 @@ Drop these values into App Store Connect → Jellyfuse → 1.0.0 Prepare for Sub
 - **Subtitle** (max 30): `Native Jellyfin client`
 - **Primary category**: Entertainment
 - **Secondary category**: Photo & Video
-- **Bundle ID**: `com.jellyfuse.app`
+- **Bundle ID**: `com.jellyfusion.app`
 - **SKU**: `jellyfuse-ios-1`
 - **Content rights**: Does not contain, show, or access third-party content (you bring your own server). If ASC pushes back, switch to "contains third-party content" and reference the BYO-server model.
 

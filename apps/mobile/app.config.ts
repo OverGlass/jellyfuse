@@ -22,7 +22,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   // native build time, so requires a rebuild to take effect.
   backgroundColor: "#1e2227",
   ios: {
-    bundleIdentifier: "com.jellyfuse.app",
+    bundleIdentifier: "com.jellyfusion.app",
     supportsTablet: false,
     appleTeamId: "39TMVBW2CY",
     infoPlist: {
@@ -35,7 +35,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
             NSBonjourServices: [],
             CFBundleURLTypes: [
               {
-                CFBundleURLSchemes: ["jellyfuse", "com.jellyfuse.app"],
+                CFBundleURLSchemes: ["jellyfuse", "com.jellyfusion.app"],
               },
             ],
           }
@@ -43,7 +43,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     },
   },
   android: {
-    package: "com.jellyfuse.app",
+    package: "com.jellyfusion.app",
     adaptiveIcon: {
       backgroundColor: "#1e2227",
       foregroundImage: "./assets/images/android-icon-foreground.png",
