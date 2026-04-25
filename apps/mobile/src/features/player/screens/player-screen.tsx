@@ -18,9 +18,9 @@ import { useDownloadForItem } from "@/services/downloads/use-local-downloads";
 import { useConnectionStatus } from "@/services/connection/monitor";
 import { useAdjacentEpisode, useMovieDetail } from "@/services/query";
 import { ControlsOverlay } from "../components/controls-overlay";
+import { EndOfEpisodeOverlay } from "../components/end-of-episode-overlay";
 import { SkipSegmentPill } from "../components/skip-segment-pill";
 import { TrackPicker } from "../components/track-picker";
-import { UpNextOverlay } from "../components/up-next-overlay";
 import { useMpvPlayer } from "../hooks/use-mpv-player";
 import { useNowPlaying } from "../hooks/use-now-playing";
 import {
@@ -243,15 +243,18 @@ export function PlayerScreen({ jellyfinId }: Props) {
         positionShared={player.positionShared}
         durationShared={player.durationShared}
         segments={resolved?.introSkipperSegments}
+        hasNext={nextEpisode !== undefined}
         onSkip={player.seek}
       />
 
-      {/* Up Next countdown — appears in the final 30-40s of an episode
-          when the next one is known. Ports the near-end fallback path
-          from `PlayerView::render` in the Rust reference. */}
-      <UpNextOverlay
+      {/* End-of-episode overlays — Watch Credits + Up Next countdown
+          (credits-path) and the near-end fallback Up Next card. Ports
+          both paths from `PlayerView::render` in the Rust reference;
+          a single store enforces the at-most-one-visible invariant. */}
+      <EndOfEpisodeOverlay
         positionShared={player.positionShared}
         durationShared={player.durationShared}
+        creditsSegment={resolved?.introSkipperSegments?.credits}
         nextEpisode={nextEpisode}
         isPlaying={player.isPlaying}
         onAutoplay={handlePlaybackEnded}

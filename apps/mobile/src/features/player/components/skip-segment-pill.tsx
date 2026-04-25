@@ -10,7 +10,8 @@
 import type { IntroSkipperSegments } from "@jellyfuse/models";
 import { colors, fontSize, fontWeight, radius, spacing } from "@jellyfuse/theme";
 import { useState } from "react";
-import { Pressable, StyleSheet, Text } from "react-native";
+import { StyleSheet, Text } from "react-native";
+import { Pressable } from "react-native-gesture-handler";
 import Animated, { useAnimatedReaction, type SharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
@@ -21,6 +22,12 @@ interface Props {
   /** UI-thread duration mirror — used to gate the pill until mpv has loaded. */
   durationShared: SharedValue<number>;
   segments: IntroSkipperSegments | undefined;
+  /**
+   * When true, the credits branch is suppressed — episodes with a
+   * next episode get the Watch Credits + Up Next pair instead. Mirrors
+   * Rust's `!has_next` gate in `PlayerView::render`.
+   */
+  hasNext: boolean;
   onSkip: (toSeconds: number) => void;
 }
 
@@ -29,7 +36,13 @@ interface ActiveSegment {
   end: number;
 }
 
-export function SkipSegmentPill({ positionShared, durationShared, segments, onSkip }: Props) {
+export function SkipSegmentPill({
+  positionShared,
+  durationShared,
+  segments,
+  hasNext,
+  onSkip,
+}: Props) {
   const insets = useSafeAreaInsets();
   const [active, setActive] = useState<ActiveSegment | null>(null);
 
@@ -52,7 +65,16 @@ export function SkipSegmentPill({ positionShared, durationShared, segments, onSk
       if (segments.recap && pos >= segments.recap.start && pos < segments.recap.end) {
         return { label: "Skip Recap", end: segments.recap.end };
       }
-      if (segments.credits && pos >= segments.credits.start && pos < segments.credits.end) {
+      // Credits branch is suppressed when a next episode is queued —
+      // those flows get the Watch Credits + Up Next pair via
+      // EndOfEpisodeOverlay instead. Mirrors Rust's `!has_next` gate
+      // around the `pending_skip_credits` button.
+      if (
+        !hasNext &&
+        segments.credits &&
+        pos >= segments.credits.start &&
+        pos < segments.credits.end
+      ) {
         return { label: "Skip Credits", end: segments.credits.end };
       }
       return null;
@@ -62,7 +84,7 @@ export function SkipSegmentPill({ positionShared, durationShared, segments, onSk
         scheduleOnRN(setActive, current);
       }
     },
-    [segments],
+    [segments, hasNext],
   );
 
   const visible = active !== null;
