@@ -20,6 +20,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   scheme: "jellyfuse",
   userInterfaceStyle: "automatic",
   icon: "./assets/images/icon.png",
+  // Native window background — used by iOS for the close-to-icon
+  // (genie) animation snapshot and the app switcher, and by Android
+  // for the window background. Without this, iOS falls back to white
+  // during the close animation. Wired through expo-system-ui at
+  // native build time, so requires a rebuild to take effect.
+  backgroundColor: "#1e2227",
   ios: {
     bundleIdentifier: "com.jellyfuse.app",
     supportsTablet: true,
@@ -32,7 +38,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   android: {
     package: "com.jellyfuse.app",
     adaptiveIcon: {
-      backgroundColor: "#000000",
+      backgroundColor: "#1e2227",
       foregroundImage: "./assets/images/android-icon-foreground.png",
       backgroundImage: "./assets/images/android-icon-background.png",
       monochromeImage: "./assets/images/android-icon-monochrome.png",
@@ -49,7 +55,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     [
       "expo-splash-screen",
       {
-        backgroundColor: "#000000",
+        backgroundColor: "#1e2227",
         image: "./assets/images/splash-icon.png",
         imageWidth: 200,
       },
