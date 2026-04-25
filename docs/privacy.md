@@ -1,3 +1,9 @@
+---
+layout: default
+title: Privacy Policy
+permalink: /privacy.html
+---
+
 # Jellyfuse Privacy Policy
 
 _Last updated: 2026-04-25_
