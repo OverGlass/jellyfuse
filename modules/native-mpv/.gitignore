@@ -1,0 +1,8 @@
+# Per-machine MPVKit symlinks created by scripts/fetch-mpvkit.sh.
+# They point at ~/Library/Caches/jellyfuse/mpvkit-ios/$VERSION/, so the
+# stored symlink target is user-specific and not portable. Each clone
+# regenerates them via the fetch script (called from
+# apps/mobile/eas-build-post-install.sh, or run manually before the
+# first iOS build).
+vendor/ios/mpvkit-device
+vendor/ios/mpvkit-simulator
