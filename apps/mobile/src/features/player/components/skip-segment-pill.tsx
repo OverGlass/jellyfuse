@@ -8,7 +8,7 @@
 // active segment *changes* (enter/exit), not on every position tick.
 
 import type { IntroSkipperSegments } from "@jellyfuse/models";
-import { colors, fontSize, fontWeight, radius, spacing } from "@jellyfuse/theme";
+import { fontSize, fontWeight, opacity, spacing } from "@jellyfuse/theme";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { StyleSheet, Text } from "react-native";
@@ -121,28 +121,37 @@ export function SkipSegmentPill({
           onPress={() => onSkip(active.end)}
           style={({ pressed }) => [styles.pill, pressed && styles.pillPressed]}
         >
-          <Text style={styles.label}>{active.label} →</Text>
+          <Text style={styles.label}>{active.label}</Text>
         </Pressable>
       ) : null}
     </Animated.View>
   );
 }
 
+// Match `CountdownPill` / `NearEndPill`: light solid fill with dark
+// label, 44dp height, fully rounded. Apple-TV / Netflix-style skip
+// affordance — consistent with the credits-window button pair.
+const FILL_COLOR = "#ededed";
+const LABEL_COLOR = "#1a1a1a";
+const HEIGHT = 44;
+
 const styles = StyleSheet.create({
   container: {
     position: "absolute",
   },
   pill: {
-    backgroundColor: colors.accent,
-    borderRadius: radius.md,
+    alignItems: "center",
+    backgroundColor: FILL_COLOR,
+    borderRadius: HEIGHT / 2,
+    height: HEIGHT,
+    justifyContent: "center",
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
   },
   pillPressed: {
-    opacity: 0.8,
+    opacity: opacity.pressed,
   },
   label: {
-    color: colors.textPrimary,
+    color: LABEL_COLOR,
     fontSize: fontSize.body,
     fontWeight: fontWeight.semibold,
   },
