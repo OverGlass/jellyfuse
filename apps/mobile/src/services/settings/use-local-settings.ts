@@ -9,6 +9,24 @@ import {
   type LocalSettings,
 } from "./local";
 
+// Module-level cache so `getSnapshot` returns a stable object reference
+// while the underlying MMKV string is unchanged. `useSyncExternalStore`
+// compares snapshots with `Object.is` — returning a freshly-parsed
+// object on every call loops ("result of getSnapshot should be cached
+// to avoid an infinite loop"). Shared across all hook instances so
+// multiple subscribers see the same reference.
+const snapshotCache = new Map<string, { raw: string | undefined; value: LocalSettings }>();
+
+function cachedSnapshot(userId: string): LocalSettings {
+  const key = localSettingsMmkvKey(userId);
+  const raw = storage.getString(key);
+  const cached = snapshotCache.get(userId);
+  if (cached && cached.raw === raw) return cached.value;
+  const value = readLocalSettings(userId);
+  snapshotCache.set(userId, { raw, value });
+  return value;
+}
+
 /**
  * Subscribe to the MMKV-backed local settings for the active user.
  *
@@ -33,7 +51,7 @@ export function useLocalSettings(): LocalSettings {
     });
     return () => listener.remove();
   };
-  const getSnapshot = () => (userId ? readLocalSettings(userId) : DEFAULT_LOCAL_SETTINGS);
+  const getSnapshot = () => (userId ? cachedSnapshot(userId) : DEFAULT_LOCAL_SETTINGS);
   return useSyncExternalStore(subscribe, getSnapshot);
 }
 
