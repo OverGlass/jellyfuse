@@ -41,7 +41,7 @@ export function PlayerScreen({ jellyfinId }: Props) {
   useKeepAwake();
   const { t } = useTranslation();
 
-  const { serverUrl } = useAuth();
+  const { serverUrl, activeUser } = useAuth();
   const resolverSettings = useResolverSettings();
   const detail = useMovieDetail(jellyfinId);
   // Local-first policy:
@@ -138,6 +138,8 @@ export function PlayerScreen({ jellyfinId }: Props) {
     mpvRef: player.mpv,
     resolved,
     baseUrl: serverUrl,
+    jellyfinId,
+    userId: activeUser?.userId,
   });
 
   // Lock-screen / Control Center metadata + remote-control wiring.
