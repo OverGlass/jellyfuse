@@ -10,8 +10,16 @@ import { AuthProvider, useAuth } from "@/services/auth/state";
 import { DownloaderProvider } from "@/services/downloads/context";
 import { useLocalDownloadsSync } from "@/services/downloads/use-local-downloads";
 import "@/services/i18n/init";
+import { installJellyseerrDisconnectMonitor } from "@/services/jellyseerr/disconnect-monitor";
 import { useReportDrainer } from "@/services/playback/use-report-drainer";
 import { QueryProvider } from "@/services/query";
+
+// Subscribe to the QueryCache once at module load so any Jellyseerr
+// 401 — surfaced as JellyseerrSessionExpiredError by jellyseerrFetch —
+// flips the active user's session marker to disconnected and seeds the
+// reconnect modal's error message. The monitor doesn't render anything;
+// it's a pure side-effect listener on the global queryClient.
+installJellyseerrDisconnectMonitor();
 
 // Keep the native splash up until the first real view has laid out
 // AND auth state has resolved — otherwise the user sees an empty
