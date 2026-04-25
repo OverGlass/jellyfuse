@@ -1,0 +1,14 @@
+title: Jellyfuse
+description: Native Jellyfin client for iPhone
+theme: jekyll-theme-cayman
+markdown: kramdown
+include:
+  - privacy.md
+exclude:
+  - feature-audit.md
+  - jellyseerr-disconnect-plan.md
+  - port-plan.md
+  - secrets.md
+  - verification
+  - release-notes
+  - store-submission.md
