@@ -709,13 +709,16 @@ interface RawMediaDetailWithInfo {
 /**
  * `GET /api/v1/{movie|tv}/{tmdbId}` — fetches the Jellyseerr media
  * detail and extracts the aggregated download progress from
- * `mediaInfo.downloadStatus`. Returns `undefined` when Jellyseerr
- * has nothing in the queue for this TMDB id (the download hasn't
- * started, or the media is already fully available).
+ * `mediaInfo.downloadStatus`. Returns `null` when Jellyseerr has
+ * nothing in the queue for this TMDB id (the download hasn't started,
+ * or the media is already fully available).
+ *
+ * Returning `null` rather than `undefined` keeps the value valid as
+ * TanStack Query cache data (v5 rejects `undefined`).
  *
  * Progress calculation mirrors `crates/jf-api/src/jellyseerr.rs::fetch_download_progress`:
  *
- * - If `downloadStatus` is missing or empty → `undefined`.
+ * - If `downloadStatus` is missing or empty → `null`.
  * - If all entries report `size === 0` → `fraction: -1` (queued,
  *   no bytes yet — UI renders an indeterminate indicator).
  * - Otherwise → `fraction = (totalSize - totalSizeLeft) / totalSize`,
@@ -725,7 +728,7 @@ export async function fetchJellyseerrDownloadProgress(
   args: { baseUrl: string; tmdbId: number; mediaType: "movie" | "tv" },
   fetcher: FetchLike,
   signal?: AbortSignal,
-): Promise<DownloadProgress | undefined> {
+): Promise<DownloadProgress | null> {
   const url = joinPath(args.baseUrl, `/api/v1/${args.mediaType}/${args.tmdbId}`);
   const response = await fetcher(url, signal ? { signal } : undefined);
   if (!response.ok) {
@@ -733,7 +736,7 @@ export async function fetchJellyseerrDownloadProgress(
   }
   const raw = (await response.json()) as RawMediaDetailWithInfo;
   const entries = raw.mediaInfo?.downloadStatus;
-  if (!Array.isArray(entries) || entries.length === 0) return undefined;
+  if (!Array.isArray(entries) || entries.length === 0) return null;
 
   let totalSize = 0;
   let totalSizeLeft = 0;

@@ -82,6 +82,7 @@ export function useDownloadProgressMap(
             mediaType: request.mediaType,
           },
           jellyseerrFetch,
+          signal,
         );
       },
       enabled,
