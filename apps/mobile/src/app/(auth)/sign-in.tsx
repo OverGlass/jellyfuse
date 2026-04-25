@@ -10,13 +10,15 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AuthScreenHeader } from "@/features/auth/components/auth-screen-header";
 import { CloseButton } from "@/features/auth/components/close-button";
+import { LoginDecorativePanel } from "@/features/auth/components/login-decorative-panel";
 import { AuthServerNotConfiguredError, useAuth } from "@/services/auth/state";
-import { useScreenGutters } from "@/services/responsive";
+import { useBreakpoint, useScreenGutters } from "@/services/responsive";
 
 /**
  * Phase 1b.2 sign-in screen — step 2 of the two-step flow. The server
@@ -32,8 +34,15 @@ export default function SignInScreen() {
   const { serverUrl, serverVersion, signInWithCredentials } = useAuth();
   const { t } = useTranslation();
   const gutters = useScreenGutters();
+  const { breakpoint } = useBreakpoint();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  // iPad-class split layout only when there's actual room — tablet+
+  // breakpoint AND the window is in landscape orientation. Add-user
+  // (modal) flow keeps the compact vertical layout regardless so the
+  // sheet doesn't double-present a decorative panel.
   const params = useLocalSearchParams<{ mode?: string }>();
   const isAddUserMode = params.mode === "add-user";
+  const useSplitLayout = !isAddUserMode && breakpoint !== "phone" && windowWidth > windowHeight;
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -90,80 +99,96 @@ export default function SignInScreen() {
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <View
-          style={[styles.container, { paddingLeft: gutters.left, paddingRight: gutters.right }]}
-        >
-          <AuthScreenHeader
-            title={isAddUserMode ? t("auth.signIn.addUser") : t("auth.signIn.title")}
-            rightAction={isAddUserMode ? <CloseButton onPress={handleCancel} /> : null}
-            extras={
-              isAddUserMode ? (
-                <Text style={styles.subtitle}>
-                  {serverUrl ? serverUrl.replace(/^https?:\/\//, "") : "—"}
-                  {serverVersion ? ` · ${serverVersion}` : ""}
-                </Text>
-              ) : (
-                <Pressable accessibilityRole="button" onPress={handleChangeServer}>
+        <View style={useSplitLayout ? styles.split : styles.flex}>
+          {useSplitLayout ? (
+            <View style={styles.splitArt}>
+              <LoginDecorativePanel />
+            </View>
+          ) : null}
+          <View
+            style={[
+              useSplitLayout ? styles.splitForm : styles.container,
+              !useSplitLayout && {
+                paddingLeft: gutters.left,
+                paddingRight: gutters.right,
+              },
+            ]}
+          >
+            <AuthScreenHeader
+              title={isAddUserMode ? t("auth.signIn.addUser") : t("auth.signIn.title")}
+              rightAction={isAddUserMode ? <CloseButton onPress={handleCancel} /> : null}
+              extras={
+                isAddUserMode ? (
                   <Text style={styles.subtitle}>
                     {serverUrl ? serverUrl.replace(/^https?:\/\//, "") : "—"}
                     {serverVersion ? ` · ${serverVersion}` : ""}
                   </Text>
-                  <Text style={styles.changeServer}>{t("auth.signIn.changeServer")}</Text>
-                </Pressable>
-              )
-            }
-          />
-
-          <View style={styles.inputBlock}>
-            <Text style={styles.label}>{t("auth.signIn.username")}</Text>
-            <TextInput
-              value={username}
-              onChangeText={setUsername}
-              placeholder={t("auth.signIn.usernamePlaceholder")}
-              placeholderTextColor={colors.textMuted}
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoComplete="username"
-              textContentType="username"
-              returnKeyType="next"
-              style={styles.input}
-              editable={!busy}
+                ) : (
+                  <Pressable accessibilityRole="button" onPress={handleChangeServer}>
+                    <Text style={styles.subtitle}>
+                      {serverUrl ? serverUrl.replace(/^https?:\/\//, "") : "—"}
+                      {serverVersion ? ` · ${serverVersion}` : ""}
+                    </Text>
+                    <Text style={styles.changeServer}>{t("auth.signIn.changeServer")}</Text>
+                  </Pressable>
+                )
+              }
             />
+
+            <View style={styles.inputBlock}>
+              <Text style={styles.label}>{t("auth.signIn.username")}</Text>
+              <TextInput
+                value={username}
+                onChangeText={setUsername}
+                placeholder={t("auth.signIn.usernamePlaceholder")}
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="username"
+                textContentType="username"
+                returnKeyType="next"
+                style={styles.input}
+                editable={!busy}
+              />
+            </View>
+
+            <View style={styles.inputBlock}>
+              <Text style={styles.label}>{t("auth.signIn.password")}</Text>
+              <TextInput
+                value={password}
+                onChangeText={setPassword}
+                placeholder={t("auth.signIn.passwordPlaceholder")}
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="current-password"
+                textContentType="password"
+                secureTextEntry
+                returnKeyType="go"
+                onSubmitEditing={handleSubmit}
+                style={styles.input}
+                editable={!busy}
+              />
+            </View>
+
+            <Pressable
+              accessibilityRole="button"
+              onPress={handleSubmit}
+              disabled={!canSubmit}
+              style={({ pressed }) => [
+                styles.button,
+                (!canSubmit || pressed) && styles.buttonMuted,
+              ]}
+            >
+              {busy ? (
+                <ActivityIndicator color={colors.textPrimary} />
+              ) : (
+                <Text style={styles.buttonLabel}>{t("auth.signIn.submit")}</Text>
+              )}
+            </Pressable>
+
+            {error ? <Text style={styles.error}>{error}</Text> : null}
           </View>
-
-          <View style={styles.inputBlock}>
-            <Text style={styles.label}>{t("auth.signIn.password")}</Text>
-            <TextInput
-              value={password}
-              onChangeText={setPassword}
-              placeholder={t("auth.signIn.passwordPlaceholder")}
-              placeholderTextColor={colors.textMuted}
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoComplete="current-password"
-              textContentType="password"
-              secureTextEntry
-              returnKeyType="go"
-              onSubmitEditing={handleSubmit}
-              style={styles.input}
-              editable={!busy}
-            />
-          </View>
-
-          <Pressable
-            accessibilityRole="button"
-            onPress={handleSubmit}
-            disabled={!canSubmit}
-            style={({ pressed }) => [styles.button, (!canSubmit || pressed) && styles.buttonMuted]}
-          >
-            {busy ? (
-              <ActivityIndicator color={colors.textPrimary} />
-            ) : (
-              <Text style={styles.buttonLabel}>{t("auth.signIn.submit")}</Text>
-            )}
-          </Pressable>
-
-          {error ? <Text style={styles.error}>{error}</Text> : null}
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -202,6 +227,22 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: spacing.lg,
     paddingBottom: spacing.lg,
+  },
+  split: {
+    flex: 1,
+    flexDirection: "row",
+  },
+  splitArt: {
+    flex: 1,
+  },
+  splitForm: {
+    width: 460,
+    paddingHorizontal: 56,
+    paddingVertical: 64,
+    gap: spacing.lg,
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderLeftColor: colors.border,
+    backgroundColor: colors.background,
   },
   subtitle: {
     color: colors.textSecondary,
