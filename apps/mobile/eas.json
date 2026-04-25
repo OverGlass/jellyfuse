@@ -48,6 +48,11 @@
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "ascAppId": "REPLACE_WITH_NUMERIC_ASC_APP_ID",
+        "appleTeamId": "39TMVBW2CY"
+      }
+    }
   }
 }
