@@ -1,3 +1,4 @@
+
 # Jellyfuse local dev environment template.
 #
 # Never edit this file with real secret values. Instead:
@@ -7,25 +8,15 @@
 #
 # See docs/secrets.md for the full vault layout.
 
-JELLYFIN_DEV_URL=op://Jellyfuse Dev/dev-server/url
-JELLYFIN_DEV_USER=op://Jellyfuse Dev/dev-server/username
-JELLYFIN_DEV_PASSWORD=op://Jellyfuse Dev/dev-server/password
-
-JELLYSEERR_DEV_URL=op://Jellyfuse Dev/jellyseerr/url
-JELLYSEERR_DEV_EMAIL=op://Jellyfuse Dev/jellyseerr/email
-JELLYSEERR_DEV_PASSWORD=op://Jellyfuse Dev/jellyseerr/password
-
-SENTRY_DSN=op://Jellyfuse Dev/sentry/dsn
-
 # EAS project (read by apps/mobile/app.config.ts). Env-driven so a fork
 # can ship to its own EAS project without editing committed files.
-EAS_OWNER=op://Jellyfuse CI/EAS/owner
-EAS_PROJECT_ID=op://Jellyfuse CI/EAS/project-id
+EAS_OWNER=op://fusion/eas/owner
+EAS_PROJECT_ID=op://fusion/eas/project_id
 
 # App Store submission (used by `eas submit`).
 # Apple Team ID and ASC App ID live in eas.json (public values, not secrets).
 # Only the Apple ID + app-specific password need to be kept out of git.
 #
 # Run as: op run --env-file=.env.tpl -- eas submit --platform ios --profile production --latest
-EXPO_APPLE_ID=op://Jellyfuse CI/AppleID/email
-EXPO_APPLE_APP_SPECIFIC_PASSWORD=op://Jellyfuse CI/AppleID/app-specific-password
+EXPO_APPLE_ID=op://fusion/eas/username
+EXPO_APPLE_APP_SPECIFIC_PASSWORD=op://fusion/eas/password
