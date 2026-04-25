@@ -9,7 +9,7 @@ How to ship an iOS release of Jellyfuse to the App Store. Long-lived; per-releas
 - 1Password vault `Jellyfuse CI` contains:
   - `AppleID/email`
   - `AppleID/app-specific-password` ([generate at appleid.apple.com](https://appleid.apple.com/account/manage))
-- Privacy Policy is self-hosted on the homelab (`jellyfuse-privacy` service) and exposed via Tailscale Funnel at <https://jellyfuse-privacy.tailba6a9d.ts.net/privacy.html>. After editing `docs/privacy.md`, run `bun run privacy:deploy` (or the underlying `jellyfuse-privacy deploy` zsh alias directly) to push the change.
+- Privacy Policy is served by GitHub Pages at <https://overglass.github.io/jellyfuse/privacy.html>. Source is `docs/privacy.md`; Jekyll renders on every push to `main`. Enable in Settings → Pages → source `main`, folder `/docs`.
 - `eas credentials` has registered the iOS distribution certificate and App Store provisioning profile.
 
 ## Per-release flow

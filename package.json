@@ -22,7 +22,6 @@
     "test": "bun run --filter '*' test",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
-    "privacy:deploy": "bash scripts/deploy-privacy.sh",
     "prepare": "lefthook install || true"
   },
   "devDependencies": {

@@ -8,7 +8,7 @@ A fast, native iPhone client for [Jellyfin](https://jellyfin.org), built around 
 
 iOS 1.0 in App Store review. iPad, Apple TV, Android, Android TV, and Mac Catalyst targets are scaffolded in the codebase but not yet shipping — the v1 release is iPhone-only.
 
-[**App Store**](#) _(link added on release)_ · [**Privacy Policy**](https://jellyfuse-privacy.tailba6a9d.ts.net/privacy.html) · [**Issues**](https://github.com/OverGlass/jellyfuse/issues)
+[**App Store**](#) _(link added on release)_ · [**Privacy Policy**](https://overglass.github.io/jellyfuse/privacy.html) · [**Issues**](https://github.com/OverGlass/jellyfuse/issues)
 
 ## What's in v1
 
@@ -20,7 +20,7 @@ iOS 1.0 in App Store review. iPad, Apple TV, Android, Android TV, and Mac Cataly
 - Fast library browsing with shelves for resume, recently added, collections.
 - Instant search across the whole library.
 - Optional [Jellyseerr](https://docs.overseerr.dev/extensions/fork-jellyseerr) integration for media requests — if you don't connect one, the requests UI stays hidden.
-- **Privacy first** — Jellyfuse only talks to your server. No analytics, no telemetry, no tracking. See [the Privacy Policy](https://jellyfuse-privacy.tailba6a9d.ts.net/privacy.html).
+- **Privacy first** — Jellyfuse only talks to your server. No analytics, no telemetry, no tracking. See [the Privacy Policy](https://overglass.github.io/jellyfuse/privacy.html).
 
 ## Try it without a server
 

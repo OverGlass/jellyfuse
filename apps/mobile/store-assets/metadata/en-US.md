@@ -62,7 +62,7 @@ jellyfin,media,player,server,stream,video,movie,tv,jellyseerr,mpv
 
 - **Support URL**: `https://github.com/OverGlass/jellyfuse/issues`
 - **Marketing URL**: `https://github.com/OverGlass/jellyfuse`
-- **Privacy Policy URL**: `https://jellyfuse-privacy.tailba6a9d.ts.net/privacy.html`
+- **Privacy Policy URL**: `https://overglass.github.io/jellyfuse/privacy.html`
 
 ## Copyright
 
@@ -86,7 +86,7 @@ Jellyseerr is an optional integration. To keep the review focused, please leave 
 
 There are no in-app purchases, subscriptions, or accounts created by the app itself — credentials live in the iOS Keychain and only authenticate to the user-supplied server.
 
-Privacy policy: https://jellyfuse-privacy.tailba6a9d.ts.net/privacy.html
+Privacy policy: https://overglass.github.io/jellyfuse/privacy.html
 ```
 
 ## What's New in this Version (max 4000)
