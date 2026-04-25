@@ -3,7 +3,7 @@ import { mediaIdJellyfin, ticksToSeconds } from "@jellyfuse/models";
 import { colors } from "@jellyfuse/theme";
 import { useKeepAwake } from "expo-keep-awake";
 import { router } from "expo-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { StyleSheet, Text, View } from "react-native";
 import { resolvePlayback } from "@/services/playback/resolver";
@@ -72,10 +72,25 @@ export function PlayerScreen({ jellyfinId }: Props) {
           })
         : null;
 
-  // Resume position from user data
-  const startPosition = detail.data?.userData?.playbackPositionTicks
-    ? ticksToSeconds(detail.data.userData.playbackPositionTicks)
-    : undefined;
+  // Resume position from user data — captured ONCE when detail first
+  // resolves, then frozen for the rest of the player's lifetime. The
+  // cache entry we read from here is the same one `applyStopReportLocally`
+  // mutates on every stop report; if we let `startPosition` track it
+  // live, every cache write would feed back into `useMpvPlayer`'s load
+  // effect (`startPositionSeconds` is a dep) and force `mpv.load(...)`
+  // to fire mid-playback — re-emitting state/ended events that re-fire
+  // the stop report → re-patch the cache → infinite loop. Lazy-init
+  // ref pattern (sanctioned by the React docs) — read during render is
+  // safe because it's deterministic and idempotent.
+  const startPositionRef = useRef<{ value: number | undefined }>(undefined);
+  if (!startPositionRef.current && detail.data) {
+    startPositionRef.current = {
+      value: detail.data.userData?.playbackPositionTicks
+        ? ticksToSeconds(detail.data.userData.playbackPositionTicks)
+        : undefined,
+    };
+  }
+  const startPosition = startPositionRef.current?.value;
 
   // Every subtitle with a `deliveryUrl` is loaded as an external track
   // via mpv's `sub-add`. This applies to ONLINE playback too — mpv sees
