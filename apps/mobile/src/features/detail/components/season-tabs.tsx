@@ -1,5 +1,6 @@
 import type { MediaItem } from "@jellyfuse/api";
 import { colors, fontSize, fontWeight, opacity, radius, spacing } from "@jellyfuse/theme";
+import { useTranslation } from "react-i18next";
 import { Pressable, ScrollView, StyleSheet, Text } from "react-native";
 
 /**
@@ -15,6 +16,7 @@ interface Props {
 }
 
 export function SeasonTabs({ seasons, activeSeasonId, onSelect }: Props) {
+  const { t } = useTranslation();
   return (
     <ScrollView
       horizontal
@@ -26,7 +28,9 @@ export function SeasonTabs({ seasons, activeSeasonId, onSelect }: Props) {
           season.id.kind === "tmdb" ? `tmdb-${season.id.tmdbId}` : season.id.jellyfinId;
         const isActive = seasonId === activeSeasonId;
         const label =
-          season.seasonNumber !== undefined ? `Season ${season.seasonNumber}` : season.title;
+          season.seasonNumber !== undefined
+            ? t("detail.season", { number: season.seasonNumber })
+            : season.title;
         return (
           <Pressable
             key={seasonId}

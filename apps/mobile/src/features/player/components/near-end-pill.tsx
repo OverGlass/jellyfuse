@@ -18,6 +18,7 @@ import {
   spacing,
   withAlpha,
 } from "@jellyfuse/theme";
+import { useTranslation } from "react-i18next";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { NerdIcon } from "@/features/common/components/nerd-icon";
@@ -30,10 +31,13 @@ interface Props {
 }
 
 export function NearEndPill({ nextEpisode, onAutoplay }: Props) {
+  const { t } = useTranslation();
   const { store } = useEndOfEpisode();
   const insets = useSafeAreaInsets();
   const label = episodeLabel(nextEpisode);
-  const upNextLabel = label ? `Up Next · ${label}` : "Up Next";
+  const upNextLabel = label
+    ? t("player.upNextWithEpisode", { episode: label })
+    : t("player.upNext");
   return (
     <View
       style={[
@@ -49,7 +53,7 @@ export function NearEndPill({ nextEpisode, onAutoplay }: Props) {
         <View style={styles.topRow}>
           <View style={styles.textBlock}>
             <Text style={styles.eyebrow} numberOfLines={1}>
-              Up Next
+              {t("player.upNext")}
             </Text>
             <Text style={styles.title} numberOfLines={2}>
               {nextEpisode.title}
@@ -57,7 +61,7 @@ export function NearEndPill({ nextEpisode, onAutoplay }: Props) {
           </View>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Dismiss Up Next"
+            accessibilityLabel={t("player.upNextDismiss")}
             onPress={store.dismiss}
             hitSlop={12}
             style={({ pressed }) => [styles.closeBtn, pressed && styles.pressed]}
@@ -68,7 +72,7 @@ export function NearEndPill({ nextEpisode, onAutoplay }: Props) {
         <CountdownPill
           label={upNextLabel}
           onPress={onAutoplay}
-          accessibilityLabel={`Play ${nextEpisode.title} now`}
+          accessibilityLabel={t("player.playNowAriaLabel", { title: nextEpisode.title })}
         />
       </View>
     </View>

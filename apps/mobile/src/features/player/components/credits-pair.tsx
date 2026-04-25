@@ -5,6 +5,7 @@
 
 import { episodeLabel, type MediaItem } from "@jellyfuse/models";
 import { colors, fontSize, fontWeight, opacity, spacing } from "@jellyfuse/theme";
+import { useTranslation } from "react-i18next";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useEndOfEpisode } from "../state/end-of-episode-context";
@@ -16,10 +17,13 @@ interface Props {
 }
 
 export function CreditsPair({ nextEpisode, onAutoplay }: Props) {
+  const { t } = useTranslation();
   const { store } = useEndOfEpisode();
   const insets = useSafeAreaInsets();
   const label = episodeLabel(nextEpisode);
-  const upNextLabel = label ? `Up Next · ${label}` : "Up Next";
+  const upNextLabel = label
+    ? t("player.upNextWithEpisode", { episode: label })
+    : t("player.upNext");
   return (
     <View
       style={[
@@ -33,19 +37,19 @@ export function CreditsPair({ nextEpisode, onAutoplay }: Props) {
     >
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Watch Credits"
+        accessibilityLabel={t("player.watchCredits")}
         onPress={store.watchCredits}
         style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}
       >
         <Text style={styles.secondaryLabel} numberOfLines={1}>
-          Watch Credits
+          {t("player.watchCredits")}
         </Text>
       </Pressable>
       <View style={styles.primary}>
         <CountdownPill
           label={upNextLabel}
           onPress={onAutoplay}
-          accessibilityLabel={`Play ${nextEpisode.title} now`}
+          accessibilityLabel={t("player.playNowAriaLabel", { title: nextEpisode.title })}
         />
       </View>
     </View>
