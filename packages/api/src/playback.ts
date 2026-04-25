@@ -49,6 +49,7 @@ export class PlaybackInfoParseError extends Error {
 export function buildDeviceProfile(maxBitrate?: number) {
   return {
     MaxStreamingBitrate: maxBitrate ?? 120_000_000,
+    MaxStaticBitrate: maxBitrate ?? 120_000_000,
     DirectPlayProfiles: [
       {
         Type: "Video",
@@ -61,6 +62,71 @@ export function buildDeviceProfile(maxBitrate?: number) {
         Container: "mp3,aac,flac,ogg,opus,wav",
       },
     ],
+    // CodecProfiles assert support shape for codecs we already DirectPlay.
+    // Without these, Jellyfin's matcher silently falls back to Transcode for
+    // 10-bit / HDR / Dolby Vision sources (no `TranscodeReasons` is emitted).
+    CodecProfiles: [
+      {
+        Type: "Video",
+        Codec: "hevc",
+        Conditions: [
+          {
+            Condition: "EqualsAny",
+            Property: "VideoProfile",
+            Value: "main|main 10",
+            IsRequired: false,
+          },
+          {
+            Condition: "EqualsAny",
+            Property: "VideoRangeType",
+            Value: "SDR|HDR10|HLG|DOVI|DOVIWithHDR10|DOVIWithHLG|DOVIWithSDR",
+            IsRequired: false,
+          },
+        ],
+      },
+      {
+        Type: "Video",
+        Codec: "h264",
+        Conditions: [
+          {
+            Condition: "EqualsAny",
+            Property: "VideoProfile",
+            Value: "high|main|baseline|constrained baseline|high 10",
+            IsRequired: false,
+          },
+          {
+            Condition: "EqualsAny",
+            Property: "VideoRangeType",
+            Value: "SDR",
+            IsRequired: false,
+          },
+        ],
+      },
+      {
+        Type: "Video",
+        Codec: "av1",
+        Conditions: [
+          {
+            Condition: "EqualsAny",
+            Property: "VideoRangeType",
+            Value: "SDR|HDR10|HLG|DOVI|DOVIWithHDR10|DOVIWithHLG|DOVIWithSDR",
+            IsRequired: false,
+          },
+        ],
+      },
+      {
+        Type: "VideoAudio",
+        Codec: "aac,mp3,ac3,eac3,dts,truehd,flac,opus,pcm",
+        Conditions: [
+          {
+            Condition: "LessThanEqual",
+            Property: "AudioChannels",
+            Value: "8",
+            IsRequired: false,
+          },
+        ],
+      },
+    ],
     TranscodingProfiles: [
       {
         Container: "ts",
@@ -70,13 +136,27 @@ export function buildDeviceProfile(maxBitrate?: number) {
         Type: "Video",
       },
     ],
+    // libmpv (via FFmpeg) renders every codec we declare here. Format strings
+    // mirror Jellyfin's `NormalizeSubtitleCodec` output (MediaBrowser.MediaEncoding/
+    // Probing/ProbeResultNormalizer.cs) — matched case-insensitively against
+    // MediaStream.Codec. The original profile only listed `pgs`, which does not
+    // match Jellyfin's canonical `PGSSUB`, so any source with PGS subs (most
+    // 4K Blu-ray rips) was silently dropped from DirectPlay.
     SubtitleProfiles: [
+      { Format: "subrip", Method: "Embed" },
+      { Format: "srt", Method: "Embed" },
+      { Format: "ass", Method: "Embed" },
+      { Format: "ssa", Method: "Embed" },
+      { Format: "pgssub", Method: "Embed" },
+      { Format: "dvdsub", Method: "Embed" },
+      { Format: "dvbsub", Method: "Embed" },
+      { Format: "dvbtxt", Method: "Embed" },
+      { Format: "mov_text", Method: "Embed" },
+      { Format: "vtt", Method: "Embed" },
       { Format: "srt", Method: "External" },
       { Format: "vtt", Method: "External" },
       { Format: "ass", Method: "External" },
       { Format: "ssa", Method: "External" },
-      { Format: "pgs", Method: "Embed" },
-      { Format: "dvbsub", Method: "Embed" },
     ],
   };
 }
