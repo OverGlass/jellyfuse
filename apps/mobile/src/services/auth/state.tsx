@@ -478,12 +478,15 @@ function useAuthActionsInternal(): AuthActions {
     onSuccess: (data) => {
       queryClient.setQueryData(PERSISTED_AUTH_KEY, data);
       queryClient.setQueryData(JELLYSEERR_LAST_ERROR_KEY, null);
-      // Retry every query currently in error — Jellyseerr-backed reads
-      // (requests list, download progress, blended search) likely failed
-      // with the rejected cookie. Predicate-invalidation keeps the
-      // refetch surgical: untouched success-state queries don't churn.
+      // Refetch every Jellyseerr-backed query — including those that
+      // succeeded under the previous cookie. The new cookie can carry
+      // different permissions (e.g. user promoted to admin), so a
+      // success-state query may now return a different shape.
+      // Error-state queries from any namespace are also retried since
+      // a generic 401 / 5xx during the disconnected window may have
+      // been transient.
       queryClient.invalidateQueries({
-        predicate: (q) => q.state.status === "error",
+        predicate: (q) => isJellyseerrQueryKey(q.queryKey) || q.state.status === "error",
       });
     },
     onError: (err: unknown) => {

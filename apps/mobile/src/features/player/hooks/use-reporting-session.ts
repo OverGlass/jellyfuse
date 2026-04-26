@@ -2,11 +2,19 @@
 // Reports start on first play, progress every 5s, stopped on unmount.
 // Uses useEffectEvent for the reporting callbacks so they always read
 // the latest position without being effect dependencies.
+//
+// On stopped, invalidates the home shelves whose order/contents depend
+// on UserData.PlaybackPositionTicks / UserData.Played. Mirrors the Rust
+// rule in `crates/jf-mobile/src/root/playback.rs:285-294` — invalidate
+// ContinueWatching + NextUp on PlaybackStopped, and let the cache
+// listener refetch them.
 
 import type { NativeMpv } from "@jellyfuse/native-mpv";
 import { secondsToTicks, type ResolvedStream } from "@jellyfuse/models";
+import { queryKeys } from "@jellyfuse/query-keys";
 import { useEffect, useEffectEvent, useRef } from "react";
 import { reportStart, reportProgress, reportStopped } from "@/services/playback/reporter";
+import { queryClient } from "@/services/query";
 
 const PROGRESS_INTERVAL_MS = 5_000;
 
@@ -14,9 +22,15 @@ interface UseReportingSessionArgs {
   mpvRef: NativeMpv | null;
   resolved: ResolvedStream | null;
   baseUrl: string | undefined;
+  userId: string | undefined;
 }
 
-export function useReportingSession({ mpvRef, resolved, baseUrl }: UseReportingSessionArgs): void {
+export function useReportingSession({
+  mpvRef,
+  resolved,
+  baseUrl,
+  userId,
+}: UseReportingSessionArgs): void {
   const reportedStartRef = useRef(false);
   const positionRef = useRef(0);
   const isPlayingRef = useRef(false);
@@ -52,6 +66,10 @@ export function useReportingSession({ mpvRef, resolved, baseUrl }: UseReportingS
       playSessionId: resolved.playSessionId,
       positionTicks: secondsToTicks(positionRef.current),
     });
+    if (userId) {
+      queryClient.invalidateQueries({ queryKey: queryKeys.continueWatching(userId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.nextUp(userId) });
+    }
   });
 
   const doReportProgress = useEffectEvent(() => {

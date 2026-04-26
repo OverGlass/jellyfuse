@@ -77,7 +77,7 @@ export function useTmdbTvSeasons(tmdbId: number | undefined): UseQueryResult<Sea
  */
 export function useCreateRequestMutation() {
   const queryClient = useQueryClient();
-  const { jellyseerrUrl, jellyseerrStatus } = useAuth();
+  const { jellyseerrUrl, jellyseerrStatus, activeUser } = useAuth();
   return useMutation({
     mutationFn: (input: Omit<CreateRequestArgs, "baseUrl">) => {
       if (jellyseerrStatus !== "connected" || !jellyseerrUrl) {
@@ -87,6 +87,14 @@ export function useCreateRequestMutation() {
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.tmdbTvSeasons(variables.tmdbId) });
+      // The TMDB-only detail page reads `availability` from this key —
+      // refetch so a still-mounted detail flips from `missing` to
+      // `requested` without waiting for its 2 min stale window.
+      if (activeUser) {
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.tmdbDetail(activeUser.userId, variables.tmdbId, variables.mediaType),
+        });
+      }
       // Phase 4d will own a `requests` query — invalidate it eagerly
       // so the requests tab refreshes the next time it mounts.
       queryClient.invalidateQueries({ queryKey: ["home"], exact: false });
