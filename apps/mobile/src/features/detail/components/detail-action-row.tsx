@@ -29,8 +29,14 @@ interface Props {
   canPlay?: boolean;
   /** Current played state — drives the played-toggle button label. */
   played?: boolean;
-  /** When provided, the row renders a "Mark Played / Unplayed" button. */
-  onTogglePlayed?: () => void;
+  /**
+   * When provided, the row renders a "Mark Played / Unplayed" button.
+   * The button doesn't mutate directly — the parent screen owns the
+   * action sheet routing (see `app/(app)/media-actions/[itemId].tsx`)
+   * so the user gets the same per-scope choice (episode / season /
+   * series) as the long-press affordance.
+   */
+  onPressMarkPlayed?: () => void;
 }
 
 export function DetailActionRow({
@@ -42,7 +48,7 @@ export function DetailActionRow({
   onRequest,
   canPlay = true,
   played = false,
-  onTogglePlayed,
+  onPressMarkPlayed,
 }: Props) {
   const { t } = useTranslation();
   const primaryLabel = !canPlay
@@ -85,11 +91,11 @@ export function DetailActionRow({
           <Text style={styles.secondaryLabel}>{requestLabel}</Text>
         </Pressable>
       ) : null}
-      {onTogglePlayed ? (
+      {onPressMarkPlayed ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={playedLabel}
-          onPress={onTogglePlayed}
+          onPress={onPressMarkPlayed}
           style={({ pressed }) => [styles.secondary, pressed && styles.secondaryPressed]}
         >
           <Text style={styles.secondaryLabel}>{playedLabel}</Text>

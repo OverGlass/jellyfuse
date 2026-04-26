@@ -9,21 +9,22 @@ import { StyleSheet, View } from "react-native";
  * - `played === undefined`    → badge hides (Jellyseerr-only items, no play state)
  * - `progress > 0`            → badge hides (resume point on a video — in
  *                                progress, conveyed by the progress bar)
- * - series with at least one watched episode → badge hides. We detect
- *                                this from either `unplayedItemCount <
- *                                episodeCount` (Jellyfin's series-level
- *                                signal, present on `/Items/Latest` and
+ * - series / season with at least one watched episode → badge hides.
+ *                                We detect this from either
+ *                                `unplayedItemCount < episodeCount`
+ *                                (Jellyfin's aggregate signal, present
+ *                                on `/Items/Latest` and
  *                                `/Items?SortBy=DateCreated` payloads
  *                                where `playCount` is left at 0), or
- *                                `playCount > 0` (set on series UserData
- *                                from richer endpoints such as the
- *                                detail screen). Either signal alone is
- *                                sufficient. Only honored for
- *                                `mediaType === "series"`; on a single
- *                                video an episode's `PlayCount` is just
- *                                a re-watch counter and shouldn't
- *                                suppress the badge for a freshly-
- *                                unmarked episode.
+ *                                `playCount > 0` (set on aggregate
+ *                                UserData from richer endpoints).
+ *                                Either signal alone is sufficient.
+ *                                Only honored for `mediaType ===
+ *                                "series"` and `mediaType === "season"`;
+ *                                on a single video an episode's
+ *                                `PlayCount` is just a re-watch counter
+ *                                and shouldn't suppress the badge for a
+ *                                freshly-unmarked episode.
  * - otherwise                 → badge shows
  *
  * Drawn as a square rotated 45° behind a square clip, so half the
@@ -57,8 +58,8 @@ interface Props {
   episodeCount?: number | undefined;
   /**
    * Item kind. `playCount` / `unplayedItemCount` are only treated as
-   * "in progress" signals when this is `"series"`; on movies /
-   * episodes those fields don't carry the same meaning.
+   * "in progress" signals when this is `"series"` or `"season"`; on
+   * movies / episodes those fields don't carry the same meaning.
    */
   mediaType?: MediaType | undefined;
   /** Edge length of the visible triangle in pt. Defaults to 18. */
@@ -76,7 +77,10 @@ export function UnplayedCornerBadge({
 }: Props) {
   if (played !== false) return null;
   if ((progress ?? 0) > 0.01) return null;
-  if (mediaType === "series" && isSeriesInProgress(unplayedItemCount, episodeCount, playCount)) {
+  if (
+    (mediaType === "series" || mediaType === "season") &&
+    isAggregateInProgress(unplayedItemCount, episodeCount, playCount)
+  ) {
     return null;
   }
   // The clip is `size × size`; the rotated square is `size√2` on each
@@ -108,7 +112,7 @@ export function UnplayedCornerBadge({
   );
 }
 
-function isSeriesInProgress(
+function isAggregateInProgress(
   unplayedItemCount: number | undefined,
   episodeCount: number | undefined,
   playCount: number | undefined,

@@ -113,6 +113,8 @@ export interface MediaItem {
   seasonNumber: number | undefined;
   episodeNumber: number | undefined;
   seriesId: string | undefined;
+  /** Jellyfin id of the parent season for an episode (`SeasonId`). */
+  seasonId: string | undefined;
 }
 
 /**
@@ -253,6 +255,7 @@ export function mediaRequestToMediaItem(request: MediaRequest): MediaItem {
     seasonNumber: undefined,
     episodeNumber: undefined,
     seriesId: undefined,
+    seasonId: undefined,
   };
 }
 

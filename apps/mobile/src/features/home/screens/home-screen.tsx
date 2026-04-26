@@ -379,6 +379,7 @@ function handleItemLongPress(item: MediaItem) {
       played: item.userData?.played ? "1" : "0",
       seriesId: item.seriesId ?? "",
       title: item.seriesName ?? item.title,
+      mediaType: item.mediaType,
     },
   });
 }

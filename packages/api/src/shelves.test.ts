@@ -5,6 +5,7 @@ import {
   fetchLatestTv,
   fetchNextUp,
   fetchRecentlyAdded,
+  fetchSeriesNextUpEpisode,
   ShelfHttpError,
   ShelfParseError,
   type ShelfFetchArgs,
@@ -139,6 +140,33 @@ describe("fetchLatestTv", () => {
     await fetchLatestTv(baseArgs, fetcher);
     const url = fetcher.mock.calls[0]?.[0] ?? "";
     expect(url).toContain("IncludeItemTypes=Series");
+  });
+});
+
+describe("fetchSeriesNextUpEpisode", () => {
+  it("hits /Shows/NextUp with SeriesId + Limit=1 and returns the first mapped item", async () => {
+    const fakeEpisodeWithSeason = { ...fakeEpisode, SeasonId: "season-7" };
+    const fetcher = fakeFetcher({ Items: [fakeEpisodeWithSeason] });
+    const item = await fetchSeriesNextUpEpisode(
+      { baseUrl: "https://jellyfin.example.com", userId: "user-xyz", seriesId: "series-1" },
+      fetcher,
+    );
+    expect(item).not.toBeNull();
+    expect(item?.seriesId).toBe("series-1");
+    expect(item?.seasonId).toBe("season-7");
+    const url = fetcher.mock.calls[0]?.[0] ?? "";
+    expect(url).toContain("/Shows/NextUp?");
+    expect(url).toContain("SeriesId=series-1");
+    expect(url).toContain("Limit=1");
+  });
+
+  it("returns null when the series has no next-up episode", async () => {
+    const fetcher = fakeFetcher({ Items: [] });
+    const item = await fetchSeriesNextUpEpisode(
+      { baseUrl: "https://jellyfin.example.com", userId: "user-xyz", seriesId: "series-1" },
+      fetcher,
+    );
+    expect(item).toBeNull();
   });
 });
 

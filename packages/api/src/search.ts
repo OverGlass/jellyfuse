@@ -246,6 +246,7 @@ function mapJellyseerrSearchItem(entry: unknown): MediaItem | undefined {
     seasonNumber: undefined,
     episodeNumber: undefined,
     seriesId: undefined,
+    seasonId: undefined,
   };
 }
 

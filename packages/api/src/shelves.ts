@@ -66,7 +66,7 @@ const DEFAULT_FIELDS =
   "Overview,Genres,RunTimeTicks,UserData,ImageTags,BackdropImageTags,ProviderIds,ChildCount";
 
 const NEXT_UP_FIELDS =
-  "Overview,UserData,ImageTags,BackdropImageTags,SeriesName,SeriesId,ParentIndexNumber,IndexNumber,ProviderIds";
+  "Overview,UserData,ImageTags,BackdropImageTags,SeriesName,SeriesId,SeasonId,ParentIndexNumber,IndexNumber,ProviderIds";
 
 const RESUME_FIELDS =
   "Overview,Genres,RunTimeTicks,UserData,ImageTags,BackdropImageTags,SeriesName,ParentIndexNumber,IndexNumber,ProviderIds";
@@ -109,6 +109,41 @@ export async function fetchNextUp(
       backdropUrl: buildBackdropImageUrl(args.baseUrl, item.seriesId, 1280),
     };
   });
+}
+
+export interface SeriesNextUpArgs {
+  baseUrl: string;
+  userId: string;
+  seriesId: string;
+}
+
+/**
+ * `GET /Shows/NextUp?SeriesId=…&Limit=1` — resume target for one
+ * series. Used by the long-press "Mark current episode / season"
+ * action sheet to find which episode (and which parent season) the
+ * user is currently watching, so the gesture can target that scope
+ * instead of cascading through the whole show.
+ */
+export async function fetchSeriesNextUpEpisode(
+  args: SeriesNextUpArgs,
+  fetcher: FetchLike,
+  signal?: AbortSignal,
+): Promise<MediaItem | null> {
+  const url = buildUrl(args.baseUrl, `/Shows/NextUp`, {
+    UserId: args.userId,
+    SeriesId: args.seriesId,
+    Limit: "1",
+    Fields: NEXT_UP_FIELDS,
+  });
+  const items = await fetchShelf(
+    "next-up-for-series",
+    url,
+    args.baseUrl,
+    fetcher,
+    signal,
+    mapItemsResponse,
+  );
+  return items[0] ?? null;
 }
 
 /** `GET /Users/{uid}/Items/Latest` — recently added. */
@@ -351,6 +386,7 @@ interface RawJfItem {
   // Episode-specific
   SeriesName?: string;
   SeriesId?: string;
+  SeasonId?: string;
   ParentIndexNumber?: number;
   IndexNumber?: number;
   UserData?: RawJfUserData;
@@ -463,6 +499,7 @@ export function mapJfItem(baseUrl: string, item: RawJfItem): MediaItem {
     seasonNumber: item.ParentIndexNumber,
     episodeNumber: item.IndexNumber,
     seriesId: item.SeriesId,
+    seasonId: item.SeasonId,
   };
 }
 

@@ -32,6 +32,7 @@ function movie(jellyfinId: string, played: boolean): MediaItem {
     seasonNumber: undefined,
     episodeNumber: undefined,
     seriesId: undefined,
+    seasonId: undefined,
   };
 }
 

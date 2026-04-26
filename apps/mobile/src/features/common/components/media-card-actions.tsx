@@ -1,6 +1,6 @@
 import { colors, fontSize, fontWeight, opacity, radius, spacing } from "@jellyfuse/theme";
-import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
 // TODO(played-actions): migrate this formSheet to expo-ui SwiftUI ContextMenu
 // on iOS / DropdownMenu on Android once expo-ui ships those primitives stably.
@@ -8,37 +8,52 @@ import { useTranslation } from "react-i18next";
 //      https://docs.expo.dev/versions/latest/sdk/ui/jetpack-compose/dropdownmenu/
 
 /**
- * Per-item action sheet shown after a long-press on a `MediaCard`.
- * Pure component — `played` describes current state, callbacks fire
- * out. The hosting route owns mutation wiring and dismissal.
- *
- * Single-action today (Mark Played / Mark Unplayed) but laid out so we
- * can stack favourite / download / share rows here later without
- * restructuring the route.
+ * Per-item action sheet body. Pure list of `actions` rendered above a
+ * Cancel row. The hosting route builds the action set based on the
+ * item's `mediaType` and `played` flag — see
+ * `app/(app)/media-actions/[itemId].tsx`. While the route is still
+ * resolving (e.g. waiting on `useSeriesNextUpEpisode`) it can pass
+ * `loading: true` to render a placeholder spinner above Cancel.
  */
-interface Props {
-  title: string;
-  played: boolean;
-  onTogglePlayed: () => void;
-  onCancel: () => void;
+export interface MediaCardAction {
+  /** Stable react key + a11y identifier. */
+  key: string;
+  label: string;
+  onPress: () => void;
 }
 
-export function MediaCardActions({ title, played, onTogglePlayed, onCancel }: Props) {
+interface Props {
+  title: string;
+  actions: MediaCardAction[];
+  onCancel: () => void;
+  loading?: boolean;
+}
+
+export function MediaCardActions({ title, actions, onCancel, loading = false }: Props) {
   const { t } = useTranslation();
-  const togglePlayedLabel = played ? t("mediaActions.markUnplayed") : t("mediaActions.markPlayed");
   return (
     <View style={styles.root}>
-      <Text style={styles.title} numberOfLines={2}>
-        {title}
-      </Text>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={togglePlayedLabel}
-        onPress={onTogglePlayed}
-        style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-      >
-        <Text style={styles.rowLabel}>{togglePlayedLabel}</Text>
-      </Pressable>
+      {title ? (
+        <Text style={styles.title} numberOfLines={2}>
+          {title}
+        </Text>
+      ) : null}
+      {loading ? (
+        <View style={[styles.row, styles.loadingRow]}>
+          <ActivityIndicator color={colors.textSecondary} />
+        </View>
+      ) : null}
+      {actions.map((action) => (
+        <Pressable
+          key={action.key}
+          accessibilityRole="button"
+          accessibilityLabel={action.label}
+          onPress={action.onPress}
+          style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+        >
+          <Text style={styles.rowLabel}>{action.label}</Text>
+        </Pressable>
+      ))}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={t("common.cancel")}
@@ -69,8 +84,8 @@ const styles = StyleSheet.create({
   row: {
     backgroundColor: colors.surfaceElevated,
     borderRadius: radius.md,
-    minHeight: 48,
     justifyContent: "center",
+    minHeight: 48,
     paddingHorizontal: spacing.lg,
   },
   rowPressed: {
@@ -80,6 +95,9 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontSize: fontSize.body,
     fontWeight: fontWeight.medium,
+  },
+  loadingRow: {
+    alignItems: "center",
   },
   cancel: {
     alignItems: "center",

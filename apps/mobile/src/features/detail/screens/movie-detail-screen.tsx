@@ -118,7 +118,7 @@ export function MovieDetailScreen({ itemId }: Props) {
               />
             }
             played={played}
-            onTogglePlayed={() => togglePlayed.mutate({ itemId, next: !played })}
+            onPressMarkPlayed={() => togglePlayed.mutate({ itemId, next: !played })}
           />
           {item.overview ? <Text style={styles.overview}>{item.overview}</Text> : null}
         </View>
