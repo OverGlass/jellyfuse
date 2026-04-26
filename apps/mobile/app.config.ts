@@ -100,4 +100,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       projectId: process.env.EAS_PROJECT_ID,
     },
   },
+  updates: {
+    url: `https://u.expo.dev/${process.env.EAS_PROJECT_ID}`,
+  },
+  runtimeVersion: {
+    policy: "appVersion",
+  },
 });
