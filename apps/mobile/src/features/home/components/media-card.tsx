@@ -1,12 +1,15 @@
 import type { MediaItem } from "@jellyfuse/api";
-import { episodeLabel } from "@jellyfuse/models";
+import { episodeLabel, mediaIdJellyfin } from "@jellyfuse/models";
 import { colors, duration, fontSize, fontWeight, opacity, radius, spacing } from "@jellyfuse/theme";
 import { Image } from "expo-image";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { UnplayedCornerBadge } from "@/features/common/components/unplayed-corner-badge";
+import { useIsSeriesInProgress } from "@/services/query/hooks/use-series-in-progress";
 
 /**
  * Poster + title + subtitle card used in every home shelf. Pure component:
- * props in, `onPress` callback out, no reach into parent state.
+ * props in, `onPress` / `onLongPress` callbacks out, no reach into parent
+ * state.
  *
  * **Responsive**: `width` + `posterHeight` are passed in from the parent
  * shelf (which reads them from `useBreakpoint()`). The card is otherwise
@@ -16,6 +19,10 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
  * Subtitle is the Jellyfin episode label (`"S2 · E4"`) for episodes,
  * otherwise the release year. Falls back to a surface-colored placeholder
  * when `item.posterUrl` is missing (deleted artwork, fresh libraries).
+ *
+ * An `<UnplayedCornerBadge />` overlays the top-right of the poster when
+ * `item.userData.played === false` so unwatched items are scannable in
+ * a shelf without opening the detail screen.
  */
 
 interface Props {
@@ -26,37 +33,68 @@ interface Props {
   /** Horizontal gap between this card and the next one in the shelf row. */
   gap: number;
   onPress: () => void;
+  /** Long-press opens the per-item action sheet (Mark Played, …). */
+  onLongPress?: () => void;
 }
 
-export function MediaCard({ item, width, posterHeight, gap, onPress }: Props) {
+export function MediaCard({ item, width, posterHeight, gap, onPress, onLongPress }: Props) {
   const subtitle = episodeLabel(item) ?? (item.year !== undefined ? String(item.year) : "");
   const accessibilityLabel = subtitle ? `${item.title}, ${subtitle}` : item.title;
+  const progress = item.progress ?? 0;
+  const hasProgress = progress > 0.01;
+  // Cross-reference Continue Watching / Next Up so a series with an
+  // in-progress episode hides its unplayed ribbon even when Jellyfin's
+  // own shelf endpoints don't surface that progress on the series item
+  // (UnplayedItemCount / PlayCount only flip on a *fully* watched
+  // episode). Returns false for non-series items.
+  const seriesInProgress = useIsSeriesInProgress(
+    item.mediaType === "series" ? mediaIdJellyfin(item.id) : undefined,
+  );
 
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       onPress={onPress}
+      onLongPress={onLongPress}
       style={({ pressed }) => [
         styles.root,
         { width, marginRight: gap },
         pressed && styles.rootPressed,
       ]}
     >
-      {item.posterUrl ? (
-        <Image
-          source={item.posterUrl}
-          style={[styles.poster, { width, height: posterHeight }]}
-          contentFit="cover"
-          transition={duration.normal}
-          recyclingKey={item.posterUrl}
-          cachePolicy="memory-disk"
-        />
-      ) : (
-        <View style={[styles.poster, styles.posterFallback, { width, height: posterHeight }]}>
-          <Text style={styles.posterFallbackGlyph}>{item.title.slice(0, 1).toUpperCase()}</Text>
-        </View>
-      )}
+      <View style={[styles.posterWrap, { width, height: posterHeight }]}>
+        {item.posterUrl ? (
+          <Image
+            source={item.posterUrl}
+            style={[styles.poster, { width, height: posterHeight }]}
+            contentFit="cover"
+            transition={duration.normal}
+            recyclingKey={item.posterUrl}
+            cachePolicy="memory-disk"
+          />
+        ) : (
+          <View style={[styles.poster, styles.posterFallback, { width, height: posterHeight }]}>
+            <Text style={styles.posterFallbackGlyph}>{item.title.slice(0, 1).toUpperCase()}</Text>
+          </View>
+        )}
+        {hasProgress ? (
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${Math.round(progress * 100)}%` }]} />
+          </View>
+        ) : null}
+        {seriesInProgress ? null : (
+          <UnplayedCornerBadge
+            played={item.userData?.played}
+            progress={item.progress}
+            playCount={item.userData?.playCount}
+            unplayedItemCount={item.userData?.unplayedItemCount}
+            episodeCount={item.episodeCount}
+            lastPlayedDate={item.userData?.lastPlayedDate}
+            mediaType={item.mediaType}
+          />
+        )}
+      </View>
       <Text style={styles.title} numberOfLines={1}>
         {item.title}
       </Text>
@@ -72,6 +110,11 @@ const styles = StyleSheet.create({
   rootPressed: {
     opacity: opacity.pressed,
   },
+  posterWrap: {
+    borderRadius: radius.md,
+    overflow: "hidden",
+    position: "relative",
+  },
   poster: {
     borderRadius: radius.md,
     backgroundColor: colors.surface,
@@ -84,6 +127,18 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: fontSize.display,
     fontWeight: fontWeight.bold,
+  },
+  progressTrack: {
+    backgroundColor: colors.surfaceElevated,
+    bottom: 0,
+    height: 3,
+    left: 0,
+    position: "absolute",
+    right: 0,
+  },
+  progressFill: {
+    backgroundColor: colors.accent,
+    height: 3,
   },
   title: {
     color: colors.textPrimary,

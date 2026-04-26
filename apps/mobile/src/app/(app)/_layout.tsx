@@ -39,6 +39,18 @@ export default function AppLayout() {
         }}
       />
       <Stack.Screen
+        name="media-actions/[itemId]"
+        options={{
+          // Same fitToContents detent as `download-quality` — the row
+          // list is short, so let the sheet hug the content height
+          // instead of claiming a fixed 50%/95% detent.
+          presentation: "formSheet",
+          sheetGrabberVisible: true,
+          sheetAllowedDetents: "fitToContents",
+          sheetCornerRadius: 24,
+        }}
+      />
+      <Stack.Screen
         name="request/[tmdbId]"
         options={{
           // `formSheet` resolves natively per platform: bottom sheet

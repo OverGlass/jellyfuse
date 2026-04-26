@@ -194,6 +194,7 @@ export function ShelfScreen({ shelfKey }: Props) {
               posterHeight={values.mediaCardPosterHeight}
               gap={0}
               onPress={() => handleItemPress(item)}
+              onLongPress={() => handleItemLongPress(item)}
             />
           </View>
         )}
@@ -275,6 +276,21 @@ function handleItemPress(item: MediaItem) {
   } else {
     router.push(`/detail/movie/${jellyfinId}`);
   }
+}
+
+function handleItemLongPress(item: MediaItem) {
+  const jellyfinId = mediaIdJellyfin(item.id);
+  if (!jellyfinId) return;
+  router.push({
+    pathname: "/media-actions/[itemId]",
+    params: {
+      itemId: jellyfinId,
+      played: item.userData?.played ? "1" : "0",
+      seriesId: item.seriesId ?? "",
+      title: item.seriesName ?? item.title,
+      mediaType: item.mediaType,
+    },
+  });
 }
 
 const styles = StyleSheet.create({

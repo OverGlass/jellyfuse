@@ -61,6 +61,14 @@ export interface UserItemData {
   playbackPositionTicks: number;
   isFavorite: boolean;
   lastPlayedDate: string | undefined;
+  /**
+   * Series-level: episodes the active user hasn't watched yet. Set by
+   * Jellyfin on `Series` items including in `/Items/Latest` and
+   * `/Items?SortBy=DateCreated`, which leave `playCount = 0` even when
+   * episodes are watched — making this the canonical "in progress"
+   * signal for series cards. `undefined` for non-series items.
+   */
+  unplayedItemCount: number | undefined;
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -105,6 +113,8 @@ export interface MediaItem {
   seasonNumber: number | undefined;
   episodeNumber: number | undefined;
   seriesId: string | undefined;
+  /** Jellyfin id of the parent season for an episode (`SeasonId`). */
+  seasonId: string | undefined;
 }
 
 /**
@@ -245,6 +255,7 @@ export function mediaRequestToMediaItem(request: MediaRequest): MediaItem {
     seasonNumber: undefined,
     episodeNumber: undefined,
     seriesId: undefined,
+    seasonId: undefined,
   };
 }
 

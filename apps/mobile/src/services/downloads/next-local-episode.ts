@@ -80,5 +80,6 @@ export function downloadRecordToMediaItem(record: DownloadRecord): MediaItem {
     seasonNumber: record.seasonNumber,
     episodeNumber: record.episodeNumber,
     seriesId: undefined,
+    seasonId: undefined,
   };
 }

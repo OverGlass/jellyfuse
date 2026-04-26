@@ -16,6 +16,7 @@ import { useConnectionStatus } from "@/services/connection/monitor";
 import { useDownloadForItem } from "@/services/downloads/use-local-downloads";
 import { useItemDownload } from "@/services/downloads/use-item-download";
 import { useMovieDetail } from "@/services/query";
+import { useTogglePlayedState } from "@/services/query/hooks/use-played-state";
 import { useScreenGutters } from "@/services/responsive";
 
 /**
@@ -32,6 +33,7 @@ export function MovieDetailScreen({ itemId }: Props) {
   const query = useMovieDetail(itemId);
   const downloadRecord = useDownloadForItem(itemId);
   const handleItemDownload = useItemDownload();
+  const togglePlayed = useTogglePlayedState();
   const connection = useConnectionStatus();
   // Local-first policy mirrors `PlayerScreen` (see
   // `player-screen.tsx` — originals always local, transcodes only
@@ -84,6 +86,7 @@ export function MovieDetailScreen({ itemId }: Props) {
 
   const item = query.data;
   const hasResume = (item.progress ?? 0) > 0.01;
+  const played = item.userData?.played ?? false;
 
   return (
     <SafeAreaView style={styles.safe} edges={[]}>
@@ -114,6 +117,8 @@ export function MovieDetailScreen({ itemId }: Props) {
                 disabled={!canDownload}
               />
             }
+            played={played}
+            onPressMarkPlayed={() => togglePlayed.mutate({ itemId, next: !played })}
           />
           {item.overview ? <Text style={styles.overview}>{item.overview}</Text> : null}
         </View>

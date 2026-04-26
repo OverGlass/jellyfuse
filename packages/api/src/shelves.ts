@@ -58,10 +58,15 @@ export class ShelfParseError extends Error {
 // ──────────────────────────────────────────────────────────────────────────────
 
 const DEFAULT_FIELDS =
-  "Overview,Genres,RunTimeTicks,UserData,ImageTags,BackdropImageTags,ProviderIds";
+  // `ChildCount` (total episode count for series) is opt-in even though
+  // `UserData.UnplayedItemCount` is included by default — without both
+  // the series-progress check on shelf cards has nothing to compare
+  // against, so latest-tv / recently-added cards stayed marked unplayed
+  // for any series with watched episodes.
+  "Overview,Genres,RunTimeTicks,UserData,ImageTags,BackdropImageTags,ProviderIds,ChildCount";
 
 const NEXT_UP_FIELDS =
-  "Overview,UserData,ImageTags,BackdropImageTags,SeriesName,SeriesId,ParentIndexNumber,IndexNumber,ProviderIds";
+  "Overview,UserData,ImageTags,BackdropImageTags,SeriesName,SeriesId,SeasonId,ParentIndexNumber,IndexNumber,ProviderIds";
 
 const RESUME_FIELDS =
   "Overview,Genres,RunTimeTicks,UserData,ImageTags,BackdropImageTags,SeriesName,ParentIndexNumber,IndexNumber,ProviderIds";
@@ -104,6 +109,41 @@ export async function fetchNextUp(
       backdropUrl: buildBackdropImageUrl(args.baseUrl, item.seriesId, 1280),
     };
   });
+}
+
+export interface SeriesNextUpArgs {
+  baseUrl: string;
+  userId: string;
+  seriesId: string;
+}
+
+/**
+ * `GET /Shows/NextUp?SeriesId=…&Limit=1` — resume target for one
+ * series. Used by the long-press "Mark current episode / season"
+ * action sheet to find which episode (and which parent season) the
+ * user is currently watching, so the gesture can target that scope
+ * instead of cascading through the whole show.
+ */
+export async function fetchSeriesNextUpEpisode(
+  args: SeriesNextUpArgs,
+  fetcher: FetchLike,
+  signal?: AbortSignal,
+): Promise<MediaItem | null> {
+  const url = buildUrl(args.baseUrl, `/Shows/NextUp`, {
+    UserId: args.userId,
+    SeriesId: args.seriesId,
+    Limit: "1",
+    Fields: NEXT_UP_FIELDS,
+  });
+  const items = await fetchShelf(
+    "next-up-for-series",
+    url,
+    args.baseUrl,
+    fetcher,
+    signal,
+    mapItemsResponse,
+  );
+  return items[0] ?? null;
 }
 
 /** `GET /Users/{uid}/Items/Latest` — recently added. */
@@ -346,6 +386,7 @@ interface RawJfItem {
   // Episode-specific
   SeriesName?: string;
   SeriesId?: string;
+  SeasonId?: string;
   ParentIndexNumber?: number;
   IndexNumber?: number;
   UserData?: RawJfUserData;
@@ -361,6 +402,14 @@ interface RawJfUserData {
   IsFavorite?: boolean;
   LastPlayedDate?: string;
   PlayedPercentage?: number;
+  /**
+   * Series-level: number of episodes the active user hasn't watched.
+   * Jellyfin sets this on the `Series` item type (including from
+   * `/Items/Latest` and `/Items?SortBy=DateCreated`, which DON'T
+   * aggregate `PlayCount`), so it's the only reliable "in progress"
+   * signal at the series-card level.
+   */
+  UnplayedItemCount?: number;
 }
 
 interface RawJfImageTags {
@@ -411,6 +460,7 @@ export function mapJfItem(baseUrl: string, item: RawJfItem): MediaItem {
         playbackPositionTicks: item.UserData.PlaybackPositionTicks ?? 0,
         isFavorite: item.UserData.IsFavorite ?? false,
         lastPlayedDate: item.UserData.LastPlayedDate,
+        unplayedItemCount: item.UserData.UnplayedItemCount,
       }
     : undefined;
 
@@ -449,6 +499,7 @@ export function mapJfItem(baseUrl: string, item: RawJfItem): MediaItem {
     seasonNumber: item.ParentIndexNumber,
     episodeNumber: item.IndexNumber,
     seriesId: item.SeriesId,
+    seasonId: item.SeasonId,
   };
 }
 

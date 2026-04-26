@@ -230,6 +230,18 @@ export function SeriesDetailScreen({ itemId }: Props) {
             onPlay={() => {
               if (playTargetHref) router.push(playTargetHref);
             }}
+            played={series.userData?.played ?? false}
+            onPressMarkPlayed={() =>
+              router.push({
+                pathname: "/media-actions/[itemId]",
+                params: {
+                  itemId,
+                  played: series.userData?.played ? "1" : "0",
+                  title: series.title,
+                  mediaType: "series",
+                },
+              })
+            }
           />
           {series.overview ? <Text style={styles.overview}>{series.overview}</Text> : null}
         </View>
@@ -283,6 +295,18 @@ export function SeriesDetailScreen({ itemId }: Props) {
                   item={episode}
                   disabled={!episodePlayable}
                   onPress={() => router.push(`/player/${episodeId}`)}
+                  onLongPress={() =>
+                    router.push({
+                      pathname: "/media-actions/[itemId]",
+                      params: {
+                        itemId: episodeId,
+                        played: episode.userData?.played ? "1" : "0",
+                        seriesId: itemId,
+                        title: episode.title,
+                        mediaType: episode.mediaType,
+                      },
+                    })
+                  }
                   rightSlot={
                     <DownloadButton
                       record={record}

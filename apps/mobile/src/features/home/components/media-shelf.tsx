@@ -34,10 +34,19 @@ interface Props {
   items: MediaItem[];
   variant?: MediaShelfVariant;
   onItemPress: (item: MediaItem) => void;
+  /** Long-press opens the per-item action sheet (Mark Played, …). */
+  onItemLongPress?: (item: MediaItem) => void;
   onSeeAll?: () => void;
 }
 
-export function MediaShelf({ title, items, variant = "poster", onItemPress, onSeeAll }: Props) {
+export function MediaShelf({
+  title,
+  items,
+  variant = "poster",
+  onItemPress,
+  onItemLongPress,
+  onSeeAll,
+}: Props) {
   const { t } = useTranslation();
   const { values } = useBreakpoint();
   const gutters = useScreenGutters();
@@ -70,6 +79,7 @@ export function MediaShelf({ title, items, variant = "poster", onItemPress, onSe
               height={values.wideCardHeight}
               gap={values.mediaCardGap}
               onPress={() => onItemPress(item)}
+              onLongPress={onItemLongPress ? () => onItemLongPress(item) : undefined}
             />
           ) : (
             <MediaCard
@@ -78,6 +88,7 @@ export function MediaShelf({ title, items, variant = "poster", onItemPress, onSe
               posterHeight={values.mediaCardPosterHeight}
               gap={values.mediaCardGap}
               onPress={() => onItemPress(item)}
+              onLongPress={onItemLongPress ? () => onItemLongPress(item) : undefined}
             />
           )
         }

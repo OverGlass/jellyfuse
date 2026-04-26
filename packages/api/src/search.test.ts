@@ -39,6 +39,7 @@ function makeItem(overrides: Partial<MediaItem> & Pick<MediaItem, "id" | "title"
     seasonNumber: overrides.seasonNumber,
     episodeNumber: overrides.episodeNumber,
     seriesId: overrides.seriesId,
+    seasonId: overrides.seasonId,
   };
 }
 

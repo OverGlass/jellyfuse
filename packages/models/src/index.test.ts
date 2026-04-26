@@ -31,6 +31,7 @@ const base: MediaItem = {
   seasonNumber: undefined,
   episodeNumber: undefined,
   seriesId: undefined,
+  seasonId: undefined,
 };
 
 describe("@jellyfuse/models", () => {

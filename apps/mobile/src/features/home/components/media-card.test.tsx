@@ -25,6 +25,7 @@ const movie: MediaItem = {
   seasonNumber: undefined,
   episodeNumber: undefined,
   seriesId: undefined,
+  seasonId: undefined,
 };
 
 const episode: MediaItem = {

@@ -15,6 +15,8 @@ export const STALE_TIMES = {
   /** Continue Watching / Next Up — 60 s (Rust: 60 s). */
   continueWatching: 60 * 1000,
   nextUp: 60 * 1000,
+  /** Per-series resume target — same staleness as global nextUp. */
+  seriesNextUp: 60 * 1000,
 
   /** Recently Added / Latest Movies / Latest TV — 5 min (Rust: 300 s). */
   recentlyAdded: 5 * 60 * 1000,
@@ -97,6 +99,13 @@ export const queryKeys = {
   /** Next episode after a given episode — used by player autoplay. */
   adjacentEpisode: (userId: string, seriesId: string, episodeId: string) =>
     ["detail", userId, "adjacent-episode", seriesId, episodeId] as const,
+  /**
+   * Per-series resume target — backs the long-press action sheet's
+   * "Mark current episode / season" rows. Short stale time (60 s)
+   * mirrors `nextUp` since it's effectively a 1-item slice of it.
+   */
+  seriesNextUp: (userId: string, seriesId: string) =>
+    ["detail", userId, "series-next-up", seriesId] as const,
   seasonInfo: (userId: string, tmdbId: number) =>
     ["detail", userId, "season-info", tmdbId] as const,
 
