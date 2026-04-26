@@ -108,7 +108,16 @@ export function useMpvPlayer(
 
   const onEnded = useEffectEvent(() => {
     setIsPlaying(false);
-    onPlaybackEnded?.();
+    // mpv emits `end-file` not only on natural EOF but also on `loadfile`
+    // swaps and explicit `stop` commands. Guard the upstream
+    // `onPlaybackEnded` (autoplay-next on series detail) against those
+    // false positives by checking the position is actually near the
+    // declared duration. 5 s of slack covers credits / decoding tail.
+    const pos = positionRef.current;
+    const dur = durationRef.current;
+    if (dur > 0 && pos >= dur - 5) {
+      onPlaybackEnded?.();
+    }
   });
 
   const onError = useEffectEvent((msg: string) => {
@@ -157,9 +166,25 @@ export function useMpvPlayer(
   useEffect(() => {
     if (!streamUrl || !mpvRef.current) return;
 
+    // Use the latest mpv position when re-loading (e.g., audio / subtitle
+    // track change mid-playback) so we don't lose the user's place.
+    // First load runs with `positionRef.current === 0` and falls through
+    // to `startPositionSeconds` (the server-side resume anchor).
+    //
+    // CRITICAL: `startPositionSeconds` is intentionally NOT in this
+    // effect's deps. The detail query refetches its UserData while
+    // playback is in progress (cache invalidation, focus refetches),
+    // which would shift `startPositionSeconds` and trigger an mpv
+    // `loadfile` reload — and mpv emits a spurious `end-file` event on
+    // every reload, which our `onEnded` listener would interpret as
+    // natural EOF and autoplay the next episode. The original anchor is
+    // captured the first time this effect runs; subsequent runs (audio
+    // track change, etc.) seek to the latest known position.
+    const seekTo = positionRef.current > 0 ? positionRef.current : startPositionSeconds;
+
     try {
       mpvRef.current.load(streamUrl, {
-        startPositionSeconds,
+        startPositionSeconds: seekTo,
         audioTrackIndex,
         subtitleTrackIndex,
         externalSubtitles,
@@ -169,7 +194,7 @@ export function useMpvPlayer(
       onError(e instanceof Error ? e.message : String(e));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [streamUrl, startPositionSeconds, audioTrackIndex, subtitleTrackIndex, externalSubsKey]); // onError is stable via useEffectEvent
+  }, [streamUrl, audioTrackIndex, subtitleTrackIndex, externalSubsKey]); // onError is stable via useEffectEvent
 
   // ── Imperative controls ───────────────────────────────────────────
 

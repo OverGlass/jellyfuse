@@ -1,9 +1,10 @@
 import type { MediaItem } from "@jellyfuse/api";
-import { episodeLabel } from "@jellyfuse/models";
+import { episodeLabel, mediaIdJellyfin } from "@jellyfuse/models";
 import { colors, duration, fontSize, fontWeight, opacity, radius, spacing } from "@jellyfuse/theme";
 import { Image } from "expo-image";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { UnplayedCornerBadge } from "@/features/common/components/unplayed-corner-badge";
+import { useIsSeriesInProgress } from "@/services/query/hooks/use-series-in-progress";
 
 /**
  * Poster + title + subtitle card used in every home shelf. Pure component:
@@ -41,6 +42,14 @@ export function MediaCard({ item, width, posterHeight, gap, onPress, onLongPress
   const accessibilityLabel = subtitle ? `${item.title}, ${subtitle}` : item.title;
   const progress = item.progress ?? 0;
   const hasProgress = progress > 0.01;
+  // Cross-reference Continue Watching / Next Up so a series with an
+  // in-progress episode hides its unplayed ribbon even when Jellyfin's
+  // own shelf endpoints don't surface that progress on the series item
+  // (UnplayedItemCount / PlayCount only flip on a *fully* watched
+  // episode). Returns false for non-series items.
+  const seriesInProgress = useIsSeriesInProgress(
+    item.mediaType === "series" ? mediaIdJellyfin(item.id) : undefined,
+  );
 
   return (
     <Pressable
@@ -74,14 +83,17 @@ export function MediaCard({ item, width, posterHeight, gap, onPress, onLongPress
             <View style={[styles.progressFill, { width: `${Math.round(progress * 100)}%` }]} />
           </View>
         ) : null}
-        <UnplayedCornerBadge
-          played={item.userData?.played}
-          progress={item.progress}
-          playCount={item.userData?.playCount}
-          unplayedItemCount={item.userData?.unplayedItemCount}
-          episodeCount={item.episodeCount}
-          mediaType={item.mediaType}
-        />
+        {seriesInProgress ? null : (
+          <UnplayedCornerBadge
+            played={item.userData?.played}
+            progress={item.progress}
+            playCount={item.userData?.playCount}
+            unplayedItemCount={item.userData?.unplayedItemCount}
+            episodeCount={item.episodeCount}
+            lastPlayedDate={item.userData?.lastPlayedDate}
+            mediaType={item.mediaType}
+          />
+        )}
       </View>
       <Text style={styles.title} numberOfLines={1}>
         {item.title}

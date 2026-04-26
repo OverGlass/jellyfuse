@@ -84,6 +84,7 @@ export function EpisodeRow({ item, onPress, rightSlot, disabled = false, onLongP
           played={item.userData?.played}
           progress={item.progress}
           playCount={item.userData?.playCount}
+          lastPlayedDate={item.userData?.lastPlayedDate}
           mediaType={item.mediaType}
           size={14}
         />

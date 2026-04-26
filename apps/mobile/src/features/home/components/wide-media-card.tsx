@@ -1,9 +1,10 @@
 import type { MediaItem } from "@jellyfuse/api";
-import { episodeLabel } from "@jellyfuse/models";
+import { episodeLabel, mediaIdJellyfin } from "@jellyfuse/models";
 import { colors, duration, fontSize, fontWeight, opacity, radius, spacing } from "@jellyfuse/theme";
 import { Image } from "expo-image";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { UnplayedCornerBadge } from "@/features/common/components/unplayed-corner-badge";
+import { useIsSeriesInProgress } from "@/services/query/hooks/use-series-in-progress";
 
 /**
  * Landscape 16:9 card used by the Continue Watching shelf (and any
@@ -51,6 +52,9 @@ export function WideMediaCard({ item, width, height, gap, onPress, onLongPress }
   const accessibilityLabel = subtitle ? `${title}, ${subtitle}` : title;
   const progress = item.progress ?? 0;
   const hasProgress = progress > 0.01;
+  const seriesInProgress = useIsSeriesInProgress(
+    item.mediaType === "series" ? mediaIdJellyfin(item.id) : undefined,
+  );
 
   return (
     <Pressable
@@ -84,14 +88,17 @@ export function WideMediaCard({ item, width, height, gap, onPress, onLongPress }
             <View style={[styles.progressFill, { width: `${Math.round(progress * 100)}%` }]} />
           </View>
         ) : null}
-        <UnplayedCornerBadge
-          played={item.userData?.played}
-          progress={item.progress}
-          playCount={item.userData?.playCount}
-          unplayedItemCount={item.userData?.unplayedItemCount}
-          episodeCount={item.episodeCount}
-          mediaType={item.mediaType}
-        />
+        {seriesInProgress ? null : (
+          <UnplayedCornerBadge
+            played={item.userData?.played}
+            progress={item.progress}
+            playCount={item.userData?.playCount}
+            unplayedItemCount={item.userData?.unplayedItemCount}
+            episodeCount={item.episodeCount}
+            lastPlayedDate={item.userData?.lastPlayedDate}
+            mediaType={item.mediaType}
+          />
+        )}
       </View>
       <Text style={styles.title} numberOfLines={1}>
         {title}

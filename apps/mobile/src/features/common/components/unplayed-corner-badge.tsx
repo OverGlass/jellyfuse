@@ -9,22 +9,29 @@ import { StyleSheet, View } from "react-native";
  * - `played === undefined`    → badge hides (Jellyseerr-only items, no play state)
  * - `progress > 0`            → badge hides (resume point on a video — in
  *                                progress, conveyed by the progress bar)
- * - series / season with at least one watched episode → badge hides.
- *                                We detect this from either
- *                                `unplayedItemCount < episodeCount`
- *                                (Jellyfin's aggregate signal, present
- *                                on `/Items/Latest` and
- *                                `/Items?SortBy=DateCreated` payloads
- *                                where `playCount` is left at 0), or
- *                                `playCount > 0` (set on aggregate
- *                                UserData from richer endpoints).
- *                                Either signal alone is sufficient.
+ * - series / season with at least one watched OR in-progress episode →
+ *                                badge hides. Three signals — any one is
+ *                                sufficient:
+ *                                  1. `unplayedItemCount < episodeCount`
+ *                                     (Jellyfin's aggregate signal,
+ *                                      present on `/Items/Latest` etc.;
+ *                                      only ticks down when an episode
+ *                                      is **fully** played, not while
+ *                                      mid-watch).
+ *                                  2. `playCount > 0` (set on aggregate
+ *                                     UserData from richer endpoints).
+ *                                  3. `lastPlayedDate !== undefined`
+ *                                     (set by Jellyfin the moment any
+ *                                      episode is started — this is
+ *                                      what catches "S1E1 is mid-watch",
+ *                                      since neither (1) nor (2) flip
+ *                                      until the episode finishes).
  *                                Only honored for `mediaType ===
  *                                "series"` and `mediaType === "season"`;
  *                                on a single video an episode's
- *                                `PlayCount` is just a re-watch counter
- *                                and shouldn't suppress the badge for a
- *                                freshly-unmarked episode.
+ *                                `PlayCount` / `LastPlayedDate` apply
+ *                                to that single video, not to a
+ *                                "container is in progress" notion.
  * - otherwise                 → badge shows
  *
  * Drawn as a square rotated 45° behind a square clip, so half the
@@ -57,6 +64,14 @@ interface Props {
   /** Total episode count for series cards (`MediaItem.episodeCount`). */
   episodeCount?: number | undefined;
   /**
+   * `UserData.LastPlayedDate` ISO string. For aggregate items (series
+   * / season) any non-undefined value means the user has at least
+   * started one episode — Jellyfin stamps this on the parent
+   * immediately on episode-start, before `PlayCount` or
+   * `UnplayedItemCount` would change.
+   */
+  lastPlayedDate?: string | undefined;
+  /**
    * Item kind. `playCount` / `unplayedItemCount` are only treated as
    * "in progress" signals when this is `"series"` or `"season"`; on
    * movies / episodes those fields don't carry the same meaning.
@@ -72,6 +87,7 @@ export function UnplayedCornerBadge({
   playCount,
   unplayedItemCount,
   episodeCount,
+  lastPlayedDate,
   mediaType,
   size = 18,
 }: Props) {
@@ -79,7 +95,7 @@ export function UnplayedCornerBadge({
   if ((progress ?? 0) > 0.01) return null;
   if (
     (mediaType === "series" || mediaType === "season") &&
-    isAggregateInProgress(unplayedItemCount, episodeCount, playCount)
+    isAggregateInProgress(unplayedItemCount, episodeCount, playCount, lastPlayedDate)
   ) {
     return null;
   }
@@ -116,6 +132,7 @@ function isAggregateInProgress(
   unplayedItemCount: number | undefined,
   episodeCount: number | undefined,
   playCount: number | undefined,
+  lastPlayedDate: string | undefined,
 ): boolean {
   if (
     unplayedItemCount !== undefined &&
@@ -124,7 +141,11 @@ function isAggregateInProgress(
   ) {
     return true;
   }
-  return (playCount ?? 0) > 0;
+  if ((playCount ?? 0) > 0) return true;
+  // Jellyfin stamps `LastPlayedDate` on the parent series the moment
+  // an episode is *started* (before PlayCount / UnplayedItemCount
+  // change). Catches the "one episode mid-watch" case.
+  return lastPlayedDate !== undefined;
 }
 
 const styles = StyleSheet.create({
