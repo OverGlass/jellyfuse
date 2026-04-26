@@ -58,7 +58,12 @@ export class ShelfParseError extends Error {
 // ──────────────────────────────────────────────────────────────────────────────
 
 const DEFAULT_FIELDS =
-  "Overview,Genres,RunTimeTicks,UserData,ImageTags,BackdropImageTags,ProviderIds";
+  // `ChildCount` (total episode count for series) is opt-in even though
+  // `UserData.UnplayedItemCount` is included by default — without both
+  // the series-progress check on shelf cards has nothing to compare
+  // against, so latest-tv / recently-added cards stayed marked unplayed
+  // for any series with watched episodes.
+  "Overview,Genres,RunTimeTicks,UserData,ImageTags,BackdropImageTags,ProviderIds,ChildCount";
 
 const NEXT_UP_FIELDS =
   "Overview,UserData,ImageTags,BackdropImageTags,SeriesName,SeriesId,ParentIndexNumber,IndexNumber,ProviderIds";
@@ -361,6 +366,14 @@ interface RawJfUserData {
   IsFavorite?: boolean;
   LastPlayedDate?: string;
   PlayedPercentage?: number;
+  /**
+   * Series-level: number of episodes the active user hasn't watched.
+   * Jellyfin sets this on the `Series` item type (including from
+   * `/Items/Latest` and `/Items?SortBy=DateCreated`, which DON'T
+   * aggregate `PlayCount`), so it's the only reliable "in progress"
+   * signal at the series-card level.
+   */
+  UnplayedItemCount?: number;
 }
 
 interface RawJfImageTags {
@@ -411,6 +424,7 @@ export function mapJfItem(baseUrl: string, item: RawJfItem): MediaItem {
         playbackPositionTicks: item.UserData.PlaybackPositionTicks ?? 0,
         isFavorite: item.UserData.IsFavorite ?? false,
         lastPlayedDate: item.UserData.LastPlayedDate,
+        unplayedItemCount: item.UserData.UnplayedItemCount,
       }
     : undefined;
 

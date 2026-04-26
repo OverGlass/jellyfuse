@@ -28,6 +28,7 @@ import { useConnectionStatus } from "@/services/connection/monitor";
 import { useItemDownload } from "@/services/downloads/use-item-download";
 import { useLocalDownloads } from "@/services/downloads/use-local-downloads";
 import { useEpisodes, useSeasons, useSeriesDetail } from "@/services/query";
+import { useTogglePlayedState } from "@/services/query/hooks/use-played-state";
 import { useScreenGutters } from "@/services/responsive";
 
 /**
@@ -64,6 +65,7 @@ export function SeriesDetailScreen({ itemId }: Props) {
   const episodesQuery = useEpisodes(itemId, resolvedActiveSeasonId);
   const downloads = useLocalDownloads();
   const handleItemDownload = useItemDownload();
+  const togglePlayed = useTogglePlayedState();
   const connection = useConnectionStatus();
   const isOffline = connection === "offline";
   const gutters = useScreenGutters();
@@ -230,6 +232,13 @@ export function SeriesDetailScreen({ itemId }: Props) {
             onPlay={() => {
               if (playTargetHref) router.push(playTargetHref);
             }}
+            played={series.userData?.played ?? false}
+            onTogglePlayed={() =>
+              togglePlayed.mutate({
+                itemId,
+                next: !(series.userData?.played ?? false),
+              })
+            }
           />
           {series.overview ? <Text style={styles.overview}>{series.overview}</Text> : null}
         </View>
@@ -283,6 +292,17 @@ export function SeriesDetailScreen({ itemId }: Props) {
                   item={episode}
                   disabled={!episodePlayable}
                   onPress={() => router.push(`/player/${episodeId}`)}
+                  onLongPress={() =>
+                    router.push({
+                      pathname: "/media-actions/[itemId]",
+                      params: {
+                        itemId: episodeId,
+                        played: episode.userData?.played ? "1" : "0",
+                        seriesId: itemId,
+                        title: episode.title,
+                      },
+                    })
+                  }
                   rightSlot={
                     <DownloadButton
                       record={record}

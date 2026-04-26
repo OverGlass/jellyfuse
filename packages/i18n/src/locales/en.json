@@ -139,6 +139,8 @@
   "player.upNextDismiss": "Dismiss Up Next",
   "player.upNextWithEpisode": "Up Next · {{episode}}",
   "player.watchCredits": "Watch Credits",
+  "mediaActions.markPlayed": "Mark as Played",
+  "mediaActions.markUnplayed": "Mark as Unplayed",
   "profile.addUser": "Add user",
   "requests.empty.body": "Search for a movie or show and tap the Request badge to kick one off.",
   "requests.empty.title": "No requests yet",

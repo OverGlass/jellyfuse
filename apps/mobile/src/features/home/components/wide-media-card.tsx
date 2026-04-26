@@ -3,6 +3,7 @@ import { episodeLabel } from "@jellyfuse/models";
 import { colors, duration, fontSize, fontWeight, opacity, radius, spacing } from "@jellyfuse/theme";
 import { Image } from "expo-image";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { UnplayedCornerBadge } from "@/features/common/components/unplayed-corner-badge";
 
 /**
  * Landscape 16:9 card used by the Continue Watching shelf (and any
@@ -27,9 +28,11 @@ interface Props {
   /** Horizontal gap between this card and the next card in the shelf row. */
   gap: number;
   onPress: () => void;
+  /** Long-press opens the per-item action sheet (Mark Played, …). */
+  onLongPress?: () => void;
 }
 
-export function WideMediaCard({ item, width, height, gap, onPress }: Props) {
+export function WideMediaCard({ item, width, height, gap, onPress, onLongPress }: Props) {
   // Episodes show the episode thumbnail (poster in Jellyfin parlance);
   // movies use the backdrop and fall back to the poster.
   const thumbUrl =
@@ -54,6 +57,7 @@ export function WideMediaCard({ item, width, height, gap, onPress }: Props) {
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       onPress={onPress}
+      onLongPress={onLongPress}
       style={({ pressed }) => [
         styles.root,
         { width, marginRight: gap },
@@ -80,6 +84,14 @@ export function WideMediaCard({ item, width, height, gap, onPress }: Props) {
             <View style={[styles.progressFill, { width: `${Math.round(progress * 100)}%` }]} />
           </View>
         ) : null}
+        <UnplayedCornerBadge
+          played={item.userData?.played}
+          progress={item.progress}
+          playCount={item.userData?.playCount}
+          unplayedItemCount={item.userData?.unplayedItemCount}
+          episodeCount={item.episodeCount}
+          mediaType={item.mediaType}
+        />
       </View>
       <Text style={styles.title} numberOfLines={1}>
         {title}

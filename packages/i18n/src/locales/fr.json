@@ -139,6 +139,8 @@
   "player.upNextDismiss": "Masquer À suivre",
   "player.upNextWithEpisode": "À suivre · {{episode}}",
   "player.watchCredits": "Regarder le générique",
+  "mediaActions.markPlayed": "Marquer comme vu",
+  "mediaActions.markUnplayed": "Marquer comme non vu",
   "profile.addUser": "Ajouter un utilisateur",
   "requests.empty.body": "Recherchez un film ou une série et appuyez sur le badge Demander pour lancer une demande.",
   "requests.empty.title": "Aucune demande pour le moment",

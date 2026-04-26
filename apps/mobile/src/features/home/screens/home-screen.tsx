@@ -260,6 +260,7 @@ export function HomeScreen() {
               items={item.items ?? item.query?.data ?? []}
               variant={item.variant}
               onItemPress={item.onItemPress ?? handleItemPress}
+              onItemLongPress={handleItemLongPress}
               onSeeAll={() => handleSeeAll(item.key)}
             />
           )}
@@ -366,6 +367,20 @@ function handleContinueWatchingPress(item: MediaItem) {
   if (jellyfinId) {
     router.push(`/player/${jellyfinId}`);
   }
+}
+
+function handleItemLongPress(item: MediaItem) {
+  const jellyfinId = mediaIdJellyfin(item.id);
+  if (!jellyfinId) return; // Jellyseerr-only items have no played-state to toggle.
+  router.push({
+    pathname: "/media-actions/[itemId]",
+    params: {
+      itemId: jellyfinId,
+      played: item.userData?.played ? "1" : "0",
+      seriesId: item.seriesId ?? "",
+      title: item.seriesName ?? item.title,
+    },
+  });
 }
 
 function handleItemPress(item: MediaItem) {
