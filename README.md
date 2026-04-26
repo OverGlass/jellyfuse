@@ -6,7 +6,7 @@ A fast, native iPhone client for [Jellyfin](https://jellyfin.org), built around 
 
 ## Status
 
-iOS 1.0 in App Store review. iPad, Apple TV, Android, Android TV, and Mac Catalyst targets are scaffolded in the codebase but not yet shipping — the v1 release is iPhone-only.
+iOS 1.0 in App Store review — iPhone + iPad. Apple TV, Android, Android TV, and Mac Catalyst targets are scaffolded in the codebase but not yet shipping.
 
 [**App Store**](#) _(link added on release)_ · [**Privacy Policy**](https://overglass.github.io/jellyfuse/privacy.html) · [**Issues**](https://github.com/OverGlass/jellyfuse/issues)
 

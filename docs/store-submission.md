@@ -17,7 +17,7 @@ How to ship an iOS release of Jellyfuse to the App Store. Long-lived; per-releas
 1. **Cut a branch** off `main`: `git worktree add -b release/vX.Y.Z .claude/worktrees/release-vX.Y.Z main`.
 2. **Bump `version`** in `apps/mobile/app.config.ts`. EAS handles the build number via `appVersionSource: remote`.
 3. **Write release notes** in `docs/release-notes/vX.Y.Z.md`. Copy the "What's New" copy verbatim.
-4. **Update screenshots** in `apps/mobile/store-assets/screenshots/en-US/iphone-69/` if UI changed materially. See "Capturing screenshots" below.
+4. **Update screenshots** in `apps/mobile/store-assets/screenshots/en-US/iphone-65/` and `ipad-13/` if UI changed materially. See "Capturing screenshots" below.
 5. **Pre-flight:**
    ```
    bun run typecheck
@@ -44,17 +44,20 @@ How to ship an iOS release of Jellyfuse to the App Store. Long-lived; per-releas
 
 ## Capturing screenshots (argent)
 
-Boot iPhone 16 Pro Max simulator (6.9" — covers all required iPhone sizes). Sign in to `https://demo.jellyfin.org/stable`.
+Sign in to `https://demo.jellyfin.org/stable` (any username, blank password) on each device class.
+
+**iPhone** — boot iPhone 14 Pro Max simulator. Required size: **1284 × 2778** portrait. Save to `apps/mobile/store-assets/screenshots/en-US/iphone-65/`.
+
+**iPad** — boot iPad Pro 13" (M4) simulator. Required size: **2064 × 2752** portrait (or 2048 × 2732 for iPad Pro 12.9"). Save to `apps/mobile/store-assets/screenshots/en-US/ipad-13/`.
 
 ```
 1. screenshot                         → baseline
 2. describe                           → find login fields
 3. type URL, tap Continue
 4. (loop) describe → tap → screenshot for each target screen
-5. save PNGs to apps/mobile/store-assets/screenshots/en-US/iphone-69/
 ```
 
-Always discover before you tap (`describe` / `debugger-component-tree`). Never derive coordinates from a screenshot. Required size: **1290 × 2796** portrait.
+Always discover before you tap (`describe` / `debugger-component-tree`). Never derive coordinates from a screenshot.
 
 ## Common review rejections to expect
 
