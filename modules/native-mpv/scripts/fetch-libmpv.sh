@@ -41,7 +41,7 @@ VENDOR_SIM="${MODULE_DIR}/vendor/ios/libmpv-simulator"
 FRAMEWORKS=(
   "LibMpv"
   "LibAvcodec" "LibAvfilter" "LibAvformat" "LibAvutil"
-  "LibSwresample" "LibSwscale"
+  "LibSwresample" "LibSwscale" "LibPostproc"
   "LibPlacebo"
   "LibMoltenVK"
   "LibAss" "LibFreetype" "LibFribidi" "LibHarfbuzz" "LibUnibreak"

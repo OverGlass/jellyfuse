@@ -27,7 +27,7 @@ LIBMPV_VERSION = "local-dev"
 LIBMPV_LIBS = [
   "mpv",
   "avcodec", "avfilter", "avformat", "avutil",
-  "swresample", "swscale",
+  "swresample", "swscale", "postproc",
   "placebo",
   "MoltenVK",
   "ass", "freetype", "fribidi", "harfbuzz", "unibreak",
