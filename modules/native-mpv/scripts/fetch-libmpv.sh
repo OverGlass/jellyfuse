@@ -111,22 +111,33 @@ else
     done
   done
 
-  # Sanitize headers — only keep mpv/ subtree so FFmpeg's time.h doesn't
-  # shadow the system <time.h> (same rule as fetch-mpvkit.sh; see also the
-  # podspec's -isystem comment).
+  # Sanitize headers — keep mpv/, vulkan/, vk_video/, MoltenVK/, exclude
+  # everything else (FFmpeg / libplacebo / libass / etc. headers would
+  # either shadow system headers like <time.h> or aren't needed by Swift
+  # consumers). render_vk.h #include <vulkan/vulkan_core.h>, so vulkan/
+  # MUST be on the include path or the Swift module fails to build.
+  KEEP_DIRS=("mpv" "vulkan" "vk_video" "MoltenVK")
   for DIR in "${CACHE_DEVICE}/include" "${CACHE_SIM}/include"; do
-    if [[ -d "${DIR}/mpv" ]]; then
-      KEEP="$(mktemp -d)"
-      cp -R "${DIR}/mpv" "${KEEP}/mpv"
-      rm -rf "${DIR:?}"
-      mkdir -p "${DIR}"
-      mv "${KEEP}/mpv" "${DIR}/mpv"
-      rm -rf "${KEEP}"
-    fi
+    KEEP="$(mktemp -d)"
+    for SUB in "${KEEP_DIRS[@]}"; do
+      [[ -d "${DIR}/${SUB}" ]] && cp -R "${DIR}/${SUB}" "${KEEP}/${SUB}"
+    done
+    rm -rf "${DIR:?}"
+    mkdir -p "${DIR}"
+    for SUB in "${KEEP_DIRS[@]}"; do
+      [[ -d "${KEEP}/${SUB}" ]] && mv "${KEEP}/${SUB}" "${DIR}/${SUB}"
+    done
+    rm -rf "${KEEP}"
   done
 
-  # Swift modulemap. Includes our Phase 0c render_vk.h so consumers can
-  # `import Libmpv` and reference mpv_vulkan_init_params / VK_TARGET_IMAGE.
+  # Swift modulemap. Two modules:
+  #   Libmpv: the public mpv API. Includes our Phase 0c render_vk.h so
+  #           consumers can `import Libmpv` and reference
+  #           mpv_vulkan_init_params / mpv_vulkan_target_image. render_vk.h
+  #           transitively #include <vulkan/vulkan_core.h>, which resolves
+  #           against the vulkan/ headers shipped alongside.
+  #   Vulkan: the raw Vulkan headers, exported for Phase 1 consumer code
+  #           that creates VkInstance/VkDevice via MoltenVK.
   for DIR in "${CACHE_DEVICE}/include" "${CACHE_SIM}/include"; do
     cat > "${DIR}/module.modulemap" <<'MODMAP'
 module Libmpv [system] {
@@ -135,6 +146,11 @@ module Libmpv [system] {
     header "mpv/render_gl.h"
     header "mpv/render_vk.h"
     header "mpv/stream_cb.h"
+    export *
+}
+
+module Vulkan [system] {
+    umbrella header "vulkan/vulkan.h"
     export *
 }
 MODMAP

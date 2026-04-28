@@ -14,18 +14,18 @@ The plan as written assumes `MPV_RENDER_API_TYPE_VK` exists. It doesn't.
 #define MPV_RENDER_API_TYPE_SW     "sw"
 ```
 
-That's the entire render API surface. No Vulkan, no Metal, no DRM-direct. mpv's `vo=gpu-next` exists *internally* and uses libplacebo with a Vulkan backend, but it owns its own surface — there's no public hook to plug in our own externally-managed `VkImage`.
+That's the entire render API surface. No Vulkan, no Metal, no DRM-direct. mpv's `vo=gpu-next` exists _internally_ and uses libplacebo with a Vulkan backend, but it owns its own surface — there's no public hook to plug in our own externally-managed `VkImage`.
 
 The 2-day spike is short-circuited: the question "(a) `--gpu-context=offscreen-vulkan` patch, or (b) drive libplacebo directly via the libmpv render API" doesn't have answer (b) — there is no Vulkan render API to drive.
 
 The honest option space is:
 
-| | Option | Forks libmpv? | PiP works? | HDR via libplacebo? | iOS+Catalyst unified? | Effort |
-|---|---|---|---|---|---|---|
-| A | **Add `MPV_RENDER_API_TYPE_VK` to our fork** | Yes (new patch alongside the AO patch) | Yes (we feed AVSBDL) | Yes | Yes | ~5 days mpv internals + the plan's Phase 1 |
-| B | Keep `MPV_RENDER_API_TYPE_OPENGL`, mpv internally uses libplacebo+GL | No (consumer-side cleanup only) | Yes (current path) | Yes (libplacebo runs on GL backend too) | No — GLES on iOS, desktop GL on Catalyst (deprecated), separate code paths | ~Phase 1 minus the fork patch |
-| C | `--wid` embedding, mpv owns a `CAMetalLayer` swapchain | No | **No** — AVSBDL not in the loop, PiP is `AVPlayerLayer`-or-AVSBDL only | Yes | Yes | Smallest, but kills PiP |
-| D | `MPV_RENDER_API_TYPE_SW` + GPU upload | No | Yes | Manual (CPU shader) | Yes | Real-time HDR is impractical |
+|     | Option                                                               | Forks libmpv?                          | PiP works?                                                             | HDR via libplacebo?                     | iOS+Catalyst unified?                                                      | Effort                                     |
+| --- | -------------------------------------------------------------------- | -------------------------------------- | ---------------------------------------------------------------------- | --------------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------ |
+| A   | **Add `MPV_RENDER_API_TYPE_VK` to our fork**                         | Yes (new patch alongside the AO patch) | Yes (we feed AVSBDL)                                                   | Yes                                     | Yes                                                                        | ~5 days mpv internals + the plan's Phase 1 |
+| B   | Keep `MPV_RENDER_API_TYPE_OPENGL`, mpv internally uses libplacebo+GL | No (consumer-side cleanup only)        | Yes (current path)                                                     | Yes (libplacebo runs on GL backend too) | No — GLES on iOS, desktop GL on Catalyst (deprecated), separate code paths | ~Phase 1 minus the fork patch              |
+| C   | `--wid` embedding, mpv owns a `CAMetalLayer` swapchain               | No                                     | **No** — AVSBDL not in the loop, PiP is `AVPlayerLayer`-or-AVSBDL only | Yes                                     | Yes                                                                        | Smallest, but kills PiP                    |
+| D   | `MPV_RENDER_API_TYPE_SW` + GPU upload                                | No                                     | Yes                                                                    | Manual (CPU shader)                     | Yes                                                                        | Real-time HDR is impractical               |
 
 ## Why I'd recommend Option A
 
@@ -51,6 +51,7 @@ A self-contained mpv patch series:
 4. **`wscript`** — guard the new file with `--enable-vulkan-render-api`, default-on for Apple platforms.
 
 Risk surface:
+
 - Patch needs to land cleanly on `apple/main` and rebase on upstream — mpv's render code is moderately stable but does shift. Mitigation: small, well-isolated patch, kept under 500 LOC.
 - Open-source upstreaming opportunity — this is something multiple projects have wanted. Consider proposing it to mpv-player after it's working. Reduces our long-term rebase tax.
 
@@ -62,16 +63,16 @@ The plan said Phase 1 was Swift-only. With Option A, Phase 1 is **Swift + a libm
 
 Updated phase order (proposed):
 
-| # | Phase | Notes |
-|---|---|---|
-| 0a | Fork repo + build infra | Unchanged |
-| 0b | Consumer fetch + podspec | Unchanged |
-| **0c** | **mpv render-API VK patch (new)** | **Lands in the fork. Output: libmpv that exposes `MPV_RENDER_API_TYPE_VK`.** |
-| 1 | Metal render rewrite (consumer side) | Unchanged in scope, now depends on 0c |
-| 2 | Custom AO | Unchanged |
-| 3 | HDR10 + HLG | Unchanged |
-| 4 | Cleanup | Unchanged |
-| 5 | AirPlay video spike | Unchanged |
+| #      | Phase                                | Notes                                                                        |
+| ------ | ------------------------------------ | ---------------------------------------------------------------------------- |
+| 0a     | Fork repo + build infra              | Unchanged                                                                    |
+| 0b     | Consumer fetch + podspec             | Unchanged                                                                    |
+| **0c** | **mpv render-API VK patch (new)**    | **Lands in the fork. Output: libmpv that exposes `MPV_RENDER_API_TYPE_VK`.** |
+| 1      | Metal render rewrite (consumer side) | Unchanged in scope, now depends on 0c                                        |
+| 2      | Custom AO                            | Unchanged                                                                    |
+| 3      | HDR10 + HLG                          | Unchanged                                                                    |
+| 4      | Cleanup                              | Unchanged                                                                    |
+| 5      | AirPlay video spike                  | Unchanged                                                                    |
 
 ## Alternatives considered and rejected
 
