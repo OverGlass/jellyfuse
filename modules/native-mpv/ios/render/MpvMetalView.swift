@@ -217,12 +217,21 @@ final class MpvMetalView: UIView {
                 throw MpvVulkanBridgeError.vk(VK_ERROR_OUT_OF_HOST_MEMORY, "CVPixelBufferCreateWithIOSurface")
             }
             // SDR BT.709 attachments. Phase 3 will switch per HDR mode.
+            //
+            // We do NOT set `kCVImageBufferYCbCrMatrixKey` here: the
+            // pixel format is BGRA (RGB-space, no chroma planes), and
+            // tagging an RGB buffer with a YCbCr matrix makes
+            // AVSampleBufferDisplayLayer on Apple Silicon devices apply
+            // a YCbCr→RGB transform to the RGB bytes, collapsing the
+            // frame to a flat green. (The simulator path is more
+            // lenient and ignores the bogus tag, which is why the
+            // earlier code "worked" on sim but not on device.) Tag
+            // primaries + transfer only — those are color-space
+            // metadata that apply to RGB just as well as YCbCr.
             CVBufferSetAttachment(pb, kCVImageBufferColorPrimariesKey,
                                   kCVImageBufferColorPrimaries_ITU_R_709_2, .shouldPropagate)
             CVBufferSetAttachment(pb, kCVImageBufferTransferFunctionKey,
                                   kCVImageBufferTransferFunction_ITU_R_709_2, .shouldPropagate)
-            CVBufferSetAttachment(pb, kCVImageBufferYCbCrMatrixKey,
-                                  kCVImageBufferYCbCrMatrix_ITU_R_709_2, .shouldPropagate)
             let img = try bridge.makeImageFromIOSurface(
                 surface, width: UInt32(width), height: UInt32(height),
                 format: VK_FORMAT_B8G8R8A8_UNORM
