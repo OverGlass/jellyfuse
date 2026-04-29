@@ -419,13 +419,22 @@ A Phase 1B commit is shippable when ALL of these hold:
 2. HDR10 HEVC 10-bit file plays without color clipping (BT.2020 + PQ
    honoured by libplacebo's tone-mapping default).
 3. Picture-in-Picture enter/exit works; scrubber reflects playhead.
-4. `argent-react-native-profiler` shows ≥30% lower per-frame CPU than the
-   Phase 0 GLES build on the same fixture (the videotoolbox-copy readback
-   was the dominant cost; videotoolbox direct should win the same margin).
-5. No dead code: `MpvVulkanBridge.swift`, `MpvRenderContext.swift` deleted;
+4. **No CPU/power regression** on `argent-react-native-profiler` for SDR
+   H.264 1080p sustained playback measured against Phase 1A (which is the
+   right baseline; the ≥30% Phase 0→Phase 1 reduction in the original
+   starter prompt was driven by dropping `videotoolbox-copy`'s CPU
+   readback, and that change already landed in Phase 1A — Path B's
+   delta is GPU-side renderer quality, not CPU).
+5. **HDR10 tone-mapping visually matches a desktop `mpv --vo=gpu-next`
+   reference render** of the same fixture (side-by-side screenshot
+   comparison; numeric thresholds aren't useful for tone-mapping).
+6. Optional perf bonus: GPU frame-time stays under 16.6ms at 1080p and
+   under 33.3ms at 4K30, measured via `pl_dispatch_info` (libplacebo's
+   per-pass timing) or an Instruments GPU capture.
+7. No dead code: `MpvVulkanBridge.swift`, `MpvRenderContext.swift` deleted;
    no stub functions; no `// TODO wire up` comments.
-6. fork patch is upstream-ready: small diff against `apple/main`,
+8. fork patch is upstream-ready: small diff against `apple/main`,
    conventional-commit messaged, no ifdef-soup.
-7. libplacebo patch is upstream-ready (PR-able): one new public API,
+9. libplacebo patch is upstream-ready (PR-able): one new public API,
    one new internal file or addition, public header doc'd, unit test
    landed.
