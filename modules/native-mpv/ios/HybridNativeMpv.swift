@@ -588,16 +588,20 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
             }
         }
 
-        // Phase 1 render path: `mpv_render_context_create` with
-        // MPV_RENDER_API_TYPE_VK in MpvMetalView.attach(). vo=libmpv
-        // is implicit once the render context exists. hwdec is true
+        // Phase 1B render path: vo=gpu-next + libplacebo's pl_renderer
+        // running over MoltenVK, writing into IOSurface-backed VkImages
+        // we own. The fork-side ra_ctx (`gpu-context=libmpvvk`) imports
+        // our VkInstance/VkDevice — see `MpvMetalView.attach` →
+        // `mpv_libmpv_apple_set_pool`. hwdec=videotoolbox is true
         // zero-copy now that the Vulkan path imports VideoToolbox's
         // CVPixelBuffer-backed IOSurfaces directly via
-        // VK_EXT_metal_objects — no `-copy` readback. The GLES era's
-        // `vid=no` / `pause=yes` workaround for a libmpv freeze is
-        // gone: lifecycle is now mpv_create → mpv_initialize → idle
-        // until MpvMetalView.attach() builds the render context →
-        // load(streamUrl). Until attach lands, mpv has nothing to do.
+        // VK_EXT_metal_objects. Lifecycle: mpv_create → set options →
+        // mpv_initialize → idle until MpvMetalView.attach() registers
+        // the pool → JS calls load(streamUrl). Until attach lands, mpv
+        // has nothing to do.
+        _ = mpv_set_option_string(mpv, "vo", "gpu-next")
+        _ = mpv_set_option_string(mpv, "gpu-api", "vulkan")
+        _ = mpv_set_option_string(mpv, "gpu-context", "libmpvvk")
         _ = mpv_set_option_string(mpv, "hwdec", "videotoolbox")
         _ = mpv_set_option_string(mpv, "audio-device", "auto")
         // Phase 2: ao_avfoundation first (AVSampleBufferAudioRenderer +

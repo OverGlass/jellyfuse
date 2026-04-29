@@ -146,6 +146,7 @@ module Libmpv [system] {
     header "mpv/render.h"
     header "mpv/render_gl.h"
     header "mpv/render_vk.h"
+    header "mpv/render_libmpv_apple.h"
     header "mpv/stream_cb.h"
     export *
 }

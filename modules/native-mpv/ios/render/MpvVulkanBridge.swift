@@ -361,26 +361,19 @@ final class MpvVulkanBridge {
         vkDestroyImage(device, image, nil)
     }
 
-    // MARK: - mpv init params
+    /// Device extensions we enabled at `vkCreateDevice` — passed through
+    /// to mpv via `mpv_libmpv_apple_pool_params.device_extensions` so
+    /// libplacebo's `pl_vulkan_import` loads matching function pointers.
+    static let enabledDeviceExtensions: [String] = [
+        "VK_KHR_portability_subset",
+        "VK_KHR_external_memory",
+        "VK_EXT_metal_objects",
+        "VK_EXT_external_memory_metal",
+    ]
 
-    /// Build the `mpv_vulkan_init_params` we hand to
-    /// `mpv_render_context_create`. The pointer to `get_proc_address`
-    /// must point at MoltenVK's `vkGetInstanceProcAddr`; libplacebo
-    /// resolves the rest of the entry points through it.
-    func makeInitParams(debug: Bool = false) -> mpv_vulkan_init_params {
-        return mpv_vulkan_init_params(
-            get_proc_address: MpvVulkanBridge.getInstanceProcAddrFnPointer,
-            vk_instance: instance,
-            vk_physical_device: physicalDevice,
-            vk_device: device,
-            queue_family_index: queueFamilyIndex,
-            queue_index: queueIndex,
-            debug: debug ? 1 : 0
-        )
-    }
-
-    /// `vkGetInstanceProcAddr` as a raw C function pointer in the
-    /// shape `mpv_vulkan_init_params.get_proc_address` expects.
+    /// `vkGetInstanceProcAddr` as a raw C function pointer in the shape
+    /// libplacebo / mpv expect. Re-exported because `pl_vulkan_import`
+    /// resolves all other entry points through this single function pointer.
     static let getInstanceProcAddrFnPointer: PFN_vkGetInstanceProcAddr = vkGetInstanceProcAddr
 }
 

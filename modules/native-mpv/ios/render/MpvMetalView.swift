@@ -1,33 +1,39 @@
 //
 //  MpvMetalView.swift
-//  @jellyfuse/native-mpv — Phase 1 render rewrite
+//  @jellyfuse/native-mpv — Phase 1B (Path B)
 //
 //  UIView whose root layer is `AVSampleBufferDisplayLayer`. Owns the
-//  per-session Metal/Vulkan render stack:
+//  per-session IOSurface ring + the bridge into mpv's headless Vulkan
+//  ra_ctx. The render pipeline mpv side is `vo=gpu-next` driving
+//  `pl_renderer` straight into our IOSurface-backed VkImages — see
+//  `docs/phase-1b-path-b-plan.md`.
+//
+//  We DO NOT call mpv_render_context_create. Instead we register a
+//  VkImage pool via the fork-extension API
+//  `mpv_libmpv_apple_set_pool(...)` (defined in
+//  `mpv/render_libmpv_apple.h`). mpv's render thread calls our
+//  `acquire` / `present` callbacks once per frame:
+//
+//      acquire(out_index) → returns next ring slot to render into
+//      present(index, sem_wait) → mpv finished writing slot `index`,
+//                                   wait on sem_wait before reading it
+//
+//  Frame layout:
 //
 //      MTLDevice
 //          │
-//      ─── IOSurface ring (N=3 BGRA buffers, host-allocated)
+//      ─── IOSurface ring (N=3 BGRA, host-allocated)
 //          │           │
 //          │           ▼
-//          │       VkImage  ── target of mpv_render_context_render
+//          │       VkImage      ← libplacebo writes here
 //          │           │
-//          │           └─► CVPixelBuffer (zero-copy)
-//          │                    │
-//          │                    ▼
-//          │            CMSampleBuffer (PTS off CMTimebase)
-//          │                    │
-//          ▼                    ▼
-//      AVSampleBufferDisplayLayer  ◄── consumed on-screen + by PiP
-//
-//  The CADisplayLink only flips a `pendingRender` flag. The dedicated
-//  render queue (`com.jellyfuse.mpv.render`) is the only place
-//  `mpv_render_context_render` runs, which makes the queue itself the
-//  serializer — the `os_unfair_lock` from the GLES path is gone.
-//
-//  PiP plumbing (CMTimebase + AVPictureInPictureController) lives on
-//  `HybridMpvVideoView`'s wrapper, identical to the GLES era; we only
-//  surface the AVSBDL layer + a `applyPlaybackState` hook.
+//          │           ▼
+//          │       CVPixelBuffer (zero-copy, same IOSurface)
+//          │                │
+//          │                ▼
+//          │        CMSampleBuffer (PTS off CMTimebase)
+//          │                ▼
+//          ▼      AVSampleBufferDisplayLayer ← consumed on-screen + by PiP
 //
 
 import AVFoundation
@@ -41,66 +47,56 @@ import Metal
 import QuartzCore
 import UIKit
 
-// MARK: - Ring entry
-
-/// One slot in the IOSurface render ring. The IOSurface is the storage
-/// shared between the Vulkan render target (libmpv writes here) and
-/// the CMSampleBuffer queue (AVSBDL reads from here).
 private struct RingEntry {
     let ioSurface: IOSurfaceRef
     let pixelBuffer: CVPixelBuffer
     let vkImage: VkImage
-    let width: Int
-    let height: Int
 }
-
-// MARK: - MpvMetalView
 
 final class MpvMetalView: UIView {
 
     // ── Root layer ───────────────────────────────────────────────────
     override class var layerClass: AnyClass { AVSampleBufferDisplayLayer.self }
-
     var sampleBufferLayer: AVSampleBufferDisplayLayer {
         return layer as! AVSampleBufferDisplayLayer
     }
 
-    // ── Metal ────────────────────────────────────────────────────────
+    // ── Metal device (kept around so we can hand IOSurfaces to a
+    //    Metal copy/blit if we need to in a future phase). ──────────
     private let metalDevice: MTLDevice
 
-    // ── Vulkan + render context ──────────────────────────────────────
+    // ── Per-session render plumbing ──────────────────────────────────
     private var vulkanBridge: MpvVulkanBridge?
-    private var renderContext: MpvRenderContext?
-    private var enqueuer: MpvSampleBufferEnqueuer?
-    private weak var attachedPlayer: HybridNativeMpv?
-    private var mpvHandle: OpaquePointer?
-
-    // ── IOSurface ring ───────────────────────────────────────────────
-    private static let ringSize: Int = 3
     private var ring: [RingEntry] = []
-    private var nextRingIndex: Int = 0
     private var ringWidth: Int = 0
     private var ringHeight: Int = 0
+    private weak var attachedPlayer: HybridNativeMpv?
+    /// Raw mpv handle. Not weak — `OpaquePointer` is a struct. Must be
+    /// nilled in `tearDown` so we don't dereference a freed mpv core.
+    private var attachedMpv: OpaquePointer?
+    private var enqueuer: MpvSampleBufferEnqueuer?
 
-    // ── Render scheduling ────────────────────────────────────────────
-    /// Serial queue — the only thread that calls
-    /// `mpv_render_context_render`. CADisplayLink lives on main.
-    private let renderQueue = DispatchQueue(
-        label: "com.jellyfuse.mpv.render", qos: .userInteractive
-    )
-    private var displayLink: CADisplayLink?
-    /// Atomically set by the mpv update callback (off-thread) and the
-    /// CADisplayLink (main); read by the render queue. `Int` so we can
-    /// use `OSAtomicCompareAndSwap32Barrier` semantics via `_Atomic`.
-    private var pendingRenderFlag: Int32 = 0
+    // ── Pool delivery to mpv ─────────────────────────────────────────
+    /// Storage for the VkImage handle array we hand mpv. Must outlive
+    /// the corresponding pool registration; mpv keeps the pointer.
+    private var poolImages: [VkImage?] = []
+    /// Storage for the device-extension name array (NULL-terminated by
+    /// libplacebo's pl_vulkan_import; we just need stable storage).
+    private var deviceExtCStrings: [UnsafeMutablePointer<CChar>?] = []
+    private var deviceExtPtrs: [UnsafePointer<CChar>?] = []
+    /// Retained Unmanaged pointer to `self`, handed to mpv as
+    /// `pool.priv` so the C callbacks can find us. Released in
+    /// `tearDown`.
+    private var poolSelfRetainer: Unmanaged<MpvMetalView>?
 
-    // ── Lifecycle observers ─────────────────────────────────────────
-    private var isAppInBackground: Bool = false
+    // ── Round-robin acquire ──────────────────────────────────────────
+    /// Atomic counter. `acquire` increments, mods by ringSize. With a
+    /// ring of 3 and `swapchain_depth = 2`, the swapchain holds at
+    /// most two images at a time and AVSBDL always has the third —
+    /// no extra free-list bookkeeping needed.
+    private var nextRingIndex: Int32 = 0
 
     // ── PiP scrubber timebase ───────────────────────────────────────
-    /// Drives the PiP scrubber + skip-forward gating. Owned here
-    /// because it is bound to `sampleBufferLayer.controlTimebase`,
-    /// but mutated from the wrapper (`HybridMpvVideoView`).
     private var controlTimebase: CMTimebase?
     private var lastInvalidatedDuration: Double = -1
     private var lastInvalidatedPaused: Bool = true
@@ -109,6 +105,7 @@ final class MpvMetalView: UIView {
     // ── PiP controller ──────────────────────────────────────────────
     private var pipController: AVPictureInPictureController?
     private var isPipActive: Bool = false
+    private var isAppInBackground: Bool = false
 
     // MARK: Init
 
@@ -139,71 +136,50 @@ final class MpvMetalView: UIView {
 
     private func registerLifecycleObservers() {
         let nc = NotificationCenter.default
-        nc.addObserver(
-            self,
-            selector: #selector(handleDidEnterBackground),
-            name: UIApplication.didEnterBackgroundNotification,
-            object: nil
-        )
-        nc.addObserver(
-            self,
-            selector: #selector(handleWillEnterForeground),
-            name: UIApplication.willEnterForegroundNotification,
-            object: nil
-        )
+        nc.addObserver(self, selector: #selector(handleDidEnterBackground),
+                       name: UIApplication.didEnterBackgroundNotification, object: nil)
+        nc.addObserver(self, selector: #selector(handleWillEnterForeground),
+                       name: UIApplication.willEnterForegroundNotification, object: nil)
     }
 
-    @objc private func handleDidEnterBackground() {
-        isAppInBackground = true
-        if !shouldKeepRenderingInBackground() {
-            displayLink?.isPaused = true
-        }
-    }
-
-    @objc private func handleWillEnterForeground() {
-        isAppInBackground = false
-        displayLink?.isPaused = false
-        markNeedsRender()
-    }
-
-    private func shouldKeepRenderingInBackground() -> Bool {
-        guard let controller = pipController else { return false }
-        if controller.isPictureInPictureActive { return true }
-        if #available(iOS 14.2, *) {
-            return controller.canStartPictureInPictureAutomaticallyFromInline
-        }
-        return false
-    }
+    @objc private func handleDidEnterBackground() { isAppInBackground = true }
+    @objc private func handleWillEnterForeground() { isAppInBackground = false }
 
     // MARK: Attach / detach
 
     func attach(player: HybridNativeMpv, mpvHandle handle: OpaquePointer) {
-        guard renderContext == nil else { return }
-        mpvHandle = handle
-        attachedPlayer = player
-        player.registerView(self)
+        guard vulkanBridge == nil else { return }
+
+        // Pool dimensions: pick a sensible fixed target. The fixed pool
+        // size is a Phase 1B v1 limitation — pl_swapchain_resize is a
+        // no-op for the headless impl, so a true resize means
+        // tear-down + rebuild. 1080p is the right default for embedded
+        // playback on iOS / iPadOS / Apple TV; HDR / 4K modes will
+        // grow it on demand in a follow-up phase.
+        let w = 1920
+        let h = 1080
 
         do {
-            // 1. Vulkan bring-up.
             let bridge = try MpvVulkanBridge(metalDevice: metalDevice)
             self.vulkanBridge = bridge
 
-            // 2. mpv render context — Vulkan API type.
-            let ctx = try MpvRenderContext(mpv: handle, bridge: bridge) { [weak self] in
-                self?.markNeedsRender()
-            }
-            self.renderContext = ctx
-
-            // 3. Sample-buffer enqueuer.
-            self.enqueuer = MpvSampleBufferEnqueuer(layer: sampleBufferLayer)
-
-            // 4. Display link + control timebase + PiP.
-            startDisplayLink()
-            setupControlTimebase()
-            setupPipController()
+            try buildRing(width: w, height: h, bridge: bridge)
+            try registerPool(width: w, height: h, mpv: handle, bridge: bridge)
         } catch {
             NSLog("[MpvMetalView] attach failed: %@", String(describing: error))
             tearDown()
+            return
+        }
+
+        attachedPlayer = player
+        attachedMpv = handle
+        player.registerView(self)
+
+        enqueuer = MpvSampleBufferEnqueuer(layer: sampleBufferLayer)
+
+        DispatchQueue.main.async { [weak self] in
+            self?.setupControlTimebase()
+            self?.setupPipController()
         }
     }
 
@@ -211,112 +187,9 @@ final class MpvMetalView: UIView {
         tearDown()
     }
 
-    // MARK: Render scheduling
+    // MARK: Ring build + pool registration
 
-    /// Called from mpv's update-callback thread AND from the main
-    /// thread (foreground transitions). Serialised against the
-    /// CADisplayLink + render queue via `OSAtomicCompareAndSwap32`.
-    func markNeedsRender() {
-        OSAtomicCompareAndSwap32Barrier(0, 1, &pendingRenderFlag)
-    }
-
-    private func startDisplayLink() {
-        guard displayLink == nil else { return }
-        let link = CADisplayLink(target: self, selector: #selector(displayLinkTick))
-        if UIScreen.main.maximumFramesPerSecond >= 120 {
-            link.preferredFramesPerSecond = 120
-        }
-        link.add(to: .main, forMode: .common)
-        displayLink = link
-    }
-
-    @objc private func displayLinkTick() {
-        // Only schedule a render if mpv has signalled "frame ready"
-        // since the last tick. Skips ~96 of 120 ticks for 24fps video.
-        guard OSAtomicCompareAndSwap32Barrier(1, 0, &pendingRenderFlag) else { return }
-        renderQueue.async { [weak self] in
-            self?.renderOneFrame()
-        }
-    }
-
-    /// Runs on `renderQueue`. The only place that calls
-    /// `mpv_render_context_render`.
-    private func renderOneFrame() {
-        guard let renderContext = renderContext, let mpv = mpvHandle else { return }
-
-        let updateFlags = mpv_render_context_update(renderContext.handle)
-        guard updateFlags & UInt64(MPV_RENDER_UPDATE_FRAME.rawValue) != 0 else { return }
-
-        // Resize the IOSurface ring on the first frame and on any
-        // adaptive-bitrate / aspect change.
-        guard let (w, h) = readMpvVideoSize(mpv: mpv) else { return }
-        if w != ringWidth || h != ringHeight {
-            do {
-                try ensureRing(width: w, height: h)
-            } catch {
-                NSLog("[MpvMetalView] ensureRing(%d,%d) failed: %@", w, h, String(describing: error))
-                return
-            }
-        }
-        guard !ring.isEmpty else { return }
-
-        let entry = ring[nextRingIndex]
-        nextRingIndex = (nextRingIndex + 1) % ring.count
-
-        // mpv renders into the IOSurface-backed VkImage. Block until
-        // the GPU finishes (libmpv_vk's done_frame calls
-        // pl_gpu_finish), so the IOSurface contents are valid when
-        // the enqueuer wraps them as a CMSampleBuffer.
-        do {
-            try renderContext.render(
-                targetImage: entry.vkImage,
-                width: UInt32(entry.width),
-                height: UInt32(entry.height),
-                format: VK_FORMAT_B8G8R8A8_UNORM
-            )
-        } catch {
-            NSLog("[MpvMetalView] render failed: %@", String(describing: error))
-            return
-        }
-
-        // Hop to main to enqueue + mutate the AVSBDL state
-        // (`enqueue` is documented thread-safe but the layer's
-        // `flush` / `requiresFlushToResumeDecoding` reads are not).
-        let pixelBuffer = entry.pixelBuffer
-        let enqueuer = self.enqueuer
-        DispatchQueue.main.async {
-            enqueuer?.enqueue(pixelBuffer: pixelBuffer)
-        }
-    }
-
-    // MARK: Ring management
-
-    private func ensureRing(width: Int, height: Int) throws {
-        guard width > 0, height > 0 else { return }
-        guard let bridge = vulkanBridge else { return }
-
-        // Tear down the old ring.
-        for entry in ring { bridge.destroyImage(entry.vkImage) }
-        ring.removeAll(keepingCapacity: true)
-
-        // Block the AVSBDL from reading stale frames at the old size.
-        sampleBufferLayer.flushAndRemoveImage()
-
-        for _ in 0..<MpvMetalView.ringSize {
-            let entry = try makeRingEntry(width: width, height: height, bridge: bridge)
-            ring.append(entry)
-        }
-        ringWidth = width
-        ringHeight = height
-        nextRingIndex = 0
-    }
-
-    private func makeRingEntry(
-        width: Int, height: Int, bridge: MpvVulkanBridge
-    ) throws -> RingEntry {
-        // 32BGRA — matches VK_FORMAT_B8G8R8A8_UNORM. Phase 3 will
-        // switch to 10-bit P010 for HDR streams; the IOSurface format
-        // is detected from the first decoded frame at that point.
+    private func buildRing(width: Int, height: Int, bridge: MpvVulkanBridge) throws {
         let bytesPerRow = width * 4
         let attrs: [String: Any] = [
             kIOSurfaceWidth as String: width,
@@ -325,61 +198,127 @@ final class MpvMetalView: UIView {
             kIOSurfaceBytesPerRow as String: bytesPerRow,
             kIOSurfacePixelFormat as String: Int(kCVPixelFormatType_32BGRA),
         ]
-        guard let surface = IOSurfaceCreate(attrs as CFDictionary) else {
-            throw MpvVulkanBridgeError.vk(VK_ERROR_OUT_OF_HOST_MEMORY, "IOSurfaceCreate")
+        ring.removeAll()
+        for _ in 0..<MpvMetalView.poolSize {
+            guard let surface = IOSurfaceCreate(attrs as CFDictionary) else {
+                throw MpvVulkanBridgeError.vk(VK_ERROR_OUT_OF_HOST_MEMORY, "IOSurfaceCreate")
+            }
+            var unmanagedPB: Unmanaged<CVPixelBuffer>?
+            let pbAttrs: [String: Any] = [
+                kCVPixelBufferIOSurfacePropertiesKey as String: [:]
+            ]
+            let rc = CVPixelBufferCreateWithIOSurface(
+                kCFAllocatorDefault, surface, pbAttrs as CFDictionary, &unmanagedPB
+            )
+            guard rc == kCVReturnSuccess, let pb = unmanagedPB?.takeRetainedValue() else {
+                throw MpvVulkanBridgeError.vk(VK_ERROR_OUT_OF_HOST_MEMORY, "CVPixelBufferCreateWithIOSurface")
+            }
+            // SDR BT.709 attachments. Phase 3 will switch per HDR mode.
+            CVBufferSetAttachment(pb, kCVImageBufferColorPrimariesKey,
+                                  kCVImageBufferColorPrimaries_ITU_R_709_2, .shouldPropagate)
+            CVBufferSetAttachment(pb, kCVImageBufferTransferFunctionKey,
+                                  kCVImageBufferTransferFunction_ITU_R_709_2, .shouldPropagate)
+            CVBufferSetAttachment(pb, kCVImageBufferYCbCrMatrixKey,
+                                  kCVImageBufferYCbCrMatrix_ITU_R_709_2, .shouldPropagate)
+            let img = try bridge.makeImageFromIOSurface(
+                surface, width: UInt32(width), height: UInt32(height),
+                format: VK_FORMAT_B8G8R8A8_UNORM
+            )
+            ring.append(RingEntry(ioSurface: surface, pixelBuffer: pb, vkImage: img))
         }
-
-        var unmanagedPB: Unmanaged<CVPixelBuffer>?
-        let pbAttrs: [String: Any] = [
-            kCVPixelBufferIOSurfacePropertiesKey as String: [:]
-        ]
-        let rc = CVPixelBufferCreateWithIOSurface(
-            kCFAllocatorDefault, surface, pbAttrs as CFDictionary, &unmanagedPB
-        )
-        guard rc == kCVReturnSuccess, let pb = unmanagedPB?.takeRetainedValue() else {
-            throw MpvVulkanBridgeError.vk(VK_ERROR_OUT_OF_HOST_MEMORY, "CVPixelBufferCreateWithIOSurface")
-        }
-
-        // Tag SDR BT.709 by default. Phase 3 overrides per-frame.
-        CVBufferSetAttachment(
-            pb, kCVImageBufferColorPrimariesKey,
-            kCVImageBufferColorPrimaries_ITU_R_709_2, .shouldPropagate
-        )
-        CVBufferSetAttachment(
-            pb, kCVImageBufferTransferFunctionKey,
-            kCVImageBufferTransferFunction_ITU_R_709_2, .shouldPropagate
-        )
-        CVBufferSetAttachment(
-            pb, kCVImageBufferYCbCrMatrixKey,
-            kCVImageBufferYCbCrMatrix_ITU_R_709_2, .shouldPropagate
-        )
-
-        let image = try bridge.makeImageFromIOSurface(
-            surface,
-            width: UInt32(width),
-            height: UInt32(height),
-            format: VK_FORMAT_B8G8R8A8_UNORM
-        )
-
-        return RingEntry(
-            ioSurface: surface,
-            pixelBuffer: pb,
-            vkImage: image,
-            width: width,
-            height: height
-        )
+        ringWidth = width
+        ringHeight = height
     }
 
-    private func readMpvVideoSize(mpv: OpaquePointer) -> (Int, Int)? {
-        var w: Int64 = 0
-        var h: Int64 = 0
-        guard mpv_get_property(mpv, "dwidth", MPV_FORMAT_INT64, &w) >= 0 else { return nil }
-        guard mpv_get_property(mpv, "dheight", MPV_FORMAT_INT64, &h) >= 0 else { return nil }
-        guard w > 0, h > 0 else { return nil }
-        return (Int(w), Int(h))
+    private func registerPool(
+        width: Int, height: Int, mpv: OpaquePointer, bridge: MpvVulkanBridge
+    ) throws {
+        // Stable storage for arrays mpv will reference until
+        // mpv_libmpv_apple_clear_pool / detach.
+        poolImages = ring.map { Optional($0.vkImage) }
+        deviceExtCStrings = MpvVulkanBridge.enabledDeviceExtensions.map {
+            strdup($0)
+        }
+        deviceExtPtrs = deviceExtCStrings.map { UnsafePointer($0) }
+
+        // Retain self for the C callback bridge. Released in tearDown.
+        let retainer = Unmanaged.passRetained(self)
+        poolSelfRetainer = retainer
+
+        // Color metadata: SDR BT.709, full-range RGB. Numeric values
+        // match libplacebo's pl_color_primaries / pl_color_transfer /
+        // pl_color_system enums (see render_libmpv_apple.h).
+        let plColorPrimBT709: Int32 = 7   // PL_COLOR_PRIM_BT_709
+        let plColorTrcBT1886: Int32 = 8   // PL_COLOR_TRC_BT_1886
+        let plColorSysRGB: Int32 = 1      // PL_COLOR_SYSTEM_RGB
+
+        let usage: VkImageUsageFlags = VkImageUsageFlags(
+            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT.rawValue
+            | VK_IMAGE_USAGE_TRANSFER_DST_BIT.rawValue
+            | VK_IMAGE_USAGE_TRANSFER_SRC_BIT.rawValue
+            | VK_IMAGE_USAGE_SAMPLED_BIT.rawValue
+        )
+
+        var rc: Int32 = 0
+        poolImages.withUnsafeMutableBufferPointer { imgBuf in
+            deviceExtPtrs.withUnsafeMutableBufferPointer { extBuf in
+                var params = mpv_libmpv_apple_pool_params(
+                    instance: bridge.instance,
+                    phys_device: bridge.physicalDevice,
+                    device: bridge.device,
+                    get_proc_addr: MpvVulkanBridge.getInstanceProcAddrFnPointer,
+                    queue_family_index: bridge.queueFamilyIndex,
+                    queue_index: bridge.queueIndex,
+                    device_extensions: extBuf.baseAddress,
+                    num_device_extensions: Int32(extBuf.count),
+                    num_images: Int32(imgBuf.count),
+                    images: imgBuf.baseAddress,
+                    format: VK_FORMAT_B8G8R8A8_UNORM,
+                    width: Int32(width),
+                    height: Int32(height),
+                    usage: usage,
+                    color_primaries: plColorPrimBT709,
+                    color_transfer: plColorTrcBT1886,
+                    color_system: plColorSysRGB,
+                    swapchain_depth: 2,
+                    acquire: MpvMetalView.acquireCb,
+                    present: MpvMetalView.presentCb,
+                    priv: retainer.toOpaque()
+                )
+                rc = mpv_libmpv_apple_set_pool(mpv, &params)
+            }
+        }
+        if rc < 0 {
+            throw MpvVulkanBridgeError.vk(VK_ERROR_INITIALIZATION_FAILED,
+                                          "mpv_libmpv_apple_set_pool returned \(rc)")
+        }
     }
 
-    // MARK: PiP / control timebase
+    // MARK: Acquire / present (called from mpv's render thread)
+
+    /// Round-robin pick. Atomic CAS-free monotonic counter mod ringSize.
+    private func acquire(outIndex: UnsafeMutablePointer<Int32>) -> Bool {
+        let next = OSAtomicIncrement32(&nextRingIndex)
+        outIndex.pointee = next.modulo(Int32(MpvMetalView.poolSize))
+        return true
+    }
+
+    /// Hand the freshly-rendered IOSurface to AVSBDL. Called from
+    /// mpv's render thread; bounce to main for `enqueueSampleBuffer:`.
+    private func present(index: Int, semaphore _: VkSemaphore?) {
+        // TODO Phase 1B+: bridge `semaphore` → MTLSharedEvent so AVSBDL
+        // sees the IOSurface only after the GPU has finished writing it.
+        // For now we trust the GPU work to complete before the next
+        // VSync — works on Apple Silicon at 1080p; revisit on first
+        // tearing report.
+        guard index >= 0, index < ring.count else { return }
+        let pb = ring[index].pixelBuffer
+        DispatchQueue.main.async { [weak self] in
+            self?.enqueuer?.enqueue(pixelBuffer: pb)
+        }
+    }
+
+    // MARK: PiP / control timebase (unchanged from Phase 1A)
 
     private func setupControlTimebase() {
         var timebase: CMTimebase?
@@ -419,9 +358,7 @@ final class MpvMetalView: UIView {
     ) {
         dispatchPrecondition(condition: .onQueue(.main))
         if let tb = controlTimebase {
-            CMTimebaseSetTime(
-                tb, time: CMTime(seconds: position, preferredTimescale: 600)
-            )
+            CMTimebaseSetTime(tb, time: CMTime(seconds: position, preferredTimescale: 600))
             CMTimebaseSetRate(tb, rate: isPaused ? 0 : rate)
         }
         let stateChanged = isPaused != lastInvalidatedPaused
@@ -440,11 +377,13 @@ final class MpvMetalView: UIView {
 
     private func tearDown() {
         let work = { [self] in
-            displayLink?.invalidate()
-            displayLink = nil
+            // Tell mpv to stop calling our acquire/present. Must happen
+            // before we destroy VkImages or unretain the pool priv.
+            if let mpv = attachedMpv {
+                mpv_libmpv_apple_clear_pool(mpv)
+            }
 
             pipController = nil
-
             if let tb = controlTimebase {
                 CMTimebaseSetRate(tb, rate: 0)
             }
@@ -454,9 +393,6 @@ final class MpvMetalView: UIView {
             lastInvalidatedPaused = true
             lastInvalidatedRate = -1
 
-            // Render context owns the libplacebo Vulkan import — must
-            // tear down before the bridge.
-            renderContext = nil
             enqueuer = nil
 
             if let bridge = vulkanBridge {
@@ -468,10 +404,17 @@ final class MpvMetalView: UIView {
             nextRingIndex = 0
 
             vulkanBridge = nil
+            poolImages.removeAll(keepingCapacity: false)
+            for ptr in deviceExtCStrings { free(ptr) }
+            deviceExtCStrings.removeAll(keepingCapacity: false)
+            deviceExtPtrs.removeAll(keepingCapacity: false)
+
+            poolSelfRetainer?.release()
+            poolSelfRetainer = nil
 
             attachedPlayer?.unregisterView(self)
             attachedPlayer = nil
-            mpvHandle = nil
+            attachedMpv = nil
 
             sampleBufferLayer.flushAndRemoveImage()
         }
@@ -487,25 +430,41 @@ final class MpvMetalView: UIView {
         NotificationCenter.default.removeObserver(self)
         tearDown()
     }
+
+    // MARK: C callbacks
+
+    /// Pool size constant — number of IOSurfaces we round-robin
+    /// through. Must be ≥ swapchain_depth + 1 to keep AVSBDL's display
+    /// hold from overlapping with libplacebo's writes.
+    static let poolSize: Int = 3
+
+    private static let acquireCb: (
+        @convention(c) (UnsafeMutableRawPointer?, UnsafeMutablePointer<Int32>?) -> Bool
+    ) = { priv, outIdx in
+        guard let priv = priv, let outIdx = outIdx else { return false }
+        let view = Unmanaged<MpvMetalView>.fromOpaque(priv).takeUnretainedValue()
+        return view.acquire(outIndex: outIdx)
+    }
+
+    private static let presentCb: (
+        @convention(c) (UnsafeMutableRawPointer?, Int32, VkSemaphore?) -> Void
+    ) = { priv, idx, sem in
+        guard let priv = priv else { return }
+        let view = Unmanaged<MpvMetalView>.fromOpaque(priv).takeUnretainedValue()
+        view.present(index: Int(idx), semaphore: sem)
+    }
 }
 
-// MARK: - PiP delegates (matches the GLES era — only the layer changed)
+// MARK: - PiP delegates (unchanged from Phase 1A)
 
 @available(iOS 15.0, *)
 extension MpvMetalView: AVPictureInPictureControllerDelegate {
-    func pictureInPictureControllerDidStartPictureInPicture(
-        _ controller: AVPictureInPictureController
-    ) {
+    func pictureInPictureControllerDidStartPictureInPicture(_ controller: AVPictureInPictureController) {
         isPipActive = true
     }
 
-    func pictureInPictureControllerDidStopPictureInPicture(
-        _ controller: AVPictureInPictureController
-    ) {
+    func pictureInPictureControllerDidStopPictureInPicture(_ controller: AVPictureInPictureController) {
         isPipActive = false
-        if isAppInBackground {
-            displayLink?.isPaused = true
-        }
     }
 
     func pictureInPictureController(
@@ -526,24 +485,17 @@ extension MpvMetalView: AVPictureInPictureControllerDelegate {
 @available(iOS 15.0, *)
 extension MpvMetalView: AVPictureInPictureSampleBufferPlaybackDelegate {
     func pictureInPictureController(
-        _ controller: AVPictureInPictureController,
-        setPlaying playing: Bool
+        _ controller: AVPictureInPictureController, setPlaying playing: Bool
     ) {
         guard let player = attachedPlayer else { return }
         do {
-            if playing {
-                try player.play()
-            } else {
-                try player.pause()
-            }
+            if playing { try player.play() } else { try player.pause() }
         } catch {
             NSLog("[MpvMetalView] PiP setPlaying error: %@", String(describing: error))
         }
     }
 
-    func pictureInPictureControllerTimeRangeForPlayback(
-        _ controller: AVPictureInPictureController
-    ) -> CMTimeRange {
+    func pictureInPictureControllerTimeRangeForPlayback(_ controller: AVPictureInPictureController) -> CMTimeRange {
         guard let player = attachedPlayer else {
             return CMTimeRange(start: .zero, duration: .zero)
         }
@@ -560,18 +512,14 @@ extension MpvMetalView: AVPictureInPictureSampleBufferPlaybackDelegate {
         )
     }
 
-    func pictureInPictureControllerIsPlaybackPaused(
-        _ controller: AVPictureInPictureController
-    ) -> Bool {
+    func pictureInPictureControllerIsPlaybackPaused(_ controller: AVPictureInPictureController) -> Bool {
         return attachedPlayer?.pipIsPaused ?? true
     }
 
     func pictureInPictureController(
         _ controller: AVPictureInPictureController,
         didTransitionToRenderSize newRenderSize: CMVideoDimensions
-    ) {
-        // No-op. Ring tracks decode size; iOS downsamples for PiP.
-    }
+    ) {}
 
     func pictureInPictureController(
         _ controller: AVPictureInPictureController,
@@ -587,5 +535,15 @@ extension MpvMetalView: AVPictureInPictureSampleBufferPlaybackDelegate {
         } catch {
             NSLog("[MpvMetalView] PiP skipByInterval error: %@", String(describing: error))
         }
+    }
+}
+
+private extension Int32 {
+    /// Always-positive modulo. Swift's `%` returns negative results for
+    /// negative dividends; OSAtomicIncrement32 wraps to negative once
+    /// it overflows past Int32.max, so we need this guard.
+    func modulo(_ n: Int32) -> Int32 {
+        let r = self % n
+        return r < 0 ? r + n : r
     }
 }
