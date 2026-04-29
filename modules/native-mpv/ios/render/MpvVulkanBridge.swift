@@ -322,6 +322,26 @@ final class MpvVulkanBridge {
             ioSurface: Unmanaged.passUnretained(ioSurface)
         )
 
+        // Tiling is platform-split:
+        //   - Real device: LINEAR. The IOSurface is also read by
+        //     AVSampleBufferDisplayLayer as plain BGRA; OPTIMAL leaves
+        //     Vulkan's swizzled GPU layout in the IOSurface and AVSBDL
+        //     paints garbage (manifests as a green dominance on Apple
+        //     Silicon devices).
+        //   - Simulator: OPTIMAL. The simulator's MoltenVK rejects
+        //     LINEAR + COLOR_ATTACHMENT for B8G8R8A8_UNORM
+        //     (VK_ERROR_FEATURE_NOT_PRESENT); its OPTIMAL layout
+        //     happens to coincide with the IOSurface's expected bytes,
+        //     so colors render correctly.
+        // The Metal-side IOSurface storage-mode assertion that either
+        // tiling can trigger is satisfied per-plane in mpv's hwdec_vt_pl
+        // path (explicit MTLStorageModeShared).
+        #if targetEnvironment(simulator)
+        let imageTiling = VK_IMAGE_TILING_OPTIMAL
+        #else
+        let imageTiling = VK_IMAGE_TILING_LINEAR
+        #endif
+
         var image: VkImage? = nil
         try withUnsafePointer(to: &importInfo) { importPtr in
             var info = VkImageCreateInfo(
@@ -334,15 +354,7 @@ final class MpvVulkanBridge {
                 mipLevels: 1,
                 arrayLayers: 1,
                 samples: VK_SAMPLE_COUNT_1_BIT,
-                // OPTIMAL is the only tiling MoltenVK on the iOS simulator
-                // supports with COLOR_ATTACHMENT_BIT for B8G8R8A8_UNORM —
-                // LINEAR fails vkCreateImage with VK_ERROR_FEATURE_NOT_PRESENT
-                // (the simulator's MoltenVK is stricter than real-device).
-                // The Metal-side IOSurface storage-mode assertion that this
-                // can otherwise trigger is now satisfied per-plane in mpv's
-                // hwdec_vt_pl path (explicit MTLStorageModeShared) — see
-                // fork commit on apple/main.
-                tiling: VK_IMAGE_TILING_OPTIMAL,
+                tiling: imageTiling,
                 usage: VkImageUsageFlags(
                     VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT.rawValue
                     | VK_IMAGE_USAGE_TRANSFER_DST_BIT.rawValue
