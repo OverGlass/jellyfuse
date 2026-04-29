@@ -56,13 +56,13 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
     var mpvHandle: OpaquePointer? { return mpv }
 
     /// Registered render views — must detach before mpv handle is destroyed.
-    private var attachedViews: [MpvGLView] = []
+    private var attachedViews: [MpvMetalView] = []
 
-    func registerView(_ view: MpvGLView) {
+    func registerView(_ view: MpvMetalView) {
         attachedViews.append(view)
     }
 
-    func unregisterView(_ view: MpvGLView) {
+    func unregisterView(_ view: MpvMetalView) {
         attachedViews.removeAll { $0 === view }
     }
 
@@ -588,31 +588,17 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
             }
         }
 
-        // Defaults matching the Rust backend:
-        // - `videotoolbox-copy` is required. Straight `videotoolbox`
-        //   (zero-copy) appears to negotiate correctly in mpv's logs
-        //   but the libmpv GLES renderer has two confirmed bugs:
-        //     1. nv12 (8-bit) frames render with a heavy green tint
-        //        (color-conversion matrix is wrong). Same bug the Rust
-        //        commit 51fec4ba hit.
-        //     2. p010 (10-bit HDR) frames are rejected by the VT↔GL
-        //        interop — "Format unsupported. Initializing texture
-        //        for hardware decoding failed" — and fall back to a
-        //        blue/black screen. The GLES interop doesn't register
-        //        the p010 pixel format.
-        //   Both are resolved by forcing `-copy`, which makes mpv do
-        //   the CPU readback + re-upload in a color-correct path.
-        //   The true zero-copy win needs the Metal backend (`vo=gpu`
-        //   / `gpu-next` + CAMetalLayer), not a hwdec flag change.
-        // - vid=no until MpvGLView.attach() plugs in the render context;
-        //   otherwise libmpv tries to open a window on its own.
-        _ = mpv_set_option_string(mpv, "hwdec", "videotoolbox-copy")
-        _ = mpv_set_option_string(mpv, "vo", "libmpv")
-        _ = mpv_set_option_string(mpv, "vid", "no")
-        // Start paused — prevents mpv from freezing when vo=libmpv
-        // has no render context yet. MpvGLView.attach() unpauses
-        // after creating the render context.
-        _ = mpv_set_option_string(mpv, "pause", "yes")
+        // Phase 1 render path: `mpv_render_context_create` with
+        // MPV_RENDER_API_TYPE_VK in MpvMetalView.attach(). vo=libmpv
+        // is implicit once the render context exists. hwdec is true
+        // zero-copy now that the Vulkan path imports VideoToolbox's
+        // CVPixelBuffer-backed IOSurfaces directly via
+        // VK_EXT_metal_objects — no `-copy` readback. The GLES era's
+        // `vid=no` / `pause=yes` workaround for a libmpv freeze is
+        // gone: lifecycle is now mpv_create → mpv_initialize → idle
+        // until MpvMetalView.attach() builds the render context →
+        // load(streamUrl). Until attach lands, mpv has nothing to do.
+        _ = mpv_set_option_string(mpv, "hwdec", "videotoolbox")
         _ = mpv_set_option_string(mpv, "audio-device", "auto")
         // Phase 2: ao_avfoundation first (AVSampleBufferAudioRenderer +
         // AVSampleBufferRenderSynchronizer — respects the
@@ -629,6 +615,11 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
             mpv_destroy(mpv)
             return nil
         }
+
+        // Surface mpv core + libplacebo logs through MPV_EVENT_LOG_MESSAGE so
+        // failures inside `mpv_render_context_create` (e.g. libplacebo's
+        // "Missing device feature: ...") aren't swallowed silently.
+        _ = mpv_request_log_messages(mpv, "v")
 
         // Observe the properties we surface as events.
         mpv_observe_property(mpv, 1, "playback-time", MPV_FORMAT_DOUBLE)
@@ -706,6 +697,12 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
                 fireState(.ended)
             case MPV_EVENT_PROPERTY_CHANGE:
                 handlePropertyChange(event)
+            case MPV_EVENT_LOG_MESSAGE:
+                if let raw = event.data?.assumingMemoryBound(to: mpv_event_log_message.self) {
+                    let prefix = raw.pointee.prefix.map { String(cString: $0) } ?? "?"
+                    let text = raw.pointee.text.map { String(cString: $0) } ?? ""
+                    NSLog("[mpv:%@] %@", prefix, text.trimmingCharacters(in: .whitespacesAndNewlines))
+                }
             default:
                 break
             }
