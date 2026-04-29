@@ -33,10 +33,18 @@ public final class HybridMpvVideoView: HybridMpvVideoViewSpec {
         guard let handle = player.mpvHandle else {
             throw RuntimeError("Player has been released")
         }
-        // Nitro hybrid refs are invoked from the JS thread; Vulkan +
-        // AVPictureInPictureController setup must run on main.
-        DispatchQueue.main.async { [weak self] in
-            self?.metalView.attach(player: player, mpvHandle: handle)
+        // Vulkan + AVPictureInPictureController setup must run on main.
+        // Block the (JS-thread) caller until the main-thread attach
+        // completes — JS code is allowed to call `load()` immediately
+        // after attachPlayer, and `vo=gpu-next gpu-context=libmpvvk`
+        // requires the consumer pool to be registered before mpv's
+        // vo_create runs (which is synchronous inside `loadfile`).
+        if Thread.isMainThread {
+            metalView.attach(player: player, mpvHandle: handle)
+        } else {
+            DispatchQueue.main.sync { [weak self] in
+                self?.metalView.attach(player: player, mpvHandle: handle)
+            }
         }
     }
 

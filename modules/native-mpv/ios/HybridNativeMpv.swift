@@ -66,6 +66,18 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         attachedViews.removeAll { $0 === view }
     }
 
+    /// Called by `MpvMetalView.attach` once the headless VkImage pool is
+    /// registered with mpv. Flips `vid` from `no` (initial) to `auto`,
+    /// which is what triggers mpv to create its vo and start reading
+    /// from our pool. Without this gate, vo_create can fire on the very
+    /// first `loadfile` — before the React view has mounted and
+    /// registered its pool — and fail with "no headless image pool
+    /// registered".
+    func activateVideoOutput() {
+        guard let mpv = self.mpv else { return }
+        _ = mpv_set_property_string(mpv, "vid", "auto")
+    }
+
     private var mpv: OpaquePointer?
     private var eventThread: Thread?
     private var isShuttingDown = false
@@ -603,6 +615,15 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         _ = mpv_set_option_string(mpv, "gpu-api", "vulkan")
         _ = mpv_set_option_string(mpv, "gpu-context", "libmpvvk")
         _ = mpv_set_option_string(mpv, "hwdec", "videotoolbox")
+        // Phase 1B lifecycle gate: with `vid=no` mpv parses tracks during
+        // loadfile but doesn't initialise the video output. The view's
+        // `attach()` flips this back to `auto` once the consumer-side
+        // pool is registered with libmpvvk — only then does mpv create
+        // its vo and read our pool. Without this gate, JS code that
+        // calls `load()` before the React view mounts would trigger
+        // vo_create with an empty pool ("no headless image pool
+        // registered" → vo init fails → no video).
+        _ = mpv_set_option_string(mpv, "vid", "no")
         _ = mpv_set_option_string(mpv, "audio-device", "auto")
         // Phase 2: ao_avfoundation first (AVSampleBufferAudioRenderer +
         // AVSampleBufferRenderSynchronizer — respects the

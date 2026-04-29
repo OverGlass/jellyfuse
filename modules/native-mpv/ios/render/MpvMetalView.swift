@@ -174,6 +174,9 @@ final class MpvMetalView: UIView {
         attachedPlayer = player
         attachedMpv = handle
         player.registerView(self)
+        // Pool is registered — let mpv create the vo. Until this call
+        // mpv was started with `vid=no`, which deferred vo_create.
+        player.activateVideoOutput()
 
         enqueuer = MpvSampleBufferEnqueuer(layer: sampleBufferLayer)
 
@@ -246,11 +249,17 @@ final class MpvMetalView: UIView {
         poolSelfRetainer = retainer
 
         // Color metadata: SDR BT.709, full-range RGB. Numeric values
-        // match libplacebo's pl_color_primaries / pl_color_transfer /
-        // pl_color_system enums (see render_libmpv_apple.h).
-        let plColorPrimBT709: Int32 = 7   // PL_COLOR_PRIM_BT_709
-        let plColorTrcBT1886: Int32 = 8   // PL_COLOR_TRC_BT_1886
-        let plColorSysRGB: Int32 = 1      // PL_COLOR_SYSTEM_RGB
+        // are taken straight from libplacebo's pl_color_primaries /
+        // pl_color_transfer / pl_color_system enums (see
+        // libplacebo/colorspace.h). The public mpv_libmpv_apple ABI
+        // forwards these as ints to avoid pulling libplacebo into the
+        // mpv public surface — values must match the enum definitions
+        // exactly. (Earlier values 7/8/1 were guesses and produced a
+        // visible green/teal cast because libplacebo silently mapped
+        // them to wrong primaries/transfer.)
+        let plColorPrimBT709: Int32 = 3   // PL_COLOR_PRIM_BT_709
+        let plColorTrcBT1886: Int32 = 1   // PL_COLOR_TRC_BT_1886
+        let plColorSysRGB: Int32 = 12     // PL_COLOR_SYSTEM_RGB
 
         let usage: VkImageUsageFlags = VkImageUsageFlags(
             VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT.rawValue
@@ -283,6 +292,7 @@ final class MpvMetalView: UIView {
                     swapchain_depth: 2,
                     acquire: MpvMetalView.acquireCb,
                     present: MpvMetalView.presentCb,
+                    destroy: MpvMetalView.destroyCb,
                     priv: retainer.toOpaque()
                 )
                 rc = mpv_libmpv_apple_set_pool(mpv, &params)
@@ -377,10 +387,36 @@ final class MpvMetalView: UIView {
 
     private func tearDown() {
         let work = { [self] in
-            // Tell mpv to stop calling our acquire/present. Must happen
-            // before we destroy VkImages or unretain the pool priv.
-            if let mpv = attachedMpv {
+            // Tell mpv to stop rendering into our pool. The actual
+            // teardown of mpv's ra_ctx (and the matching release of
+            // the +1 retain we handed it as the pool's `priv`) happens
+            // asynchronously inside mpv via the `destroyCb` callback,
+            // which lets MetalView's `deinit` finally free the ring +
+            // bridge without racing the render thread.
+            //
+            // Reach the mpv handle through the weak `attachedPlayer`
+            // ref, NOT via the cached `attachedMpv` raw pointer:
+            // `HybridNativeMpv` may have already been deallocated by
+            // the time `onDropView` reaches us on nav-back. The cached
+            // pointer would be a dangling reference and `mpv_command`
+            // would dereference it (EXC_BAD_ACCESS in
+            // `run_client_command`).
+            if let mpv = attachedPlayer?.mpvHandle {
                 mpv_libmpv_apple_clear_pool(mpv)
+
+                let stop = strdup("stop")
+                var args: [UnsafePointer<CChar>?] = [
+                    UnsafePointer(stop), nil,
+                ]
+                _ = mpv_command(mpv, &args)
+                free(stop)
+            } else if let r = poolSelfRetainer {
+                // Player already gone: the ra_ctx will never tear down
+                // and `destroyCb` will never fire, so the +1 retain we
+                // handed mpv as `priv` would leak forever. Release it
+                // here — there's no race because mpv core is dead.
+                r.release()
+                poolSelfRetainer = nil
             }
 
             pipController = nil
@@ -395,26 +431,19 @@ final class MpvMetalView: UIView {
 
             enqueuer = nil
 
-            if let bridge = vulkanBridge {
-                for entry in ring { bridge.destroyImage(entry.vkImage) }
-            }
-            ring.removeAll(keepingCapacity: false)
-            ringWidth = 0
-            ringHeight = 0
-            nextRingIndex = 0
-
-            vulkanBridge = nil
-            poolImages.removeAll(keepingCapacity: false)
-            for ptr in deviceExtCStrings { free(ptr) }
-            deviceExtCStrings.removeAll(keepingCapacity: false)
-            deviceExtPtrs.removeAll(keepingCapacity: false)
-
-            poolSelfRetainer?.release()
-            poolSelfRetainer = nil
+            // The ring (IOSurfaces + VkImages + CVPixelBuffers), the
+            // Vulkan bridge, the pool-extension cstrings, and the
+            // pool-self retainer all stay alive past tearDown — mpv's
+            // render thread may still call acquire/present in the
+            // window between view dismount and `mpv_command "stop"`
+            // draining the vo. They're released in `deinit` once the
+            // ra_ctx's destroy callback (`destroyCb`) has dropped the
+            // +1 retain we handed mpv at `mpv_libmpv_apple_set_pool`
+            // time. Releasing them here is the use-after-free that
+            // crashed the app on nav-back from the player.
 
             attachedPlayer?.unregisterView(self)
             attachedPlayer = nil
-            attachedMpv = nil
 
             sampleBufferLayer.flushAndRemoveImage()
         }
@@ -428,7 +457,25 @@ final class MpvMetalView: UIView {
 
     deinit {
         NotificationCenter.default.removeObserver(self)
-        tearDown()
+        // Heavy resources are deferred from tearDown to here — by the
+        // time `deinit` fires, mpv has already released its +1 retain
+        // (via the `destroyCb` ra_ctx tear-down callback), so no more
+        // acquire/present callbacks can fire and the pool's VkImages /
+        // IOSurfaces are safe to free.
+        if let bridge = vulkanBridge {
+            for entry in ring { bridge.destroyImage(entry.vkImage) }
+        }
+        ring.removeAll(keepingCapacity: false)
+        vulkanBridge = nil
+        poolImages.removeAll(keepingCapacity: false)
+        for ptr in deviceExtCStrings { free(ptr) }
+        deviceExtCStrings.removeAll(keepingCapacity: false)
+        deviceExtPtrs.removeAll(keepingCapacity: false)
+        // Defensive: if tearDown wasn't called (synthetic deinit path),
+        // run the visible-side cleanup too.
+        if controlTimebase != nil {
+            sampleBufferLayer.controlTimebase = nil
+        }
     }
 
     // MARK: C callbacks
@@ -452,6 +499,18 @@ final class MpvMetalView: UIView {
         guard let priv = priv else { return }
         let view = Unmanaged<MpvMetalView>.fromOpaque(priv).takeUnretainedValue()
         view.present(index: Int(idx), semaphore: sem)
+    }
+
+    /// Mpv signals end-of-vo via this callback. We hold a +1 retain on
+    /// `self` for the lifetime of the registered pool (passed to
+    /// `mpv_libmpv_apple_set_pool` as `priv`); release it here so the
+    /// MetalView can finally deinit. Fires from mpv's render thread —
+    /// keep work minimal and never call back into mpv.
+    private static let destroyCb: (
+        @convention(c) (UnsafeMutableRawPointer?) -> Void
+    ) = { priv in
+        guard let priv = priv else { return }
+        Unmanaged<MpvMetalView>.fromOpaque(priv).release()
     }
 }
 

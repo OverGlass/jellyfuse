@@ -334,6 +334,14 @@ final class MpvVulkanBridge {
                 mipLevels: 1,
                 arrayLayers: 1,
                 samples: VK_SAMPLE_COUNT_1_BIT,
+                // OPTIMAL is the only tiling MoltenVK on the iOS simulator
+                // supports with COLOR_ATTACHMENT_BIT for B8G8R8A8_UNORM —
+                // LINEAR fails vkCreateImage with VK_ERROR_FEATURE_NOT_PRESENT
+                // (the simulator's MoltenVK is stricter than real-device).
+                // The Metal-side IOSurface storage-mode assertion that this
+                // can otherwise trigger is now satisfied per-plane in mpv's
+                // hwdec_vt_pl path (explicit MTLStorageModeShared) — see
+                // fork commit on apple/main.
                 tiling: VK_IMAGE_TILING_OPTIMAL,
                 usage: VkImageUsageFlags(
                     VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT.rawValue
