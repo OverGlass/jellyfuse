@@ -30,6 +30,7 @@ LIBMPV_LIBS = [
   "swresample", "swscale", "postproc",
   "placebo",
   "MoltenVK",
+  "glslang_combined",
   "ass", "freetype", "fribidi", "harfbuzz", "unibreak",
   "lcms2",
 ]

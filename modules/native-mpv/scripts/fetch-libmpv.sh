@@ -44,6 +44,7 @@ FRAMEWORKS=(
   "LibSwresample" "LibSwscale" "LibPostproc"
   "LibPlacebo"
   "LibMoltenVK"
+  "LibGlslang_combined"
   "LibAss" "LibFreetype" "LibFribidi" "LibHarfbuzz" "LibUnibreak"
   "LibLcms2"
 )
@@ -151,6 +152,11 @@ module Libmpv [system] {
 
 module Vulkan [system] {
     umbrella header "vulkan/vulkan.h"
+    // vulkan/vulkan.h gates vulkan_metal.h behind VK_USE_PLATFORM_METAL_EXT,
+    // which the modulemap can't define. List it explicitly so consumers can
+    // use VK_EXT_metal_objects (IOSurface ↔ VkImage import) — required by
+    // the Phase 1 render path.
+    header "vulkan/vulkan_metal.h"
     export *
 }
 MODMAP
