@@ -369,22 +369,28 @@ final class MpvMetalView: UIView {
             vkDeviceWaitIdle(bridge.device)
         }
 
-        // One-shot diagnostic — tells us whether libplacebo wrote real
-        // pixel data or whether the IOSurface is uninitialized/green,
-        // and whether our MTLTexture is actually IOSurface-backed.
+        // One-shot diagnostic — dumps each ring slot to discriminate:
+        //   - libplacebo wrote a different slot than the one it
+        //     handed us via present(index): one slot would show real
+        //     content, the others stay seed-red.
+        //   - libplacebo wrote nothing into any slot we own: every
+        //     slot reads (0, 77, 0) — same OS-default we keep seeing.
+        //   - libplacebo wrote into the right slot but in a layout we
+        //     can't read: the metal-clear test below still wins, so
+        //     fall through to the post-metal-clear dump on `index`.
         if !didDumpFirstFrame {
             didDumpFirstFrame = true
             let entry = ring[index]
             dumpMTLTextureBacking(entry.mtlTexture, expectedSurface: entry.ioSurface,
                                   label: "first-frame index=\(index)")
-            dumpIOSurfaceBytes(entry.ioSurface, label: "post-libplacebo index=\(index)")
-            // Now bypass libplacebo entirely: clear the same MTLTexture
-            // to BLUE via direct Metal, wait for completion, and dump
-            // again. If post-clear shows BLUE, our IOSurface↔MTLTexture
-            // chain is sound and the green is libplacebo's writes never
-            // reaching the texture. If it still shows green, even
-            // direct Metal can't write the IOSurface — fundamental
-            // Metal/IOSurface configuration issue.
+            for (i, e) in ring.enumerated() {
+                let lbl = (i == index) ? "post-libplacebo[acquired] index=\(i)" : "post-libplacebo[unused] index=\(i)"
+                dumpIOSurfaceBytes(e.ioSurface, label: lbl)
+            }
+            // Direct Metal write to the same MTLTexture libplacebo was
+            // supposed to render to. If this writes BLUE through to
+            // the IOSurface, libplacebo definitively did not target
+            // it.
             metalClearToBlue(entry.mtlTexture)
             dumpIOSurfaceBytes(entry.ioSurface, label: "post-metal-clear index=\(index)")
         }
