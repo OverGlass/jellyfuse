@@ -371,10 +371,7 @@ final class MpvMetalView: UIView {
         let bpr = IOSurfaceGetBytesPerRow(surface)
         let width = IOSurfaceGetWidth(surface)
         let height = IOSurfaceGetHeight(surface)
-        guard let base = IOSurfaceGetBaseAddress(surface) else {
-            NSLog("[MpvMetalView] dumpIOSurface(%@): no base address", label)
-            return
-        }
+        let base = IOSurfaceGetBaseAddress(surface)
         let row = base.assumingMemoryBound(to: UInt8.self)
         // Sample 4 pixels: 0, w/4, w/2, w-1.
         let positions = [0, width / 4, width / 2, max(0, width - 1)]
