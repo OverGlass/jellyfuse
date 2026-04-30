@@ -41,13 +41,16 @@ enum MpvVulkanBridgeError: Error, CustomStringConvertible {
     }
 }
 
-/// Owned pair returned from `makeImageFromIOSurface`. Both must be
-/// released together via `destroyImage(_:)` — the VkImage holds a
-/// reference to the IOSurface and the VkDeviceMemory holds the storage
-/// mode hint MoltenVK reads to satisfy iOS 17+ Metal validation.
+/// Owned triple returned from `makeImageFromIOSurface`. All three must
+/// be released together via `destroyImage(_:)`. The MTLTexture is the
+/// real backing — created in Swift with `allowGPUOptimizedContents =
+/// false` so AGX doesn't compress the IOSurface bytes; handed to
+/// MoltenVK verbatim via `VkImportMetalTextureInfoEXT`. The
+/// VkDeviceMemory is a no-op placeholder Vulkan still requires.
 struct MpvIOSurfaceVkImage {
     let image: VkImage
     let memory: VkDeviceMemory
+    let mtlTexture: MTLTexture
 }
 
 // MARK: - MpvVulkanBridge
@@ -306,83 +309,72 @@ final class MpvVulkanBridge {
 
     // MARK: - IOSurface → VkImage
 
-    /// Create a VkImage backed by the supplied IOSurface. The image is
-    /// created with the same usage flags libmpv's libmpv_vk path
-    /// expects (`pl_vulkan_wrap` calls in
-    /// `~/projects/mpv-apple/video/out/vulkan/libmpv_vk.c`):
-    ///     COLOR_ATTACHMENT | TRANSFER_DST | TRANSFER_SRC | SAMPLED.
+    /// Create a VkImage backed by the supplied IOSurface, with
+    /// COLOR_ATTACHMENT | TRANSFER_DST | TRANSFER_SRC | SAMPLED usage.
     ///
-    /// We thread three independent MoltenVK 1.4.1 gates to land an
-    /// IOSurface-backed render target on Apple Silicon — get any of them
-    /// wrong and we get a flat-green frame or an outright Metal abort:
+    /// We build the underlying `MTLTexture` ourselves in Swift and hand
+    /// it to MoltenVK via `VkImportMetalTextureInfoEXT`, instead of
+    /// letting MoltenVK build the texture from
+    /// `VkImportMetalIOSurfaceInfoEXT` + a `VkImageCreateInfo`. The sole
+    /// reason for this is to pin
+    /// `MTLTextureDescriptor.allowGPUOptimizedContents = false`.
     ///
-    /// 1. **Bind a `VkDeviceMemory` of type `DEVICE_LOCAL` (Private).**
-    ///    `MVKImage::getMTLStorageMode()` (`MVKImage.mm:1115`) returns
-    ///    `Private` outright when no memory is bound, so the
-    ///    IOSurface→Shared promotion at line 1119 is bypassed; iOS 17+
-    ///    Metal validation rejects the resulting MTLTexture
-    ///    ("IOSurface textures must use MTLStorageModeShared"). Binding
-    ///    Private memory means line 1117 reads `Private` from the
-    ///    memory and line 1119 promotes it to `Shared` via the
-    ///    `_ioSurface` fallback — exactly what iOS expects.
-    /// 2. **Use `VK_IMAGE_TILING_OPTIMAL`.** The texel-buffer gate at
-    ///    `MVKImageMemoryBinding::bindDeviceMemory` (`MVKImage.mm:481`)
-    ///    fires on `(host-visible || placementHeaps) && _isLinear` and
-    ///    silently swaps the IOSurface for an MTLBuffer; OPTIMAL keeps
-    ///    `_isLinear = false` and the IOSurface remains the backing.
-    /// 3. **Don't pick HOST_VISIBLE memory.** With host-accessible
-    ///    memory bound, `MVKImageMemoryBinding::bindDeviceMemory`
-    ///    (`MVKImage.mm:508`) calls `flushToDevice`, which issues a
-    ///    `[mtlTex replaceRegion:]` whose computed `bytesPerRow` does
-    ///    NOT match the IOSurface's row stride — Metal asserts:
-    ///    `bytesPerRow(7858) must be a multiple of MTLPixelFormatBGRA8Unorm
-    ///    pixel bytes(4)`. Private memory has `isMemoryHostAccessible() =
-    ///    false`, so `shouldFlushHostMemory()` returns false and the
-    ///    flush is a no-op.
+    /// MoltenVK 1.4.1 hardcodes `allowGPUOptimizedContents = YES` for
+    /// every render-target texture (`MVKImage::newMTLTextureDescriptor`
+    /// at `MVKImage.mm:159`). On Apple Silicon (A15 verified, likely
+    /// every M1+ class GPU) Metal then engages AGX lossless compression
+    /// for the BGRA8Unorm IOSurface-backed render target — the GPU
+    /// writes a compressed payload through the IOSurface, AVSBDL reads
+    /// the IOSurface as plain BGRA, and the entire frame collapses to a
+    /// uniform clear-color (`(B=0, G=~77, R=0, A=255)` in our diagnostic
+    /// dumps). The compression is invisible to a CPU-side
+    /// `IOSurfaceLock` + read.
     ///
-    /// Caller owns the returned pair and must call `destroyImage(_:)`
+    /// `VkImportMetalTextureInfoEXT` short-circuits MoltenVK's
+    /// descriptor builder (`MVKImage.mm:1285-1290` calls
+    /// `setMTLTexture` at `vkCreateImage` time, and the cached
+    /// `_mtlTexture` makes `MVKImagePlane::getMTLTexture` (`MVKImage.mm:41`)
+    /// short-circuit on the first frame), so the
+    /// `allowGPUOptimizedContents = YES` hardcode is bypassed entirely.
+    ///
+    /// We still allocate + bind a `VkDeviceMemory` from a `DEVICE_LOCAL`
+    /// memory type — Vulkan requires every image to have memory bound
+    /// before use, but with `_mtlTexture` already set MoltenVK never
+    /// reads the bound memory; the binding is a no-op placeholder.
+    ///
+    /// Caller owns the returned triple and must call `destroyImage(_:)`
     /// before the bridge is deinitialised.
     func makeImageFromIOSurface(
         _ ioSurface: IOSurfaceRef,
         width: UInt32,
         height: UInt32,
-        format: VkFormat
+        format _: VkFormat
     ) throws -> MpvIOSurfaceVkImage {
-        // The synthesized vulkan_metal.h forward-declares
-        // `typedef struct __IOSurface* IOSurfaceRef;` without CF bridging
-        // annotations, so Swift exposes the field as `Unmanaged<IOSurfaceRef>`.
-        // Pass unretained — the VkImage retains the surface for its lifetime
-        // and we hold the strong reference in the RingEntry.
-        var importInfo = VkImportMetalIOSurfaceInfoEXT(
-            sType: VK_STRUCTURE_TYPE_IMPORT_METAL_IO_SURFACE_INFO_EXT,
-            pNext: nil,
-            ioSurface: Unmanaged.passUnretained(ioSurface)
+        // 1) Build the MTLTexture in Swift with the descriptor we
+        //    actually want. We pin `allowGPUOptimizedContents = false`
+        //    here — that's the whole reason this code path exists.
+        let mtlTex = try makeIOSurfaceBackedMTLTexture(
+            ioSurface: ioSurface, width: Int(width), height: Int(height)
         )
 
-        // Always OPTIMAL — on both simulator and real device.
+        // 2) vkCreateImage with `VkImportMetalTextureInfoEXT` chained
+        //    into pNext. MoltenVK calls `setMTLTexture` from this
+        //    (`MVKImage.mm:1285-1290`), captures + retains the texture,
+        //    and pulls extent/format/usage/IOSurface from it directly
+        //    — our `VkImageCreateInfo` fields must match what we built
+        //    the MTLTexture with, but they aren't authoritative.
         //
-        // LINEAR is a trap on Apple Silicon: MoltenVK's
-        // `MVKImageMemoryBinding::bindDeviceMemory`
-        // (`MVKImage.mm` line 481) gates a "texel buffer" code path on
-        //     (isMemoryHostAccessible() || placementHeaps) && _isLinear
-        // When all conditions hold (HOST_VISIBLE bind + LINEAR + Apple
-        // GPU with placement-heap support), MoltenVK creates an MTLBuffer
-        // as the texture's storage and silently *bypasses* the IOSurface
-        // backing entirely. libplacebo's writes land in that throwaway
-        // buffer; AVSBDL reads the IOSurface and gets uninitialized
-        // bytes (manifests as a flat ~(0,77,0) green clear).
-        //
-        // OPTIMAL avoids that path (`!_isLinear` → no texel buffer);
-        // the MTLTexture is created from the IOSurface itself, which
-        // on iOS is what we need. Apple's Metal handles tile↔linear
-        // translation internally for IOSurface-backed render targets,
-        // so the IOSurface ends up with plain BGRA bytes after rendering
-        // even though Vulkan thinks the layout is OPTIMAL.
-        //
-        // The simulator's MoltenVK rejects LINEAR + COLOR_ATTACHMENT
-        // for B8G8R8A8_UNORM anyway (VK_ERROR_FEATURE_NOT_PRESENT), so
-        // OPTIMAL was already required there.
-        let imageTiling = VK_IMAGE_TILING_OPTIMAL
+        //    `MTLTexture_id` is `void*` in the synthesized header, so
+        //    we hand MoltenVK an unretained pointer (it retains
+        //    internally) and keep our own strong reference in the
+        //    returned struct for symmetry on destroy.
+        let mtlTexHandle = Unmanaged.passUnretained(mtlTex).toOpaque()
+        var importInfo = VkImportMetalTextureInfoEXT(
+            sType: VK_STRUCTURE_TYPE_IMPORT_METAL_TEXTURE_INFO_EXT,
+            pNext: nil,
+            plane: VK_IMAGE_ASPECT_COLOR_BIT,
+            mtlTexture: mtlTexHandle
+        )
 
         var image: VkImage? = nil
         try withUnsafePointer(to: &importInfo) { importPtr in
@@ -391,12 +383,12 @@ final class MpvVulkanBridge {
                 pNext: UnsafeRawPointer(importPtr),
                 flags: 0,
                 imageType: VK_IMAGE_TYPE_2D,
-                format: format,
+                format: VK_FORMAT_B8G8R8A8_UNORM,
                 extent: VkExtent3D(width: width, height: height, depth: 1),
                 mipLevels: 1,
                 arrayLayers: 1,
                 samples: VK_SAMPLE_COUNT_1_BIT,
-                tiling: imageTiling,
+                tiling: VK_IMAGE_TILING_OPTIMAL,
                 usage: VkImageUsageFlags(
                     VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT.rawValue
                     | VK_IMAGE_USAGE_TRANSFER_DST_BIT.rawValue
@@ -410,17 +402,21 @@ final class MpvVulkanBridge {
             )
             let rc = vkCreateImage(device, &info, nil, &image)
             if rc != VK_SUCCESS {
-                throw MpvVulkanBridgeError.vk(rc, "vkCreateImage(IOSurface)")
+                throw MpvVulkanBridgeError.vk(rc, "vkCreateImage(MTLTexture import)")
             }
         }
         guard let img = image else {
-            throw MpvVulkanBridgeError.vk(VK_ERROR_INITIALIZATION_FAILED, "vkCreateImage(IOSurface) returned null")
+            throw MpvVulkanBridgeError.vk(
+                VK_ERROR_INITIALIZATION_FAILED, "vkCreateImage(MTLTexture import) returned null"
+            )
         }
 
-        // Allocate + bind DEVICE_LOCAL (Private) memory. See the doc
-        // comment above for why HOST_VISIBLE is wrong here. On any
-        // failure we must destroy the freshly-created image before
-        // propagating — otherwise we leak a VkImage on every error path.
+        // 3) Allocate + bind DEVICE_LOCAL (Private) memory to satisfy
+        //    Vulkan's "must bind memory" requirement. With the texture
+        //    already pre-set, MoltenVK never reads this memory — but
+        //    `vkBindImageMemory` validation still checks it's there.
+        //    On any failure here we must destroy the freshly-created
+        //    image first to avoid leaking it.
         let memory: VkDeviceMemory
         do {
             memory = try allocateDeviceLocalMemory(forImage: img)
@@ -432,14 +428,60 @@ final class MpvVulkanBridge {
         if bindRc != VK_SUCCESS {
             vkFreeMemory(device, memory, nil)
             vkDestroyImage(device, img, nil)
-            throw MpvVulkanBridgeError.vk(bindRc, "vkBindImageMemory(IOSurface)")
+            throw MpvVulkanBridgeError.vk(bindRc, "vkBindImageMemory(MTLTexture import)")
         }
-        return MpvIOSurfaceVkImage(image: img, memory: memory)
+        return MpvIOSurfaceVkImage(image: img, memory: memory, mtlTexture: mtlTex)
+    }
+
+    /// Build an MTLTexture from an IOSurface, mirroring the proven
+    /// `hwdec_vt_pl.m` pattern (`storageMode = .shared`,
+    /// `usage = [.shaderRead, .renderTarget]`) but extended for our
+    /// render-target use case and pinning
+    /// `allowGPUOptimizedContents = false` — without that, AGX lossless
+    /// compression mangles the IOSurface bytes that AVSBDL reads.
+    private func makeIOSurfaceBackedMTLTexture(
+        ioSurface: IOSurfaceRef, width: Int, height: Int
+    ) throws -> MTLTexture {
+        let desc = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .bgra8Unorm,
+            width: width, height: height,
+            mipmapped: false
+        )
+        // Render target + shader-read covers libplacebo's full usage
+        // (color attachment + sampled). `.pixelFormatView` lets it
+        // create swizzle / format views if needed.
+        desc.usage = [.shaderRead, .renderTarget, .pixelFormatView]
+        // Shared storage: GPU writes are visible to CPU/IOSurface
+        // readers without a synchronizeResource: blit.
+        desc.storageMode = .shared
+        // Counts come from the texture, not the descriptor flags
+        // above, but set them explicitly for clarity.
+        desc.mipmapLevelCount = 1
+        desc.arrayLength = 1
+        desc.sampleCount = 1
+        // The whole reason we're here. Default is YES, and on Apple
+        // Silicon AGX engages lossless compression for BGRA8 RT
+        // textures when YES — the IOSurface bytes come back
+        // compressed and AVSBDL displays them as a uniform clear.
+        desc.allowGPUOptimizedContents = false
+        guard let tex = metalDevice.makeTexture(
+            descriptor: desc, iosurface: ioSurface, plane: 0
+        ) else {
+            throw MpvVulkanBridgeError.vk(
+                VK_ERROR_INITIALIZATION_FAILED,
+                "MTLDevice.makeTexture(iosurface:) returned nil"
+            )
+        }
+        return tex
     }
 
     func destroyImage(_ owned: MpvIOSurfaceVkImage) {
         vkDestroyImage(device, owned.image, nil)
         vkFreeMemory(device, owned.memory, nil)
+        // `owned.mtlTexture`'s last Swift strong reference goes out
+        // of scope here; ARC drops the +1 we held, MoltenVK's own
+        // retain (taken at setMTLTexture / `MVKImage.mm:1019`) was
+        // already released by `vkDestroyImage`.
     }
 
     /// Allocate a VkDeviceMemory matching the image's memory requirements,

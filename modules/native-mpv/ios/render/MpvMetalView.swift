@@ -52,6 +52,7 @@ private struct RingEntry {
     let pixelBuffer: CVPixelBuffer
     let vkImage: VkImage
     let vkMemory: VkDeviceMemory
+    let mtlTexture: MTLTexture
 }
 
 final class MpvMetalView: UIView {
@@ -262,7 +263,8 @@ final class MpvMetalView: UIView {
                 ioSurface: surface,
                 pixelBuffer: pb,
                 vkImage: owned.image,
-                vkMemory: owned.memory
+                vkMemory: owned.memory,
+                mtlTexture: owned.mtlTexture
             ))
         }
         ringWidth = width
@@ -576,7 +578,9 @@ final class MpvMetalView: UIView {
         if let bridge = vulkanBridge {
             for entry in ring {
                 bridge.destroyImage(MpvIOSurfaceVkImage(
-                    image: entry.vkImage, memory: entry.vkMemory
+                    image: entry.vkImage,
+                    memory: entry.vkMemory,
+                    mtlTexture: entry.mtlTexture
                 ))
             }
         }
