@@ -364,16 +364,18 @@ final class MpvVulkanBridge {
         //    — our `VkImageCreateInfo` fields must match what we built
         //    the MTLTexture with, but they aren't authoritative.
         //
-        //    `MTLTexture_id` is `void*` in the synthesized header, so
-        //    we hand MoltenVK an unretained pointer (it retains
-        //    internally) and keep our own strong reference in the
-        //    returned struct for symmetry on destroy.
-        let mtlTexHandle = Unmanaged.passUnretained(mtlTex).toOpaque()
+        //    Swift's clang importer maps `MTLTexture_id` (the
+        //    `__unsafe_unretained id<MTLTexture>` typedef from
+        //    `vulkan_metal.h:78`) to `Unmanaged<any MTLTexture>`, so we
+        //    hand it the unmanaged form. MoltenVK retains internally
+        //    via `setMTLTexture` (`MVKImage.mm:1019`); we keep our own
+        //    strong reference in the returned struct for symmetry on
+        //    destroy.
         var importInfo = VkImportMetalTextureInfoEXT(
             sType: VK_STRUCTURE_TYPE_IMPORT_METAL_TEXTURE_INFO_EXT,
             pNext: nil,
             plane: VK_IMAGE_ASPECT_COLOR_BIT,
-            mtlTexture: mtlTexHandle
+            mtlTexture: Unmanaged.passUnretained(mtlTex)
         )
 
         var image: VkImage? = nil
