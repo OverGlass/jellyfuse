@@ -362,9 +362,10 @@ final class MpvMetalView: UIView {
         }
     }
 
-    /// Lock the IOSurface and log the first row of pixels (BGRA).
-    /// Diagnostic only — used once per session to disambiguate
-    /// libplacebo-side from AVSBDL-side green-screen causes.
+    /// Lock the IOSurface and log a sample of pixel bytes from several
+    /// rows. Diagnostic only — used once per session to disambiguate
+    /// "solid clear-color" (every row identical) from "luma-as-green
+    /// passthrough" (rows vary as expected for actual content).
     private func dumpIOSurfaceBytes(_ surface: IOSurfaceRef, label: String) {
         IOSurfaceLock(surface, .readOnly, nil)
         defer { IOSurfaceUnlock(surface, .readOnly, nil) }
@@ -372,21 +373,23 @@ final class MpvMetalView: UIView {
         let width = IOSurfaceGetWidth(surface)
         let height = IOSurfaceGetHeight(surface)
         let base = IOSurfaceGetBaseAddress(surface)
-        let row = base.assumingMemoryBound(to: UInt8.self)
-        // Sample 4 pixels: 0, w/4, w/2, w-1.
-        let positions = [0, width / 4, width / 2, max(0, width - 1)]
-        var samples: [String] = []
-        for px in positions {
-            let p = row.advanced(by: px * 4)
-            // BGRA in memory.
-            let b = p[0]
-            let g = p[1]
-            let r = p[2]
-            let a = p[3]
-            samples.append("[\(px)]=(B=\(b) G=\(g) R=\(r) A=\(a))")
+        // Sample several rows (top, quarter, middle, bottom) and within
+        // each row a few horizontal positions. If every sample reads
+        // the same BGRA: libplacebo wrote a clear color, not real
+        // content. If samples differ: real content is being rendered
+        // but mis-coloured.
+        let rowIndices = [0, height / 4, height / 2, max(0, height - 1)]
+        let pxIndices = [0, width / 4, width / 2, max(0, width - 1)]
+        for r in rowIndices {
+            let rowPtr = base.advanced(by: r * bpr).assumingMemoryBound(to: UInt8.self)
+            var samples: [String] = []
+            for px in pxIndices {
+                let p = rowPtr.advanced(by: px * 4)
+                samples.append("[\(px)]=(B=\(p[0]) G=\(p[1]) R=\(p[2]) A=\(p[3]))")
+            }
+            NSLog("[MpvMetalView] IOSurface(%@) %dx%d bpr=%d row%d: %@",
+                  label, width, height, bpr, r, samples.joined(separator: " "))
         }
-        NSLog("[MpvMetalView] IOSurface(%@) %dx%d bpr=%d row0: %@",
-              label, width, height, bpr, samples.joined(separator: " "))
     }
 
     // MARK: PiP / control timebase (unchanged from Phase 1A)
