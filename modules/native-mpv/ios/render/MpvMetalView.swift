@@ -365,17 +365,50 @@ final class MpvMetalView: UIView {
             vkDeviceWaitIdle(bridge.device)
         }
 
-        // One-shot byte dump — tells us whether libplacebo wrote real
-        // pixel data or whether the IOSurface is uninitialized/green.
+        // One-shot diagnostic — tells us whether libplacebo wrote real
+        // pixel data or whether the IOSurface is uninitialized/green,
+        // and whether our MTLTexture is actually IOSurface-backed.
         if !didDumpFirstFrame {
             didDumpFirstFrame = true
-            dumpIOSurfaceBytes(ring[index].ioSurface, label: "first-frame index=\(index)")
+            let entry = ring[index]
+            dumpMTLTextureBacking(entry.mtlTexture, expectedSurface: entry.ioSurface,
+                                  label: "first-frame index=\(index)")
+            dumpIOSurfaceBytes(entry.ioSurface, label: "first-frame index=\(index)")
         }
 
         let pb = ring[index].pixelBuffer
         DispatchQueue.main.async { [weak self] in
             self?.enqueuer?.enqueue(pixelBuffer: pb)
         }
+    }
+
+    /// Log the MTLTexture's storage mode + IOSurface backing identity
+    /// vs the IOSurface we *intended* to back it with. Diagnostic.
+    private func dumpMTLTextureBacking(
+        _ tex: MTLTexture, expectedSurface: IOSurfaceRef, label: String
+    ) {
+        let expectedPtr = Unmanaged.passUnretained(expectedSurface).toOpaque()
+        let actualPtr: UnsafeMutableRawPointer?
+        if let s = tex.iosurface {
+            actualPtr = Unmanaged.passUnretained(s).toOpaque()
+        } else {
+            actualPtr = nil
+        }
+        let storageStr: String
+        switch tex.storageMode {
+        case .shared: storageStr = "shared"
+        case .private: storageStr = "private"
+        case .memoryless: storageStr = "memoryless"
+        @unknown default: storageStr = "unknown(\(tex.storageMode.rawValue))"
+        }
+        let actualAddr = actualPtr.map { String(format: "%p", Int(bitPattern: $0)) } ?? "nil"
+        let expectedAddr = String(format: "%p", Int(bitPattern: expectedPtr))
+        let match = (actualPtr == expectedPtr) ? "YES" : "NO"
+        NSLog(
+            "[MpvMetalView] MTLTexture(%@) storage=%@ usage=0x%lx iosurface(expected=%@ actual=%@ match=%@)",
+            label, storageStr, tex.usage.rawValue,
+            expectedAddr, actualAddr, match
+        )
     }
 
     /// Pre-fill the entire IOSurface with opaque red BGRA bytes from the
