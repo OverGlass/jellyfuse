@@ -27,7 +27,7 @@ enum MpvVulkanBridgeError: Error, CustomStringConvertible {
     case vk(VkResult, String)
     case noPhysicalDevice
     case noGraphicsQueue
-    case noHostVisibleMemoryType
+    case noSuitableMemoryType
 
     var description: String {
         switch self {
@@ -35,8 +35,8 @@ enum MpvVulkanBridgeError: Error, CustomStringConvertible {
             return "Vulkan error \(rc.rawValue) in \(where_)"
         case .noPhysicalDevice: return "No Vulkan physical device available"
         case .noGraphicsQueue: return "No graphics-capable queue family"
-        case .noHostVisibleMemoryType:
-            return "No HOST_VISIBLE memory type available for IOSurface-backed VkImage"
+        case .noSuitableMemoryType:
+            return "No suitable memory type available for IOSurface-backed VkImage"
         }
     }
 }
@@ -312,22 +312,33 @@ final class MpvVulkanBridge {
     /// `~/projects/mpv-apple/video/out/vulkan/libmpv_vk.c`):
     ///     COLOR_ATTACHMENT | TRANSFER_DST | TRANSFER_SRC | SAMPLED.
     ///
-    /// Even though `VkImportMetalIOSurfaceInfoEXT` makes the IOSurface
-    /// the image's *real* backing storage, we still allocate and bind a
-    /// `VkDeviceMemory` from a HOST_VISIBLE memory type. MoltenVK 1.4.1's
-    /// `MVKImage::getMTLStorageMode()` returns `MTLStorageModePrivate`
-    /// outright when no `_deviceMemory` is bound (see
-    /// `MoltenVK/MoltenVK/GPUObjects/MVKImage.mm:1115`), bypassing the
-    /// IOSurface→Shared promotion at line 1119. iOS 17+ Metal validation
-    /// then rejects the resulting MTLTexture with
-    ///     "IOSurface textures must use MTLStorageModeShared"
-    /// (debug abort) and on release builds the GPU writes never reach
-    /// the IOSurface — AVSampleBufferDisplayLayer reads stale memory and
-    /// paints flat green. Binding HOST_VISIBLE memory makes MoltenVK
-    /// pick up `MTLStorageModeShared` directly without relying on the
-    /// promotion path. The bound `VkDeviceMemory` does not back the
-    /// texture data — the IOSurface still does — but its size must
-    /// satisfy the image's memory requirements.
+    /// We thread three independent MoltenVK 1.4.1 gates to land an
+    /// IOSurface-backed render target on Apple Silicon — get any of them
+    /// wrong and we get a flat-green frame or an outright Metal abort:
+    ///
+    /// 1. **Bind a `VkDeviceMemory` of type `DEVICE_LOCAL` (Private).**
+    ///    `MVKImage::getMTLStorageMode()` (`MVKImage.mm:1115`) returns
+    ///    `Private` outright when no memory is bound, so the
+    ///    IOSurface→Shared promotion at line 1119 is bypassed; iOS 17+
+    ///    Metal validation rejects the resulting MTLTexture
+    ///    ("IOSurface textures must use MTLStorageModeShared"). Binding
+    ///    Private memory means line 1117 reads `Private` from the
+    ///    memory and line 1119 promotes it to `Shared` via the
+    ///    `_ioSurface` fallback — exactly what iOS expects.
+    /// 2. **Use `VK_IMAGE_TILING_OPTIMAL`.** The texel-buffer gate at
+    ///    `MVKImageMemoryBinding::bindDeviceMemory` (`MVKImage.mm:481`)
+    ///    fires on `(host-visible || placementHeaps) && _isLinear` and
+    ///    silently swaps the IOSurface for an MTLBuffer; OPTIMAL keeps
+    ///    `_isLinear = false` and the IOSurface remains the backing.
+    /// 3. **Don't pick HOST_VISIBLE memory.** With host-accessible
+    ///    memory bound, `MVKImageMemoryBinding::bindDeviceMemory`
+    ///    (`MVKImage.mm:508`) calls `flushToDevice`, which issues a
+    ///    `[mtlTex replaceRegion:]` whose computed `bytesPerRow` does
+    ///    NOT match the IOSurface's row stride — Metal asserts:
+    ///    `bytesPerRow(7858) must be a multiple of MTLPixelFormatBGRA8Unorm
+    ///    pixel bytes(4)`. Private memory has `isMemoryHostAccessible() =
+    ///    false`, so `shouldFlushHostMemory()` returns false and the
+    ///    flush is a no-op.
     ///
     /// Caller owns the returned pair and must call `destroyImage(_:)`
     /// before the bridge is deinitialised.
@@ -406,12 +417,13 @@ final class MpvVulkanBridge {
             throw MpvVulkanBridgeError.vk(VK_ERROR_INITIALIZATION_FAILED, "vkCreateImage(IOSurface) returned null")
         }
 
-        // Allocate + bind HOST_VISIBLE memory. On any failure here we
-        // must destroy the freshly-created image before propagating —
-        // otherwise we leak a VkImage on every error path.
+        // Allocate + bind DEVICE_LOCAL (Private) memory. See the doc
+        // comment above for why HOST_VISIBLE is wrong here. On any
+        // failure we must destroy the freshly-created image before
+        // propagating — otherwise we leak a VkImage on every error path.
         let memory: VkDeviceMemory
         do {
-            memory = try allocateHostVisibleMemory(forImage: img)
+            memory = try allocateDeviceLocalMemory(forImage: img)
         } catch {
             vkDestroyImage(device, img, nil)
             throw error
@@ -431,10 +443,14 @@ final class MpvVulkanBridge {
     }
 
     /// Allocate a VkDeviceMemory matching the image's memory requirements,
-    /// preferring `HOST_VISIBLE | HOST_COHERENT` (maps to
-    /// `MTLStorageModeShared` in MoltenVK) and falling back to any
-    /// HOST_VISIBLE type if a coherent one is not exposed.
-    private func allocateHostVisibleMemory(forImage image: VkImage) throws -> VkDeviceMemory {
+    /// preferring `DEVICE_LOCAL` (maps to `MTLStorageModePrivate` in
+    /// MoltenVK, which is then promoted to `Shared` for IOSurface-backed
+    /// images via the `_ioSurface` fallback in
+    /// `MVKImage::getMTLStorageMode()` line 1119). HOST_VISIBLE memory
+    /// would trip MoltenVK's `flushToDevice` call inside
+    /// `vkBindImageMemory`, which issues a `replaceRegion` with a
+    /// bytesPerRow that doesn't match the IOSurface's row stride.
+    private func allocateDeviceLocalMemory(forImage image: VkImage) throws -> VkDeviceMemory {
         var reqs = VkMemoryRequirements(size: 0, alignment: 0, memoryTypeBits: 0)
         vkGetImageMemoryRequirements(device, image, &reqs)
 
@@ -449,10 +465,9 @@ final class MpvVulkanBridge {
         var memProps = memPropsPtr.pointee
 
         let preferred: VkMemoryPropertyFlags = VkMemoryPropertyFlags(
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT.rawValue
-            | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT.rawValue
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT.rawValue
         )
-        let fallback: VkMemoryPropertyFlags = VkMemoryPropertyFlags(
+        let hostVisible: VkMemoryPropertyFlags = VkMemoryPropertyFlags(
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT.rawValue
         )
 
@@ -462,21 +477,28 @@ final class MpvVulkanBridge {
         // `memoryTypes` is a homogeneous tuple. Take a pointer to the
         // tuple value and rebind it as a VkMemoryType buffer for integer
         // indexing.
-        func findIndex(matching mask: VkMemoryPropertyFlags) -> UInt32? {
+        func findIndex(matching mask: VkMemoryPropertyFlags, excluding excl: VkMemoryPropertyFlags = 0) -> UInt32? {
             return withUnsafePointer(to: &memProps.memoryTypes) { tuplePtr in
                 let buf = UnsafeRawPointer(tuplePtr).assumingMemoryBound(to: VkMemoryType.self)
                 for i in 0..<typeCount {
                     if (memTypeBits & (UInt32(1) << UInt32(i))) == 0 { continue }
-                    if (buf[i].propertyFlags & mask) == mask {
-                        return UInt32(i)
-                    }
+                    let flags = buf[i].propertyFlags
+                    if (flags & mask) != mask { continue }
+                    if excl != 0 && (flags & excl) != 0 { continue }
+                    return UInt32(i)
                 }
                 return nil
             }
         }
 
-        guard let typeIndex = findIndex(matching: preferred) ?? findIndex(matching: fallback) else {
-            throw MpvVulkanBridgeError.noHostVisibleMemoryType
+        // Prefer DEVICE_LOCAL & not HOST_VISIBLE (true Private). On a
+        // unified-memory GPU like Apple Silicon, every memory type
+        // typically advertises DEVICE_LOCAL, but a subset is also
+        // HOST_VISIBLE — we want the strictly-Private one.
+        guard let typeIndex = findIndex(matching: preferred, excluding: hostVisible)
+            ?? findIndex(matching: preferred)
+        else {
+            throw MpvVulkanBridgeError.noSuitableMemoryType
         }
 
         var alloc = VkMemoryAllocateInfo(
