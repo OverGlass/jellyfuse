@@ -614,14 +614,7 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         _ = mpv_set_option_string(mpv, "vo", "gpu-next")
         _ = mpv_set_option_string(mpv, "gpu-api", "vulkan")
         _ = mpv_set_option_string(mpv, "gpu-context", "libmpvvk")
-        // Diagnostic: force software decoding to test whether the
-        // green-screen on real device is caused by the input-side
-        // hwdec_vt_pl Metal-texture-from-IOSurface path. With `no`
-        // libplacebo gets a CPU-decoded YUV buffer and converts in
-        // shader; if the picture renders correctly, the bug is
-        // confirmed in the fork's hwdec_vt_pl.m. Revert to
-        // "videotoolbox" once the input path is fixed.
-        _ = mpv_set_option_string(mpv, "hwdec", "no")
+        _ = mpv_set_option_string(mpv, "hwdec", "videotoolbox")
         // Phase 1B lifecycle gate: with `vid=no` mpv parses tracks during
         // loadfile but doesn't initialise the video output. The view's
         // `attach()` flips this back to `auto` once the consumer-side
