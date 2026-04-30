@@ -474,6 +474,34 @@ final class MpvVulkanBridge {
                 "MTLDevice.makeTexture(iosurface:) returned nil"
             )
         }
+        // Sanity check: confirm Metal actually backed our texture with
+        // the IOSurface we asked for. If `tex.iosurface` is nil or a
+        // different surface, the MTLTexture is a private allocation and
+        // no IOSurface lock will ever see GPU writes.
+        let inputPtr = Unmanaged.passUnretained(ioSurface).toOpaque()
+        let texPtr: UnsafeMutableRawPointer?
+        if let s = tex.iosurface {
+            texPtr = Unmanaged.passUnretained(s).toOpaque()
+        } else {
+            texPtr = nil
+        }
+        let storageStr: String
+        switch tex.storageMode {
+        case .shared: storageStr = "shared"
+        case .private: storageStr = "private"
+        case .memoryless: storageStr = "memoryless"
+        @unknown default: storageStr = "unknown(\(tex.storageMode.rawValue))"
+        }
+        let texAddr = texPtr.map { String(format: "%p", Int(bitPattern: $0)) } ?? "nil"
+        let inAddr = String(format: "%p", Int(bitPattern: inputPtr))
+        let match = (texPtr == inputPtr) ? "YES" : "NO"
+        NSLog(
+            "[MpvVulkanBridge] MTLTexture %dx%d storage=%@ allowGPUOpt=%@ iosurface(input=%@ tex=%@ match=%@) usage=0x%lx",
+            tex.width, tex.height, storageStr,
+            desc.allowGPUOptimizedContents ? "YES" : "NO",
+            inAddr, texAddr, match,
+            tex.usage.rawValue
+        )
         return tex
     }
 
