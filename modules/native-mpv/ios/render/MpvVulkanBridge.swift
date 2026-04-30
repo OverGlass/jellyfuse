@@ -348,22 +348,30 @@ final class MpvVulkanBridge {
             ioSurface: Unmanaged.passUnretained(ioSurface)
         )
 
-        // Tiling is platform-split:
-        //   - Real device: LINEAR. The IOSurface is also read by
-        //     AVSampleBufferDisplayLayer as plain BGRA; OPTIMAL leaves
-        //     Vulkan's swizzled GPU layout in the IOSurface and AVSBDL
-        //     paints garbage (manifests as a green dominance on Apple
-        //     Silicon devices).
-        //   - Simulator: OPTIMAL. The simulator's MoltenVK rejects
-        //     LINEAR + COLOR_ATTACHMENT for B8G8R8A8_UNORM
-        //     (VK_ERROR_FEATURE_NOT_PRESENT); its OPTIMAL layout
-        //     happens to coincide with the IOSurface's expected bytes,
-        //     so colors render correctly.
-        #if targetEnvironment(simulator)
+        // Always OPTIMAL — on both simulator and real device.
+        //
+        // LINEAR is a trap on Apple Silicon: MoltenVK's
+        // `MVKImageMemoryBinding::bindDeviceMemory`
+        // (`MVKImage.mm` line 481) gates a "texel buffer" code path on
+        //     (isMemoryHostAccessible() || placementHeaps) && _isLinear
+        // When all conditions hold (HOST_VISIBLE bind + LINEAR + Apple
+        // GPU with placement-heap support), MoltenVK creates an MTLBuffer
+        // as the texture's storage and silently *bypasses* the IOSurface
+        // backing entirely. libplacebo's writes land in that throwaway
+        // buffer; AVSBDL reads the IOSurface and gets uninitialized
+        // bytes (manifests as a flat ~(0,77,0) green clear).
+        //
+        // OPTIMAL avoids that path (`!_isLinear` → no texel buffer);
+        // the MTLTexture is created from the IOSurface itself, which
+        // on iOS is what we need. Apple's Metal handles tile↔linear
+        // translation internally for IOSurface-backed render targets,
+        // so the IOSurface ends up with plain BGRA bytes after rendering
+        // even though Vulkan thinks the layout is OPTIMAL.
+        //
+        // The simulator's MoltenVK rejects LINEAR + COLOR_ATTACHMENT
+        // for B8G8R8A8_UNORM anyway (VK_ERROR_FEATURE_NOT_PRESENT), so
+        // OPTIMAL was already required there.
         let imageTiling = VK_IMAGE_TILING_OPTIMAL
-        #else
-        let imageTiling = VK_IMAGE_TILING_LINEAR
-        #endif
 
         var image: VkImage? = nil
         try withUnsafePointer(to: &importInfo) { importPtr in
