@@ -240,6 +240,20 @@ final class MpvMetalView: UIView {
                                   kCVImageBufferColorPrimaries_ITU_R_709_2, .shouldPropagate)
             CVBufferSetAttachment(pb, kCVImageBufferTransferFunctionKey,
                                   kCVImageBufferTransferFunction_ITU_R_709_2, .shouldPropagate)
+            // Diagnostic: seed the IOSurface with pure red BEFORE the
+            // VkImage is wired up. After libplacebo renders + present's
+            // vkDeviceWaitIdle returns, our row dump in present() shows
+            // one of three things:
+            //   - red (B=0,G=0,R=255,A=255): Metal didn't write the
+            //     IOSurface at all. Writes landed in a private
+            //     allocation; the IOSurface "backing" was a fiction.
+            //   - green clear (~0,77,0): Metal wrote, but in a layout
+            //     the CPU can't read linearly (AGX lossless compression
+            //     / allowGPUOptimizedContents trap).
+            //   - real video pixels: render path is healthy and the
+            //     bug is elsewhere (color, format desc, AVSBDL config).
+            // To be removed once the green-screen cause is pinned.
+            seedIOSurfaceRed(surface)
             let owned = try bridge.makeImageFromIOSurface(
                 surface, width: UInt32(width), height: UInt32(height),
                 format: VK_FORMAT_B8G8R8A8_UNORM
@@ -362,10 +376,43 @@ final class MpvMetalView: UIView {
         }
     }
 
+    /// Pre-fill the entire IOSurface with opaque red BGRA bytes from the
+    /// CPU. Pairs with `dumpIOSurfaceBytes` in `present` to discriminate
+    /// "Metal didn't write the IOSurface at all" from "Metal wrote but
+    /// in a non-linear layout the CPU can't read." Diagnostic only —
+    /// remove once the green-screen cause is pinned down.
+    private func seedIOSurfaceRed(_ surface: IOSurfaceRef) {
+        // Empty option set = read-write lock. `.readOnly` would prevent
+        // writes from being committed back to the IOSurface backing.
+        IOSurfaceLock(surface, [], nil)
+        defer { IOSurfaceUnlock(surface, [], nil) }
+        let bpr = IOSurfaceGetBytesPerRow(surface)
+        let height = IOSurfaceGetHeight(surface)
+        let count = bpr * height
+        let base = IOSurfaceGetBaseAddress(surface)
+            .assumingMemoryBound(to: UInt8.self)
+        // BGRA in memory: byte0=B, byte1=G, byte2=R, byte3=A.
+        // Opaque red = (B=0, G=0, R=255, A=255).
+        var i = 0
+        while i < count {
+            base[i] = 0
+            base[i + 1] = 0
+            base[i + 2] = 0xFF
+            base[i + 3] = 0xFF
+            i += 4
+        }
+        NSLog("[MpvMetalView] IOSurface seeded RED (B=0 G=0 R=255 A=255), %d bytes", count)
+    }
+
     /// Lock the IOSurface and log a sample of pixel bytes from several
-    /// rows. Diagnostic only — used once per session to disambiguate
-    /// "solid clear-color" (every row identical) from "luma-as-green
-    /// passthrough" (rows vary as expected for actual content).
+    /// rows. Diagnostic only — paired with `seedIOSurfaceRed` so the
+    /// post-render dump tells us:
+    ///   - red bytes (B=0,G=0,R=255,A=255): Metal never wrote the
+    ///     IOSurface (writes landed in a separate allocation).
+    ///   - green clear (B=0,G=~77,R=0,A=255): Metal wrote but in a
+    ///     non-linear / compressed layout the CPU can't decode.
+    ///   - varying real-content values: render is healthy, look
+    ///     elsewhere for the green-screen cause.
     private func dumpIOSurfaceBytes(_ surface: IOSurfaceRef, label: String) {
         IOSurfaceLock(surface, .readOnly, nil)
         defer { IOSurfaceUnlock(surface, .readOnly, nil) }
