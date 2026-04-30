@@ -614,7 +614,49 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         _ = mpv_set_option_string(mpv, "vo", "gpu-next")
         _ = mpv_set_option_string(mpv, "gpu-api", "vulkan")
         _ = mpv_set_option_string(mpv, "gpu-context", "libmpvvk")
-        _ = mpv_set_option_string(mpv, "hwdec", "videotoolbox")
+        // Phase 1B: software decoding only.
+        //
+        // We ship `hwdec=no` because the VideoToolbox → libplacebo →
+        // MoltenVK input texture path doesn't work on iOS-26 Apple
+        // Silicon real device. Two architectural walls:
+        //
+        //  1. PL_HANDLE_MTL_TEX (fork's hwdec_vt_pl wraps the VT-decoded
+        //     IOSurface as MTLTexture and hands it to libplacebo): the
+        //     resulting Vulkan-imported texture samples as all-zero in
+        //     shaders. libplacebo's BT.709 limited→full conversion of
+        //     (Y=0,U=0,V=0) writes a uniform `(B=0, G=~77, R=0, A=255)`
+        //     flat green. Both `[device newTextureWithDescriptor:
+        //     iosurface:plane:]` and `CVMetalTextureCacheCreateTexture
+        //     FromImage` exhibit this. Simulator is unaffected (no AGX).
+        //
+        //  2. PL_HANDLE_IOSURFACE (passes the raw IOSurface to
+        //     libplacebo): plane 0 (Y, full-res) imports correctly, but
+        //     plane 1 (UV, half-res chroma) fails MoltenVK's
+        //     `useIOSurface` size validation because
+        //     `VkImportMetalIOSurfaceInfoEXT` has no plane field — the
+        //     extension validates against the IOSurface's BASE
+        //     dimensions, not per-plane. NV12's chroma plane never
+        //     matches.
+        //
+        // With software decoding the picture renders correctly through
+        // the same gpu-next + MoltenVK stack. h264 1080p on A15 takes
+        // ~5–10% of one core (verified). HEVC and 4K are more expensive;
+        // both are out of scope for Phase 1B v1.
+        //
+        // Phase 2 followup: build a real zero-copy VT path. Options:
+        //   a. Patch MoltenVK's useIOSurface to accept plane index
+        //      (heuristic: pick the plane whose dimensions match the
+        //      VkImage extent), and propagate that plane to the Metal
+        //      newTextureWithDescriptor:iosurface:plane: call.
+        //   b. Bypass libplacebo's Vulkan import for the source side:
+        //      build a Metal renderer / ra_ctx that consumes
+        //      CVMetalTextureRef directly without going through Vulkan
+        //      (needs a fork of libplacebo's pl_metal backend).
+        //   c. CPU-upload path (`pl_tex_upload` + `no_import`):
+        //      essentially the same cost as hwdec=no since both pay
+        //      the per-frame memcpy. Not worth the complexity.
+        // See `project_hwdec_vt_pl_no_zero_copy_on_ios26.md` in memory.
+        _ = mpv_set_option_string(mpv, "hwdec", "no")
         // Phase 1B lifecycle gate: with `vid=no` mpv parses tracks during
         // loadfile but doesn't initialise the video output. The view's
         // `attach()` flips this back to `auto` once the consumer-side

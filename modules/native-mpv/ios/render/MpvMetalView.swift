@@ -98,17 +98,6 @@ final class MpvMetalView: UIView {
     /// no extra free-list bookkeeping needed.
     private var nextRingIndex: Int32 = 0
 
-    /// One-shot diagnostic: dump the first row of the IOSurface bytes
-    /// after the first present so we can disambiguate "libplacebo
-    /// wrote green" from "AVSBDL is misinterpreting correct bytes".
-    /// Cleared in tearDown. Phase 1B device-debug only — remove once
-    /// the green-screen on real device is solved.
-    private var didDumpFirstFrame: Bool = false
-
-    /// Lazy Metal command queue used only by the blue-clear diagnostic.
-    /// Created on first use, lives for the session.
-    private lazy var diagnosticCmdQueue: MTLCommandQueue? = metalDevice.makeCommandQueue()
-
     // ── PiP scrubber timebase ───────────────────────────────────────
     private var controlTimebase: CMTimebase?
     private var lastInvalidatedDuration: Double = -1
@@ -245,20 +234,6 @@ final class MpvMetalView: UIView {
                                   kCVImageBufferColorPrimaries_ITU_R_709_2, .shouldPropagate)
             CVBufferSetAttachment(pb, kCVImageBufferTransferFunctionKey,
                                   kCVImageBufferTransferFunction_ITU_R_709_2, .shouldPropagate)
-            // Diagnostic: seed the IOSurface with pure red BEFORE the
-            // VkImage is wired up. After libplacebo renders + present's
-            // vkDeviceWaitIdle returns, our row dump in present() shows
-            // one of three things:
-            //   - red (B=0,G=0,R=255,A=255): Metal didn't write the
-            //     IOSurface at all. Writes landed in a private
-            //     allocation; the IOSurface "backing" was a fiction.
-            //   - green clear (~0,77,0): Metal wrote, but in a layout
-            //     the CPU can't read linearly (AGX lossless compression
-            //     / allowGPUOptimizedContents trap).
-            //   - real video pixels: render path is healthy and the
-            //     bug is elsewhere (color, format desc, AVSBDL config).
-            // To be removed once the green-screen cause is pinned.
-            seedIOSurfaceRed(surface)
             let owned = try bridge.makeImageFromIOSurface(
                 surface, width: UInt32(width), height: UInt32(height),
                 format: VK_FORMAT_B8G8R8A8_UNORM
@@ -369,158 +344,9 @@ final class MpvMetalView: UIView {
             vkDeviceWaitIdle(bridge.device)
         }
 
-        // One-shot diagnostic — dumps each ring slot to discriminate:
-        //   - libplacebo wrote a different slot than the one it
-        //     handed us via present(index): one slot would show real
-        //     content, the others stay seed-red.
-        //   - libplacebo wrote nothing into any slot we own: every
-        //     slot reads (0, 77, 0) — same OS-default we keep seeing.
-        //   - libplacebo wrote into the right slot but in a layout we
-        //     can't read: the metal-clear test below still wins, so
-        //     fall through to the post-metal-clear dump on `index`.
-        if !didDumpFirstFrame {
-            didDumpFirstFrame = true
-            let entry = ring[index]
-            dumpMTLTextureBacking(entry.mtlTexture, expectedSurface: entry.ioSurface,
-                                  label: "first-frame index=\(index)")
-            for (i, e) in ring.enumerated() {
-                let lbl = (i == index) ? "post-libplacebo[acquired] index=\(i)" : "post-libplacebo[unused] index=\(i)"
-                dumpIOSurfaceBytes(e.ioSurface, label: lbl)
-            }
-            // Direct Metal write to the same MTLTexture libplacebo was
-            // supposed to render to. If this writes BLUE through to
-            // the IOSurface, libplacebo definitively did not target
-            // it.
-            metalClearToBlue(entry.mtlTexture)
-            dumpIOSurfaceBytes(entry.ioSurface, label: "post-metal-clear index=\(index)")
-        }
-
         let pb = ring[index].pixelBuffer
         DispatchQueue.main.async { [weak self] in
             self?.enqueuer?.enqueue(pixelBuffer: pb)
-        }
-    }
-
-    /// Bypass libplacebo: directly clear the given MTLTexture to BLUE
-    /// using a one-shot Metal render pass, wait for GPU completion.
-    /// Diagnostic only — this discriminates "libplacebo's writes never
-    /// reach our texture" from "even direct Metal writes don't reach
-    /// the IOSurface."
-    private func metalClearToBlue(_ tex: MTLTexture) {
-        guard let queue = diagnosticCmdQueue else {
-            NSLog("[MpvMetalView] metalClearToBlue: no command queue")
-            return
-        }
-        let pass = MTLRenderPassDescriptor()
-        pass.colorAttachments[0].texture = tex
-        pass.colorAttachments[0].loadAction = .clear
-        pass.colorAttachments[0].storeAction = .store
-        // BGRA in memory: clear color uses RGBA semantics. Pure blue =
-        // (R=0, G=0, B=1, A=1) → in BGRA memory bytes: B=255, G=0, R=0, A=255.
-        pass.colorAttachments[0].clearColor = MTLClearColor(
-            red: 0.0, green: 0.0, blue: 1.0, alpha: 1.0
-        )
-        guard let cb = queue.makeCommandBuffer(),
-              let enc = cb.makeRenderCommandEncoder(descriptor: pass)
-        else {
-            NSLog("[MpvMetalView] metalClearToBlue: command buffer/encoder failed")
-            return
-        }
-        enc.endEncoding()
-        cb.commit()
-        cb.waitUntilCompleted()
-        NSLog("[MpvMetalView] metalClearToBlue: GPU complete (status=%d)", cb.status.rawValue)
-    }
-
-    /// Log the MTLTexture's storage mode + IOSurface backing identity
-    /// vs the IOSurface we *intended* to back it with. Diagnostic.
-    private func dumpMTLTextureBacking(
-        _ tex: MTLTexture, expectedSurface: IOSurfaceRef, label: String
-    ) {
-        let expectedPtr = Unmanaged.passUnretained(expectedSurface).toOpaque()
-        let actualPtr: UnsafeMutableRawPointer?
-        if let s = tex.iosurface {
-            actualPtr = Unmanaged.passUnretained(s).toOpaque()
-        } else {
-            actualPtr = nil
-        }
-        let storageStr: String
-        switch tex.storageMode {
-        case .shared: storageStr = "shared"
-        case .private: storageStr = "private"
-        case .memoryless: storageStr = "memoryless"
-        @unknown default: storageStr = "unknown(\(tex.storageMode.rawValue))"
-        }
-        let actualAddr = actualPtr.map { String(format: "%p", Int(bitPattern: $0)) } ?? "nil"
-        let expectedAddr = String(format: "%p", Int(bitPattern: expectedPtr))
-        let match = (actualPtr == expectedPtr) ? "YES" : "NO"
-        NSLog(
-            "[MpvMetalView] MTLTexture(%@) storage=%@ usage=0x%lx iosurface(expected=%@ actual=%@ match=%@)",
-            label, storageStr, tex.usage.rawValue,
-            expectedAddr, actualAddr, match
-        )
-    }
-
-    /// Pre-fill the entire IOSurface with opaque red BGRA bytes from the
-    /// CPU. Pairs with `dumpIOSurfaceBytes` in `present` to discriminate
-    /// "Metal didn't write the IOSurface at all" from "Metal wrote but
-    /// in a non-linear layout the CPU can't read." Diagnostic only —
-    /// remove once the green-screen cause is pinned down.
-    private func seedIOSurfaceRed(_ surface: IOSurfaceRef) {
-        // Empty option set = read-write lock. `.readOnly` would prevent
-        // writes from being committed back to the IOSurface backing.
-        IOSurfaceLock(surface, [], nil)
-        defer { IOSurfaceUnlock(surface, [], nil) }
-        let bpr = IOSurfaceGetBytesPerRow(surface)
-        let height = IOSurfaceGetHeight(surface)
-        let count = bpr * height
-        let base = IOSurfaceGetBaseAddress(surface)
-            .assumingMemoryBound(to: UInt8.self)
-        // BGRA in memory: byte0=B, byte1=G, byte2=R, byte3=A.
-        // Opaque red = (B=0, G=0, R=255, A=255).
-        var i = 0
-        while i < count {
-            base[i] = 0
-            base[i + 1] = 0
-            base[i + 2] = 0xFF
-            base[i + 3] = 0xFF
-            i += 4
-        }
-        NSLog("[MpvMetalView] IOSurface seeded RED (B=0 G=0 R=255 A=255), %d bytes", count)
-    }
-
-    /// Lock the IOSurface and log a sample of pixel bytes from several
-    /// rows. Diagnostic only — paired with `seedIOSurfaceRed` so the
-    /// post-render dump tells us:
-    ///   - red bytes (B=0,G=0,R=255,A=255): Metal never wrote the
-    ///     IOSurface (writes landed in a separate allocation).
-    ///   - green clear (B=0,G=~77,R=0,A=255): Metal wrote but in a
-    ///     non-linear / compressed layout the CPU can't decode.
-    ///   - varying real-content values: render is healthy, look
-    ///     elsewhere for the green-screen cause.
-    private func dumpIOSurfaceBytes(_ surface: IOSurfaceRef, label: String) {
-        IOSurfaceLock(surface, .readOnly, nil)
-        defer { IOSurfaceUnlock(surface, .readOnly, nil) }
-        let bpr = IOSurfaceGetBytesPerRow(surface)
-        let width = IOSurfaceGetWidth(surface)
-        let height = IOSurfaceGetHeight(surface)
-        let base = IOSurfaceGetBaseAddress(surface)
-        // Sample several rows (top, quarter, middle, bottom) and within
-        // each row a few horizontal positions. If every sample reads
-        // the same BGRA: libplacebo wrote a clear color, not real
-        // content. If samples differ: real content is being rendered
-        // but mis-coloured.
-        let rowIndices = [0, height / 4, height / 2, max(0, height - 1)]
-        let pxIndices = [0, width / 4, width / 2, max(0, width - 1)]
-        for r in rowIndices {
-            let rowPtr = base.advanced(by: r * bpr).assumingMemoryBound(to: UInt8.self)
-            var samples: [String] = []
-            for px in pxIndices {
-                let p = rowPtr.advanced(by: px * 4)
-                samples.append("[\(px)]=(B=\(p[0]) G=\(p[1]) R=\(p[2]) A=\(p[3]))")
-            }
-            NSLog("[MpvMetalView] IOSurface(%@) %dx%d bpr=%d row%d: %@",
-                  label, width, height, bpr, r, samples.joined(separator: " "))
         }
     }
 
