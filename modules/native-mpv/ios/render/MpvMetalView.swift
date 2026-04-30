@@ -105,6 +105,10 @@ final class MpvMetalView: UIView {
     /// the green-screen on real device is solved.
     private var didDumpFirstFrame: Bool = false
 
+    /// Lazy Metal command queue used only by the blue-clear diagnostic.
+    /// Created on first use, lives for the session.
+    private lazy var diagnosticCmdQueue: MTLCommandQueue? = metalDevice.makeCommandQueue()
+
     // ── PiP scrubber timebase ───────────────────────────────────────
     private var controlTimebase: CMTimebase?
     private var lastInvalidatedDuration: Double = -1
@@ -373,13 +377,53 @@ final class MpvMetalView: UIView {
             let entry = ring[index]
             dumpMTLTextureBacking(entry.mtlTexture, expectedSurface: entry.ioSurface,
                                   label: "first-frame index=\(index)")
-            dumpIOSurfaceBytes(entry.ioSurface, label: "first-frame index=\(index)")
+            dumpIOSurfaceBytes(entry.ioSurface, label: "post-libplacebo index=\(index)")
+            // Now bypass libplacebo entirely: clear the same MTLTexture
+            // to BLUE via direct Metal, wait for completion, and dump
+            // again. If post-clear shows BLUE, our IOSurface↔MTLTexture
+            // chain is sound and the green is libplacebo's writes never
+            // reaching the texture. If it still shows green, even
+            // direct Metal can't write the IOSurface — fundamental
+            // Metal/IOSurface configuration issue.
+            metalClearToBlue(entry.mtlTexture)
+            dumpIOSurfaceBytes(entry.ioSurface, label: "post-metal-clear index=\(index)")
         }
 
         let pb = ring[index].pixelBuffer
         DispatchQueue.main.async { [weak self] in
             self?.enqueuer?.enqueue(pixelBuffer: pb)
         }
+    }
+
+    /// Bypass libplacebo: directly clear the given MTLTexture to BLUE
+    /// using a one-shot Metal render pass, wait for GPU completion.
+    /// Diagnostic only — this discriminates "libplacebo's writes never
+    /// reach our texture" from "even direct Metal writes don't reach
+    /// the IOSurface."
+    private func metalClearToBlue(_ tex: MTLTexture) {
+        guard let queue = diagnosticCmdQueue else {
+            NSLog("[MpvMetalView] metalClearToBlue: no command queue")
+            return
+        }
+        let pass = MTLRenderPassDescriptor()
+        pass.colorAttachments[0].texture = tex
+        pass.colorAttachments[0].loadAction = .clear
+        pass.colorAttachments[0].storeAction = .store
+        // BGRA in memory: clear color uses RGBA semantics. Pure blue =
+        // (R=0, G=0, B=1, A=1) → in BGRA memory bytes: B=255, G=0, R=0, A=255.
+        pass.colorAttachments[0].clearColor = MTLClearColor(
+            red: 0.0, green: 0.0, blue: 1.0, alpha: 1.0
+        )
+        guard let cb = queue.makeCommandBuffer(),
+              let enc = cb.makeRenderCommandEncoder(descriptor: pass)
+        else {
+            NSLog("[MpvMetalView] metalClearToBlue: command buffer/encoder failed")
+            return
+        }
+        enc.endEncoding()
+        cb.commit()
+        cb.waitUntilCompleted()
+        NSLog("[MpvMetalView] metalClearToBlue: GPU complete (status=%d)", cb.status.rawValue)
     }
 
     /// Log the MTLTexture's storage mode + IOSurface backing identity
