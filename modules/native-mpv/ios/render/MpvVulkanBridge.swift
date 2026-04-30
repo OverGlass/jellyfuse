@@ -27,6 +27,7 @@ enum MpvVulkanBridgeError: Error, CustomStringConvertible {
     case vk(VkResult, String)
     case noPhysicalDevice
     case noGraphicsQueue
+    case noHostVisibleMemoryType
 
     var description: String {
         switch self {
@@ -34,8 +35,19 @@ enum MpvVulkanBridgeError: Error, CustomStringConvertible {
             return "Vulkan error \(rc.rawValue) in \(where_)"
         case .noPhysicalDevice: return "No Vulkan physical device available"
         case .noGraphicsQueue: return "No graphics-capable queue family"
+        case .noHostVisibleMemoryType:
+            return "No HOST_VISIBLE memory type available for IOSurface-backed VkImage"
         }
     }
+}
+
+/// Owned pair returned from `makeImageFromIOSurface`. Both must be
+/// released together via `destroyImage(_:)` — the VkImage holds a
+/// reference to the IOSurface and the VkDeviceMemory holds the storage
+/// mode hint MoltenVK reads to satisfy iOS 17+ Metal validation.
+struct MpvIOSurfaceVkImage {
+    let image: VkImage
+    let memory: VkDeviceMemory
 }
 
 // MARK: - MpvVulkanBridge
@@ -300,17 +312,31 @@ final class MpvVulkanBridge {
     /// `~/projects/mpv-apple/video/out/vulkan/libmpv_vk.c`):
     ///     COLOR_ATTACHMENT | TRANSFER_DST | TRANSFER_SRC | SAMPLED.
     ///
-    /// Caller owns the returned VkImage and must call
-    /// `destroyImage(_:)` before the bridge is deinitialised.
+    /// Even though `VkImportMetalIOSurfaceInfoEXT` makes the IOSurface
+    /// the image's *real* backing storage, we still allocate and bind a
+    /// `VkDeviceMemory` from a HOST_VISIBLE memory type. MoltenVK 1.4.1's
+    /// `MVKImage::getMTLStorageMode()` returns `MTLStorageModePrivate`
+    /// outright when no `_deviceMemory` is bound (see
+    /// `MoltenVK/MoltenVK/GPUObjects/MVKImage.mm:1115`), bypassing the
+    /// IOSurface→Shared promotion at line 1119. iOS 17+ Metal validation
+    /// then rejects the resulting MTLTexture with
+    ///     "IOSurface textures must use MTLStorageModeShared"
+    /// (debug abort) and on release builds the GPU writes never reach
+    /// the IOSurface — AVSampleBufferDisplayLayer reads stale memory and
+    /// paints flat green. Binding HOST_VISIBLE memory makes MoltenVK
+    /// pick up `MTLStorageModeShared` directly without relying on the
+    /// promotion path. The bound `VkDeviceMemory` does not back the
+    /// texture data — the IOSurface still does — but its size must
+    /// satisfy the image's memory requirements.
+    ///
+    /// Caller owns the returned pair and must call `destroyImage(_:)`
+    /// before the bridge is deinitialised.
     func makeImageFromIOSurface(
         _ ioSurface: IOSurfaceRef,
         width: UInt32,
         height: UInt32,
         format: VkFormat
-    ) throws -> VkImage {
-        // VkImportMetalIOSurfaceInfoEXT chains into VkImageCreateInfo;
-        // MoltenVK uses the IOSurface as the image's storage. No
-        // separate vkAllocateMemory + vkBindImageMemory needed.
+    ) throws -> MpvIOSurfaceVkImage {
         // The synthesized vulkan_metal.h forward-declares
         // `typedef struct __IOSurface* IOSurfaceRef;` without CF bridging
         // annotations, so Swift exposes the field as `Unmanaged<IOSurfaceRef>`.
@@ -333,9 +359,6 @@ final class MpvVulkanBridge {
         //     (VK_ERROR_FEATURE_NOT_PRESENT); its OPTIMAL layout
         //     happens to coincide with the IOSurface's expected bytes,
         //     so colors render correctly.
-        // The Metal-side IOSurface storage-mode assertion that either
-        // tiling can trigger is satisfied per-plane in mpv's hwdec_vt_pl
-        // path (explicit MTLStorageModeShared).
         #if targetEnvironment(simulator)
         let imageTiling = VK_IMAGE_TILING_OPTIMAL
         #else
@@ -374,11 +397,96 @@ final class MpvVulkanBridge {
         guard let img = image else {
             throw MpvVulkanBridgeError.vk(VK_ERROR_INITIALIZATION_FAILED, "vkCreateImage(IOSurface) returned null")
         }
-        return img
+
+        // Allocate + bind HOST_VISIBLE memory. On any failure here we
+        // must destroy the freshly-created image before propagating —
+        // otherwise we leak a VkImage on every error path.
+        let memory: VkDeviceMemory
+        do {
+            memory = try allocateHostVisibleMemory(forImage: img)
+        } catch {
+            vkDestroyImage(device, img, nil)
+            throw error
+        }
+        let bindRc = vkBindImageMemory(device, img, memory, 0)
+        if bindRc != VK_SUCCESS {
+            vkFreeMemory(device, memory, nil)
+            vkDestroyImage(device, img, nil)
+            throw MpvVulkanBridgeError.vk(bindRc, "vkBindImageMemory(IOSurface)")
+        }
+        return MpvIOSurfaceVkImage(image: img, memory: memory)
     }
 
-    func destroyImage(_ image: VkImage) {
-        vkDestroyImage(device, image, nil)
+    func destroyImage(_ owned: MpvIOSurfaceVkImage) {
+        vkDestroyImage(device, owned.image, nil)
+        vkFreeMemory(device, owned.memory, nil)
+    }
+
+    /// Allocate a VkDeviceMemory matching the image's memory requirements,
+    /// preferring `HOST_VISIBLE | HOST_COHERENT` (maps to
+    /// `MTLStorageModeShared` in MoltenVK) and falling back to any
+    /// HOST_VISIBLE type if a coherent one is not exposed.
+    private func allocateHostVisibleMemory(forImage image: VkImage) throws -> VkDeviceMemory {
+        var reqs = VkMemoryRequirements(size: 0, alignment: 0, memoryTypeBits: 0)
+        vkGetImageMemoryRequirements(device, image, &reqs)
+
+        // VkPhysicalDeviceMemoryProperties contains fixed-size C-array
+        // tuples (32 memoryTypes, 16 memoryHeaps) that Swift can't
+        // default-construct, so we hand Vulkan an uninitialized
+        // heap-allocated out-buffer, then copy onto the stack so the
+        // tuple is addressable.
+        let memPropsPtr = UnsafeMutablePointer<VkPhysicalDeviceMemoryProperties>.allocate(capacity: 1)
+        defer { memPropsPtr.deallocate() }
+        vkGetPhysicalDeviceMemoryProperties(physicalDevice, memPropsPtr)
+        var memProps = memPropsPtr.pointee
+
+        let preferred: VkMemoryPropertyFlags = VkMemoryPropertyFlags(
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT.rawValue
+            | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT.rawValue
+        )
+        let fallback: VkMemoryPropertyFlags = VkMemoryPropertyFlags(
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT.rawValue
+        )
+
+        let typeCount = Int(memProps.memoryTypeCount)
+        let memTypeBits = reqs.memoryTypeBits
+
+        // `memoryTypes` is a homogeneous tuple. Take a pointer to the
+        // tuple value and rebind it as a VkMemoryType buffer for integer
+        // indexing.
+        func findIndex(matching mask: VkMemoryPropertyFlags) -> UInt32? {
+            return withUnsafePointer(to: &memProps.memoryTypes) { tuplePtr in
+                let buf = UnsafeRawPointer(tuplePtr).assumingMemoryBound(to: VkMemoryType.self)
+                for i in 0..<typeCount {
+                    if (memTypeBits & (UInt32(1) << UInt32(i))) == 0 { continue }
+                    if (buf[i].propertyFlags & mask) == mask {
+                        return UInt32(i)
+                    }
+                }
+                return nil
+            }
+        }
+
+        guard let typeIndex = findIndex(matching: preferred) ?? findIndex(matching: fallback) else {
+            throw MpvVulkanBridgeError.noHostVisibleMemoryType
+        }
+
+        var alloc = VkMemoryAllocateInfo(
+            sType: VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+            pNext: nil,
+            allocationSize: reqs.size,
+            memoryTypeIndex: typeIndex
+        )
+        var memory: VkDeviceMemory? = nil
+        let rc = vkAllocateMemory(device, &alloc, nil, &memory)
+        if rc != VK_SUCCESS {
+            throw MpvVulkanBridgeError.vk(rc, "vkAllocateMemory(IOSurface)")
+        }
+        guard let mem = memory else {
+            throw MpvVulkanBridgeError.vk(VK_ERROR_INITIALIZATION_FAILED,
+                                          "vkAllocateMemory(IOSurface) returned null")
+        }
+        return mem
     }
 
     /// Device extensions we enabled at `vkCreateDevice` — passed through

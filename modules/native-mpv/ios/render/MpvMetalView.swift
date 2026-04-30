@@ -51,6 +51,7 @@ private struct RingEntry {
     let ioSurface: IOSurfaceRef
     let pixelBuffer: CVPixelBuffer
     let vkImage: VkImage
+    let vkMemory: VkDeviceMemory
 }
 
 final class MpvMetalView: UIView {
@@ -232,11 +233,16 @@ final class MpvMetalView: UIView {
                                   kCVImageBufferColorPrimaries_ITU_R_709_2, .shouldPropagate)
             CVBufferSetAttachment(pb, kCVImageBufferTransferFunctionKey,
                                   kCVImageBufferTransferFunction_ITU_R_709_2, .shouldPropagate)
-            let img = try bridge.makeImageFromIOSurface(
+            let owned = try bridge.makeImageFromIOSurface(
                 surface, width: UInt32(width), height: UInt32(height),
                 format: VK_FORMAT_B8G8R8A8_UNORM
             )
-            ring.append(RingEntry(ioSurface: surface, pixelBuffer: pb, vkImage: img))
+            ring.append(RingEntry(
+                ioSurface: surface,
+                pixelBuffer: pb,
+                vkImage: owned.image,
+                vkMemory: owned.memory
+            ))
         }
         ringWidth = width
         ringHeight = height
@@ -472,7 +478,11 @@ final class MpvMetalView: UIView {
         // acquire/present callbacks can fire and the pool's VkImages /
         // IOSurfaces are safe to free.
         if let bridge = vulkanBridge {
-            for entry in ring { bridge.destroyImage(entry.vkImage) }
+            for entry in ring {
+                bridge.destroyImage(MpvIOSurfaceVkImage(
+                    image: entry.vkImage, memory: entry.vkMemory
+                ))
+            }
         }
         ring.removeAll(keepingCapacity: false)
         vulkanBridge = nil
