@@ -97,6 +97,13 @@ final class MpvMetalView: UIView {
     /// no extra free-list bookkeeping needed.
     private var nextRingIndex: Int32 = 0
 
+    /// One-shot diagnostic: dump the first row of the IOSurface bytes
+    /// after the first present so we can disambiguate "libplacebo
+    /// wrote green" from "AVSBDL is misinterpreting correct bytes".
+    /// Cleared in tearDown. Phase 1B device-debug only — remove once
+    /// the green-screen on real device is solved.
+    private var didDumpFirstFrame: Bool = false
+
     // ── PiP scrubber timebase ───────────────────────────────────────
     private var controlTimebase: CMTimebase?
     private var lastInvalidatedDuration: Double = -1
@@ -331,16 +338,58 @@ final class MpvMetalView: UIView {
     /// Hand the freshly-rendered IOSurface to AVSBDL. Called from
     /// mpv's render thread; bounce to main for `enqueueSampleBuffer:`.
     private func present(index: Int, semaphore _: VkSemaphore?) {
-        // TODO Phase 1B+: bridge `semaphore` → MTLSharedEvent so AVSBDL
-        // sees the IOSurface only after the GPU has finished writing it.
-        // For now we trust the GPU work to complete before the next
-        // VSync — works on Apple Silicon at 1080p; revisit on first
-        // tearing report.
         guard index >= 0, index < ring.count else { return }
+
+        // Wait for libplacebo's GPU writes to land before AVSBDL reads
+        // the IOSurface. Phase 1B+ TODO: bridge `semaphore` →
+        // MTLSharedEvent for a non-blocking wait. For now we use the
+        // heavyweight vkDeviceWaitIdle — at 24 fps × ~1 ms render the
+        // CPU stall is negligible and we get correct frames.
+        if let bridge = vulkanBridge {
+            vkDeviceWaitIdle(bridge.device)
+        }
+
+        // One-shot byte dump — tells us whether libplacebo wrote real
+        // pixel data or whether the IOSurface is uninitialized/green.
+        if !didDumpFirstFrame {
+            didDumpFirstFrame = true
+            dumpIOSurfaceBytes(ring[index].ioSurface, label: "first-frame index=\(index)")
+        }
+
         let pb = ring[index].pixelBuffer
         DispatchQueue.main.async { [weak self] in
             self?.enqueuer?.enqueue(pixelBuffer: pb)
         }
+    }
+
+    /// Lock the IOSurface and log the first row of pixels (BGRA).
+    /// Diagnostic only — used once per session to disambiguate
+    /// libplacebo-side from AVSBDL-side green-screen causes.
+    private func dumpIOSurfaceBytes(_ surface: IOSurfaceRef, label: String) {
+        IOSurfaceLock(surface, .readOnly, nil)
+        defer { IOSurfaceUnlock(surface, .readOnly, nil) }
+        let bpr = IOSurfaceGetBytesPerRow(surface)
+        let width = IOSurfaceGetWidth(surface)
+        let height = IOSurfaceGetHeight(surface)
+        guard let base = IOSurfaceGetBaseAddress(surface) else {
+            NSLog("[MpvMetalView] dumpIOSurface(%@): no base address", label)
+            return
+        }
+        let row = base.assumingMemoryBound(to: UInt8.self)
+        // Sample 4 pixels: 0, w/4, w/2, w-1.
+        let positions = [0, width / 4, width / 2, max(0, width - 1)]
+        var samples: [String] = []
+        for px in positions {
+            let p = row.advanced(by: px * 4)
+            // BGRA in memory.
+            let b = p[0]
+            let g = p[1]
+            let r = p[2]
+            let a = p[3]
+            samples.append("[\(px)]=(B=\(b) G=\(g) R=\(r) A=\(a))")
+        }
+        NSLog("[MpvMetalView] IOSurface(%@) %dx%d bpr=%d row0: %@",
+              label, width, height, bpr, samples.joined(separator: " "))
     }
 
     // MARK: PiP / control timebase (unchanged from Phase 1A)
