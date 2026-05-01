@@ -119,6 +119,9 @@ final class MpvMetalView: UIView {
         super.init(frame: frame)
         configureView()
         registerLifecycleObservers()
+        let p = Unmanaged.passUnretained(self).toOpaque()
+        let rc = CFGetRetainCount(self)
+        print("[MpvMetalView][lifecycle] init \(p) rc=\(rc)")
     }
 
     required init?(coder: NSCoder) {
@@ -296,6 +299,11 @@ final class MpvMetalView: UIView {
         // Retain self for the C callback bridge. Released in tearDown.
         let retainer = Unmanaged.passRetained(self)
         poolSelfRetainer = retainer
+        do {
+            let p = Unmanaged.passUnretained(self).toOpaque()
+            let lifecycleRC = CFGetRetainCount(self)
+            print("[MpvMetalView][lifecycle] attach passRetained self=\(p) rc=\(lifecycleRC)")
+        }
 
         // Phase 3 step 3+4: BT.2020 / PQ output. libplacebo emits
         // PQ-encoded values into the RGBA16F pool. Both SDR and HDR
@@ -463,6 +471,9 @@ final class MpvMetalView: UIView {
     // MARK: Tear-down
 
     private func tearDown() {
+        let p = Unmanaged.passUnretained(self).toOpaque()
+        let rc = CFGetRetainCount(self)
+        print("[MpvMetalView][lifecycle] tearDown enter \(p) rc=\(rc)")
         // Set up the sync handoff before issuing clear_pool/stop. The
         // destroyCb fires on mpv's render thread once the ra_ctx is
         // fully torn down (i.e. no more Vulkan submits incoming), and
@@ -565,6 +576,8 @@ final class MpvMetalView: UIView {
     }
 
     deinit {
+        let p = Unmanaged.passUnretained(self).toOpaque()
+        print("[MpvMetalView][lifecycle] deinit \(p)")
         NotificationCenter.default.removeObserver(self)
         // Heavy resources are deferred from tearDown to here — by the
         // time `deinit` fires, mpv has already released its +1 retain
@@ -640,6 +653,8 @@ final class MpvMetalView: UIView {
     ) = { priv in
         guard let priv = priv else { return }
         let view = Unmanaged<MpvMetalView>.fromOpaque(priv).takeUnretainedValue()
+        let rc = CFGetRetainCount(view)
+        print("[MpvMetalView][lifecycle] destroyCb fire \(priv) rc-before=\(rc)")
         view.destroySemaphore?.signal()
         Unmanaged<MpvMetalView>.fromOpaque(priv).release()
     }
