@@ -24,6 +24,19 @@ public final class HybridMpvVideoView: HybridMpvVideoViewSpec {
 
     public required override init() {
         super.init()
+        // Diagnostic mitigation for the documented nav-back UAF
+        // (`project_rctswiftui_duplicate_class.md`). Zombies caught
+        // `_NSZombie_NativeMpv.MpvMetalView` being released by the
+        // Fabric wrapper's `_contentView` ivar during cxx_destruct —
+        // i.e. metalView is being over-released by ONE retain, but the
+        // retain math (Swift `let metalView`, wrapper `_contentView`,
+        // destroyCb retainer, HybridNativeMpv.attachedViews) balances
+        // out by inspection. Until the missing release path is
+        // identified, hold one extra +1 retain that we deliberately
+        // never balance — neutralises the imbalance, prevents UAF.
+        // Cost: one MpvMetalView + its IOSurface ring leaks per
+        // mounted video session for app lifetime.
+        _ = Unmanaged.passRetained(metalView)
     }
 
     public func attachPlayer(instanceId: String) throws {
