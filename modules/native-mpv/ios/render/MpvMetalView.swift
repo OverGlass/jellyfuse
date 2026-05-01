@@ -152,14 +152,21 @@ final class MpvMetalView: UIView {
     func attach(player: HybridNativeMpv, mpvHandle handle: OpaquePointer) {
         guard vulkanBridge == nil else { return }
 
-        // Pool dimensions: pick a sensible fixed target. The fixed pool
-        // size is a Phase 1B v1 limitation — pl_swapchain_resize is a
-        // no-op for the headless impl, so a true resize means
-        // tear-down + rebuild. 1080p is the right default for embedded
-        // playback on iOS / iPadOS / Apple TV; HDR / 4K modes will
-        // grow it on demand in a follow-up phase.
-        let w = 1920
-        let h = 1080
+        // Pool dimensions: render at the layer's pixel size, capped at
+        // 1920x1080 (current Phase 1B v1 cap; HDR / 4K grow it later).
+        //
+        // libplacebo's per-output-pixel shader cost dominates the player
+        // CPU; rendering at the panel size instead of always-1080p drops
+        // the shader work proportional to the oversample ratio. On a
+        // 13 mini in landscape with 16:9 video the visible region is
+        // roughly 1170x658 — about 2.7x cheaper than 1920x1080.
+        //
+        // The pool is fixed for this session: pl_swapchain_resize is a
+        // no-op for the headless impl, so a true resize after attach
+        // means tear-down + rebuild. We don't observe layout changes
+        // here yet — orientation changes use AVSBDL's bilinear scale
+        // until the next attach (same as v1 behavior).
+        let (w, h) = desiredPoolSize()
 
         do {
             let bridge = try MpvVulkanBridge(metalDevice: metalDevice)
@@ -190,6 +197,39 @@ final class MpvMetalView: UIView {
 
     func detach() {
         tearDown()
+    }
+
+    // MARK: Pool sizing
+
+    /// Pixel size for the IOSurface pool. Falls back to the 1920x1080 cap
+    /// if the view hasn't been laid out yet, so attach() never blocks
+    /// waiting for layout. The cap also prevents over-allocation when an
+    /// external 4K display is mirrored (the user can re-attach later for
+    /// full-resolution playback in a follow-up phase).
+    private func desiredPoolSize() -> (Int, Int) {
+        let scale = contentScaleFactor > 0 ? contentScaleFactor : UIScreen.main.scale
+        let pixelW = Int((bounds.size.width  * scale).rounded())
+        let pixelH = Int((bounds.size.height * scale).rounded())
+        let cap = 1920
+        // Guard: a view that hasn't been laid out (or a 1px preview) gets
+        // the conservative default so we don't ship a tiny pool the layer
+        // would have to upscale heavily.
+        guard pixelW >= 320 && pixelH >= 240 else { return (cap, 1080) }
+        // Cap the larger dimension at 1920 while preserving aspect ratio.
+        var w = pixelW
+        var h = pixelH
+        let larger = max(w, h)
+        if larger > cap {
+            let r = Double(cap) / Double(larger)
+            w = Int((Double(w) * r).rounded())
+            h = Int((Double(h) * r).rounded())
+        }
+        // Align to 16 px to keep tile-based GPUs happy.
+        w = max(16, (w + 15) & ~15)
+        h = max(16, (h + 15) & ~15)
+        NSLog("[MpvMetalView] pool size %dx%d (layer %.0fx%.0f @ %.1fx)",
+              w, h, bounds.size.width, bounds.size.height, scale)
+        return (w, h)
     }
 
     // MARK: Ring build + pool registration
