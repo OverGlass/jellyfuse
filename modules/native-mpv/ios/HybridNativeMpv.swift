@@ -275,6 +275,13 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
     public func addStateChangeListener(onStateChange: @escaping (MpvPlaybackState) -> Void) throws -> MpvListener {
         let sub = Subscription(onStateChange)
         stateSubs.append(sub)
+        // Replay the current state to the new subscriber. mpv only fires
+        // the `pause` property observer on changes, so a JS UI that
+        // subscribes after autoplay has begun would otherwise stay at
+        // its default state forever (visible bug: play button stuck on
+        // the play icon while the video is actually playing).
+        let currentState: MpvPlaybackState = isPausedNow ? .paused : .playing
+        onStateChange(currentState)
         return makeListener { [weak self] in
             self?.stateSubs.removeAll { $0 === sub }
         }
