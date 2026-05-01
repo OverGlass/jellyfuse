@@ -330,23 +330,34 @@ final class MpvMetalView: UIView {
         return true
     }
 
-    /// Hand the freshly-rendered IOSurface to AVSBDL. Called from
-    /// mpv's render thread; bounce to main for `enqueueSampleBuffer:`.
+    /// Serial worker for the GPU wait. Moves `vkDeviceWaitIdle` off mpv's
+    /// render thread so mpv can pipeline the next frame while we're
+    /// waiting for the current frame's writes to land. Serial ordering is
+    /// load-bearing — AVSBDL relies on CMSampleBuffer enqueue order
+    /// matching frame order for PTS sequencing.
+    private static let presentWaitQueue = DispatchQueue(
+        label: "jellyfuse.native-mpv.present-wait", qos: .userInteractive
+    )
+
+    /// Hand the freshly-rendered IOSurface to AVSBDL. Called from mpv's
+    /// render thread; the wait + main hop run on a worker queue so the
+    /// render thread returns immediately and mpv can keep pipelining.
     private func present(index: Int, semaphore _: VkSemaphore?) {
         guard index >= 0, index < ring.count else { return }
-
-        // Wait for libplacebo's GPU writes to land before AVSBDL reads
-        // the IOSurface. Phase 1B+ TODO: bridge `semaphore` →
-        // MTLSharedEvent for a non-blocking wait. For now we use the
-        // heavyweight vkDeviceWaitIdle — at 24 fps × ~1 ms render the
-        // CPU stall is negligible and we get correct frames.
-        if let bridge = vulkanBridge {
-            vkDeviceWaitIdle(bridge.device)
-        }
-
         let pb = ring[index].pixelBuffer
-        DispatchQueue.main.async { [weak self] in
-            self?.enqueuer?.enqueue(pixelBuffer: pb)
+        let device = vulkanBridge?.device
+
+        MpvMetalView.presentWaitQueue.async { [weak self] in
+            // Wait for libplacebo's GPU writes to land before AVSBDL
+            // reads the IOSurface. vkDeviceWaitIdle is the sledgehammer
+            // — a per-frame fence wait would be tighter, but only by
+            // microseconds on a single-queue workload, and it'd require
+            // injecting a VkFence + dummy submit per present. Phase
+            // follow-up if we ever need it.
+            if let device = device { vkDeviceWaitIdle(device) }
+            DispatchQueue.main.async { [weak self] in
+                self?.enqueuer?.enqueue(pixelBuffer: pb)
+            }
         }
     }
 
