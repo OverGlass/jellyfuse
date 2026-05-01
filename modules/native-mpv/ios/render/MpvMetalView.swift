@@ -524,7 +524,14 @@ final class MpvMetalView: UIView {
     /// Pool size constant — number of IOSurfaces we round-robin
     /// through. Must be ≥ swapchain_depth + 1 to keep AVSBDL's display
     /// hold from overlapping with libplacebo's writes.
-    static let poolSize: Int = 3
+    ///
+    /// At 4K with HDR tone-mapping, per-frame libplacebo render takes
+    /// long enough that swapchain_depth (2) + AVSBDL display queue (≥ 1
+    /// when the display engine briefly stalls) can saturate a 3-slot
+    /// ring and cause torn frames. 5 slots gives enough headroom for
+    /// 24 fps 4K HEVC10 + tone-map without observable glitches.
+    /// Memory cost: 5 × 1920 × 1080 × 4 ≈ 40 MB.
+    static let poolSize: Int = 5
 
     private static let acquireCb: (
         @convention(c) (UnsafeMutableRawPointer?, UnsafeMutablePointer<Int32>?) -> Bool
