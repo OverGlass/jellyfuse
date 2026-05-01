@@ -463,6 +463,15 @@ final class MpvMetalView: UIView {
     // MARK: Tear-down
 
     private func tearDown() {
+        // Set up the sync handoff before issuing clear_pool/stop. The
+        // destroyCb fires on mpv's render thread once the ra_ctx is
+        // fully torn down (i.e. no more Vulkan submits incoming), and
+        // signals this semaphore. We wait below on a worker queue
+        // before letting tearDown return to its caller.
+        let mpvAlive = attachedPlayer?.mpvHandle != nil
+        let semaphore: DispatchSemaphore? = mpvAlive ? DispatchSemaphore(value: 0) : nil
+        if let s = semaphore { destroySemaphore = s }
+
         let work = { [self] in
             // Tell mpv to stop rendering into our pool. The actual
             // teardown of mpv's ra_ctx (and the matching release of
@@ -530,6 +539,29 @@ final class MpvMetalView: UIView {
         } else {
             DispatchQueue.main.sync { work() }
         }
+
+        // Block briefly until mpv's destroyCb fires (ra_ctx torn down,
+        // no more Vulkan submits incoming). Without this, the React
+        // view tree starts deallocating while mpv's render thread is
+        // still mid-render — the documented use-after-free where a
+        // sibling RCTViewComponentView's _backgroundColorLayer gets
+        // released into corrupted state on nav-back.
+        //
+        // 500 ms is plenty for mpv to drain its render queue at the
+        // point we ask it to stop (the work in flight is at most one
+        // frame's render). On timeout we proceed anyway — preferable
+        // to deadlocking nav-back if mpv ever wedges. Won't block the
+        // main thread because the wait runs on a worker queue when
+        // tearDown was invoked off-main; on-main tearDown (rare —
+        // typically triggered from JS thread) will briefly block, but
+        // bounded.
+        if let s = semaphore {
+            let result = s.wait(timeout: .now() + .milliseconds(500))
+            if result == .timedOut {
+                NSLog("[MpvMetalView] tearDown wait timed out — mpv vo destroy still pending")
+            }
+            destroySemaphore = nil
+        }
     }
 
     deinit {
@@ -596,12 +628,30 @@ final class MpvMetalView: UIView {
     /// `mpv_libmpv_apple_set_pool` as `priv`); release it here so the
     /// MetalView can finally deinit. Fires from mpv's render thread —
     /// keep work minimal and never call back into mpv.
+    ///
+    /// Also signals the optional `destroySemaphore`, which `tearDown`
+    /// waits on (briefly, with timeout) so the React view tree can't
+    /// dealloc while mpv's render thread is still issuing Vulkan
+    /// submits. Use takeUnretainedValue first so we can read the
+    /// semaphore property before the retain release potentially
+    /// triggers deinit.
     private static let destroyCb: (
         @convention(c) (UnsafeMutableRawPointer?) -> Void
     ) = { priv in
         guard let priv = priv else { return }
+        let view = Unmanaged<MpvMetalView>.fromOpaque(priv).takeUnretainedValue()
+        view.destroySemaphore?.signal()
         Unmanaged<MpvMetalView>.fromOpaque(priv).release()
     }
+
+    /// Set by `tearDown` before issuing `clear_pool` / `stop`; signaled
+    /// by `destroyCb` once mpv's ra_ctx has fully torn down. tearDown
+    /// blocks on this for a bounded interval so mpv's render thread
+    /// stops issuing Vulkan submits before the React view tree starts
+    /// dealloc — addresses the long-standing nav-back crash where a
+    /// sibling `RCTViewComponentView`'s `_backgroundColorLayer` gets
+    /// freed while mpv is mid-render.
+    fileprivate var destroySemaphore: DispatchSemaphore?
 }
 
 // MARK: - PiP delegates (unchanged from Phase 1A)
