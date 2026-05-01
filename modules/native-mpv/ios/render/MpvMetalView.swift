@@ -139,12 +139,20 @@ final class MpvMetalView: UIView {
         // Retina XDR). For SDR-source content the underlying PQ values
         // sit in the SDR luminance band (~100 nits), so the panel still
         // shows SDR content at SDR brightness — the EDR mode is the
-        // ceiling, not the floor. iOS 13.4+. Ignored gracefully on
-        // non-EDR displays (none exist on iPhone X+ shipping today).
-        if #available(iOS 16.0, *) {
+        // ceiling, not the floor. Ignored gracefully on non-EDR
+        // displays (none exist on iPhone X+ shipping today).
+        //
+        // wantsExtendedDynamicRangeContent on AVSampleBufferDisplayLayer
+        // is iOS 17+; toneMapMode is iOS 18+. Below those versions, EDR
+        // signaling falls back to per-CMSampleBuffer color attachments
+        // alone — the OS still recognises the BT.2020 / SMPTE_ST_2084
+        // tags on the buffer and lifts the layer into EDR composition.
+        if #available(iOS 17.0, *) {
+            sampleBufferLayer.wantsExtendedDynamicRangeContent = true
+        }
+        if #available(iOS 18.0, *) {
             sampleBufferLayer.toneMapMode = .automatic
         }
-        sampleBufferLayer.wantsExtendedDynamicRangeContent = true
     }
 
     private func registerLifecycleObservers() {
