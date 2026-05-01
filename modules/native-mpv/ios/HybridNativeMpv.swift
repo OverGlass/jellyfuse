@@ -620,6 +620,31 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         // which selects the matching IOSurface plane by dimensions —
         // upstream `VkImportMetalIOSurfaceInfoEXT` has no plane field.
         _ = mpv_set_option_string(mpv, "hwdec", "videotoolbox")
+
+        // Phase 3 — HDR10 + HLG. Static libplacebo options applied
+        // unconditionally; SDR streams ignore them. With these set,
+        // HDR10/HLG sources are tone-mapped via libplacebo's BT.2390
+        // soft-knee curve into our current SDR BGRA output IOSurfaces.
+        // Steps 2-4 (video-params observer, AVSBDL EDR metadata, P010
+        // ring rebuild) follow.
+        //
+        //  - target-trc=auto / target-prim=auto: let libplacebo pick the
+        //    output transfer/primaries from the active swapchain. Our
+        //    pool is BT.709 SDR today; HDR rebuild flips this.
+        //  - tone-mapping=bt.2390: the standardised soft-knee tone-map.
+        //    Closest to "neutral" of the available curves; safe default.
+        //  - hdr-compute-peak=yes: dynamic peak detection per scene
+        //    (compute-shader-driven). Better than static peak metadata
+        //    for content with inaccurate MaxCLL.
+        //  - gamut-mapping-mode=perceptual: BT.2020 → BT.709 gamut
+        //    compression that preserves saturation relations rather
+        //    than hard-clipping.
+        _ = mpv_set_option_string(mpv, "target-trc", "auto")
+        _ = mpv_set_option_string(mpv, "target-prim", "auto")
+        _ = mpv_set_option_string(mpv, "tone-mapping", "bt.2390")
+        _ = mpv_set_option_string(mpv, "hdr-compute-peak", "yes")
+        _ = mpv_set_option_string(mpv, "gamut-mapping-mode", "perceptual")
+
         // Phase 1B lifecycle gate: with `vid=no` mpv parses tracks during
         // loadfile but doesn't initialise the video output. The view's
         // `attach()` flips this back to `auto` once the consumer-side
