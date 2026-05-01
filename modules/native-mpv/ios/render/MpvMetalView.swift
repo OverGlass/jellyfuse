@@ -385,6 +385,19 @@ final class MpvMetalView: UIView {
         pipController = controller
     }
 
+    /// Phase 3 step 2: receive the source HDR classification from
+    /// HybridNativeMpv. Stub for now — step 3 will set
+    /// `wantsExtendedDynamicRangeContent` and `CAEDRMetadata` here, and
+    /// step 4 will trigger a P010 ring rebuild on the first
+    /// `.hdr10` / `.hlg` transition.
+    private var currentHdrMode: MpvHdrMode = .sdr
+    func applyHdrMode(_ mode: MpvHdrMode) {
+        dispatchPrecondition(condition: .onQueue(.main))
+        guard mode != currentHdrMode else { return }
+        currentHdrMode = mode
+        NSLog("[MpvMetalView] hdr mode → %@", String(describing: mode))
+    }
+
     func applyPlaybackState(
         position: Double, duration: Double, isPaused: Bool, rate: Double
     ) {

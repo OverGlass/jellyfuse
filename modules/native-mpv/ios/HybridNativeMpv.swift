@@ -684,6 +684,11 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         mpv_observe_property(mpv, 5, "track-list", MPV_FORMAT_NODE)
         mpv_observe_property(mpv, 6, "paused-for-cache", MPV_FORMAT_FLAG)
         mpv_observe_property(mpv, 7, "cache-buffering-state", MPV_FORMAT_DOUBLE)
+        // Phase 3 step 2: detect HDR mode from the source. video-params is a
+        // node-map; we read `gamma` (transfer) and `primaries` to classify the
+        // source as SDR / HDR10 / HLG. Step 3 uses this to flip
+        // wantsExtendedDynamicRangeContent + EDRMetadata on AVSBDL.
+        mpv_observe_property(mpv, 8, "video-params", MPV_FORMAT_NODE)
         // (Phase 2 removed the audio-params observer — ao_avfoundation
         // doesn't clobber routeSharingPolicy on restart, so the
         // re-apply trick that ao_audiounit needed is gone.)
@@ -831,8 +836,32 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
             let snap = bufferingSubs
             for s in snap { s.callback(progress < 1.0, progress) }
 
+        case "video-params":
+            guard prop.format == MPV_FORMAT_NODE, let valPtr = prop.data else { return }
+            let node = valPtr.assumingMemoryBound(to: mpv_node.self).pointee
+            let fields = readMpvNodeMapStrings(node, keys: ["gamma", "primaries"])
+            let mode = MpvHdrMode.classify(
+                transfer: fields["gamma"], primaries: fields["primaries"]
+            )
+            applyHdrMode(mode)
+
         default:
             break
+        }
+    }
+
+    /// Cached so we only forward when the classification actually changes —
+    /// `video-params` fires on every reconfig and most events are no-ops for
+    /// HDR mode (e.g. resolution changes, deinterlacer toggles).
+    private var currentHdrMode: MpvHdrMode = .sdr
+
+    private func applyHdrMode(_ mode: MpvHdrMode) {
+        guard mode != currentHdrMode else { return }
+        currentHdrMode = mode
+        NSLog("[HybridNativeMpv] hdr mode → %@", String(describing: mode))
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            for view in self.attachedViews { view.applyHdrMode(mode) }
         }
     }
 
