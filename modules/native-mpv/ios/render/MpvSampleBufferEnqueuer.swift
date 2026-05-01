@@ -19,6 +19,7 @@ import AVFoundation
 import CoreMedia
 import CoreVideo
 import Foundation
+import UIKit
 
 final class MpvSampleBufferEnqueuer {
 
@@ -45,6 +46,24 @@ final class MpvSampleBufferEnqueuer {
             || lastDimensions?.width != dims.width
             || lastDimensions?.height != dims.height
         {
+            // Phase 3 step 3+4: explicit BT.2020 / SMPTE_ST_2084 (PQ)
+            // extensions on the format description. The CVPixelBuffer
+            // already carries these attachments via `.shouldPropagate`
+            // (set in MpvMetalView.buildRing), but
+            // `CMVideoFormatDescriptionCreateForImageBuffer`'s
+            // auto-derivation is incomplete on some iOS versions for
+            // 16-bit float RGBA buffers — explicit extensions ensure
+            // AVSBDL recognises the layer as HDR10 PQ and engages EDR
+            // composition.
+            let extensions: [CFString: Any] = [
+                kCMFormatDescriptionExtension_ColorPrimaries:
+                    kCMFormatDescriptionColorPrimaries_ITU_R_2020,
+                kCMFormatDescriptionExtension_TransferFunction:
+                    kCMFormatDescriptionTransferFunction_SMPTE_ST_2084_PQ,
+                kCMFormatDescriptionExtension_YCbCrMatrix:
+                    kCMFormatDescriptionYCbCrMatrix_ITU_R_2020,
+                kCMFormatDescriptionExtension_FullRangeVideo: true,
+            ]
             var fd: CMFormatDescription?
             let rc = CMVideoFormatDescriptionCreateForImageBuffer(
                 allocator: kCFAllocatorDefault,
@@ -58,8 +77,45 @@ final class MpvSampleBufferEnqueuer {
                 )
                 return
             }
-            formatDescription = fd
+            // Re-create with explicit extensions merged in. Apple has no
+            // "set extensions" API on CMFormatDescription — we have to
+            // build a fresh one with the merged dictionary.
+            let codecType = CMFormatDescriptionGetMediaSubType(fd!)
+            let merged = (CMFormatDescriptionGetExtensions(fd!) as? [CFString: Any] ?? [:])
+                .merging(extensions, uniquingKeysWith: { _, new in new })
+            var fd2: CMFormatDescription?
+            let rc2 = CMVideoFormatDescriptionCreate(
+                allocator: kCFAllocatorDefault,
+                codecType: codecType,
+                width: dims.width,
+                height: dims.height,
+                extensions: merged as CFDictionary,
+                formatDescriptionOut: &fd2
+            )
+            if rc2 != noErr || fd2 == nil {
+                NSLog(
+                    "[MpvSampleBufferEnqueuer] CMVideoFormatDescriptionCreate(merged) failed: %d, falling back",
+                    rc2
+                )
+                formatDescription = fd
+            } else {
+                formatDescription = fd2
+            }
             lastDimensions = dims
+
+            // EDR headroom diagnostic: > 1.0 means the panel has HDR
+            // brightness above SDR available right now (depends on
+            // ambient light, current brightness setting, content size,
+            // OS thermal state). 13 mini in dim room: ~1.5x. Bright
+            // room or low display brightness suppresses EDR.
+            if #available(iOS 16.0, *) {
+                let screen = UIScreen.main
+                NSLog(
+                    "[MpvSampleBufferEnqueuer] EDR headroom %.2f (potential %.2f)",
+                    screen.currentEDRHeadroom,
+                    screen.potentialEDRHeadroom
+                )
+            }
         }
         guard let fd = formatDescription else { return }
 
