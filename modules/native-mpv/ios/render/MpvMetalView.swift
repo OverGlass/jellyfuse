@@ -134,6 +134,17 @@ final class MpvMetalView: UIView {
         backgroundColor = .black
         isOpaque = true
         contentScaleFactor = UIScreen.main.scale
+        // Phase 3 step 3+4: EDR display mode. Tells the OS this layer can
+        // drive the panel above SDR brightness (~1000-1200 nits on Super
+        // Retina XDR). For SDR-source content the underlying PQ values
+        // sit in the SDR luminance band (~100 nits), so the panel still
+        // shows SDR content at SDR brightness — the EDR mode is the
+        // ceiling, not the floor. iOS 13.4+. Ignored gracefully on
+        // non-EDR displays (none exist on iPhone X+ shipping today).
+        if #available(iOS 16.0, *) {
+            sampleBufferLayer.toneMapMode = .automatic
+        }
+        sampleBufferLayer.wantsExtendedDynamicRangeContent = true
     }
 
     private func registerLifecycleObservers() {
@@ -195,13 +206,35 @@ final class MpvMetalView: UIView {
     // MARK: Ring build + pool registration
 
     private func buildRing(width: Int, height: Int, bridge: MpvVulkanBridge) throws {
-        let bytesPerRow = width * 4
+        // Phase 3 step 3+4: HDR-capable output pool.
+        //
+        // Output format: 16-bit half-float RGBA. libplacebo emits
+        // BT.2020 / PQ-encoded values into this buffer. AVSBDL with
+        // wantsExtendedDynamicRangeContent=true reads PQ values per
+        // CMSampleBuffer color attachments and drives the EDR-capable
+        // panel (XDR on iPhone X+, all modern iPhones) up to the panel's
+        // HDR peak (~1000-1200 nits on iPhone 13 mini).
+        //
+        // Always-PQ output handles all source HDR modes correctly:
+        //   - SDR (BT.1886): libplacebo encodes SDR values as low-nit
+        //     PQ levels (~100 nits peak). Display matches SDR brightness.
+        //   - HDR10 (PQ): pass-through (or tone-map for headroom).
+        //     Display at full HDR.
+        //   - HLG: libplacebo converts HLG → PQ. Display at full HDR.
+        //
+        // No mid-stream pool rebuild needed — the EDR pipeline is mode-
+        // agnostic at the AVSBDL layer; the encoded pixel values dictate
+        // the actual displayed brightness.
+        //
+        // Memory: 5 slots × 1920×1080 × 8 bytes = ~80 MB (vs ~40 MB BGRA8).
+        // Acceptable for the brightness win on EDR panels.
+        let bytesPerRow = width * 8
         let attrs: [String: Any] = [
             kIOSurfaceWidth as String: width,
             kIOSurfaceHeight as String: height,
-            kIOSurfaceBytesPerElement as String: 4,
+            kIOSurfaceBytesPerElement as String: 8,
             kIOSurfaceBytesPerRow as String: bytesPerRow,
-            kIOSurfacePixelFormat as String: Int(kCVPixelFormatType_32BGRA),
+            kIOSurfacePixelFormat as String: Int(kCVPixelFormatType_64RGBAHalf),
         ]
         ring.removeAll()
         for _ in 0..<MpvMetalView.poolSize {
@@ -218,25 +251,16 @@ final class MpvMetalView: UIView {
             guard rc == kCVReturnSuccess, let pb = unmanagedPB?.takeRetainedValue() else {
                 throw MpvVulkanBridgeError.vk(VK_ERROR_OUT_OF_HOST_MEMORY, "CVPixelBufferCreateWithIOSurface")
             }
-            // SDR BT.709 attachments. Phase 3 will switch per HDR mode.
-            //
-            // We do NOT set `kCVImageBufferYCbCrMatrixKey` here: the
-            // pixel format is BGRA (RGB-space, no chroma planes), and
-            // tagging an RGB buffer with a YCbCr matrix makes
-            // AVSampleBufferDisplayLayer on Apple Silicon devices apply
-            // a YCbCr→RGB transform to the RGB bytes, collapsing the
-            // frame to a flat green. (The simulator path is more
-            // lenient and ignores the bogus tag, which is why the
-            // earlier code "worked" on sim but not on device.) Tag
-            // primaries + transfer only — those are color-space
-            // metadata that apply to RGB just as well as YCbCr.
+            // BT.2020 / PQ color tags on the CVPixelBuffer propagate to
+            // the CMSampleBuffer that AVSBDL displays. We do NOT set
+            // YCbCrMatrix — the format is RGBA, no chroma planes.
             CVBufferSetAttachment(pb, kCVImageBufferColorPrimariesKey,
-                                  kCVImageBufferColorPrimaries_ITU_R_709_2, .shouldPropagate)
+                                  kCVImageBufferColorPrimaries_ITU_R_2020, .shouldPropagate)
             CVBufferSetAttachment(pb, kCVImageBufferTransferFunctionKey,
-                                  kCVImageBufferTransferFunction_ITU_R_709_2, .shouldPropagate)
+                                  kCVImageBufferTransferFunction_SMPTE_ST_2084_PQ, .shouldPropagate)
             let owned = try bridge.makeImageFromIOSurface(
                 surface, width: UInt32(width), height: UInt32(height),
-                format: VK_FORMAT_B8G8R8A8_UNORM
+                format: VK_FORMAT_R16G16B16A16_SFLOAT
             )
             ring.append(RingEntry(
                 ioSurface: surface,
@@ -265,18 +289,17 @@ final class MpvMetalView: UIView {
         let retainer = Unmanaged.passRetained(self)
         poolSelfRetainer = retainer
 
-        // Color metadata: SDR BT.709, full-range RGB. Numeric values
-        // are taken straight from libplacebo's pl_color_primaries /
-        // pl_color_transfer / pl_color_system enums (see
-        // libplacebo/colorspace.h). The public mpv_libmpv_apple ABI
-        // forwards these as ints to avoid pulling libplacebo into the
-        // mpv public surface — values must match the enum definitions
-        // exactly. (Earlier values 7/8/1 were guesses and produced a
-        // visible green/teal cast because libplacebo silently mapped
-        // them to wrong primaries/transfer.)
-        let plColorPrimBT709: Int32 = 3   // PL_COLOR_PRIM_BT_709
-        let plColorTrcBT1886: Int32 = 1   // PL_COLOR_TRC_BT_1886
-        let plColorSysRGB: Int32 = 12     // PL_COLOR_SYSTEM_RGB
+        // Phase 3 step 3+4: BT.2020 / PQ output. libplacebo emits
+        // PQ-encoded values into the RGBA16F pool. Both SDR and HDR
+        // sources route through the same target — SDR gets encoded at
+        // SDR-luminance PQ levels (~100 nits), HDR at full HDR levels
+        // (up to 1000+ nits).
+        //
+        // Numeric values match libplacebo's pl_color_primaries /
+        // pl_color_transfer / pl_color_system enums (libplacebo/colorspace.h).
+        let plColorPrimBT2020: Int32 = 6   // PL_COLOR_PRIM_BT_2020
+        let plColorTrcPQ: Int32 = 12       // PL_COLOR_TRC_PQ
+        let plColorSysRGB: Int32 = 12      // PL_COLOR_SYSTEM_RGB
 
         let usage: VkImageUsageFlags = VkImageUsageFlags(
             VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT.rawValue
@@ -299,12 +322,12 @@ final class MpvMetalView: UIView {
                     num_device_extensions: Int32(extBuf.count),
                     num_images: Int32(imgBuf.count),
                     images: imgBuf.baseAddress,
-                    format: VK_FORMAT_B8G8R8A8_UNORM,
+                    format: VK_FORMAT_R16G16B16A16_SFLOAT,
                     width: Int32(width),
                     height: Int32(height),
                     usage: usage,
-                    color_primaries: plColorPrimBT709,
-                    color_transfer: plColorTrcBT1886,
+                    color_primaries: plColorPrimBT2020,
+                    color_transfer: plColorTrcPQ,
                     color_system: plColorSysRGB,
                     swapchain_depth: 2,
                     acquire: MpvMetalView.acquireCb,

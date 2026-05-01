@@ -348,13 +348,15 @@ final class MpvVulkanBridge {
         _ ioSurface: IOSurfaceRef,
         width: UInt32,
         height: UInt32,
-        format _: VkFormat
+        format: VkFormat
     ) throws -> MpvIOSurfaceVkImage {
         // 1) Build the MTLTexture in Swift with the descriptor we
         //    actually want. We pin `allowGPUOptimizedContents = false`
         //    here — that's the whole reason this code path exists.
+        let mtlPixelFormat = Self.metalPixelFormat(for: format)
         let mtlTex = try makeIOSurfaceBackedMTLTexture(
-            ioSurface: ioSurface, width: Int(width), height: Int(height)
+            ioSurface: ioSurface, width: Int(width), height: Int(height),
+            mtlPixelFormat: mtlPixelFormat
         )
 
         // 2) vkCreateImage with `VkImportMetalTextureInfoEXT` chained
@@ -385,7 +387,7 @@ final class MpvVulkanBridge {
                 pNext: UnsafeRawPointer(importPtr),
                 flags: 0,
                 imageType: VK_IMAGE_TYPE_2D,
-                format: VK_FORMAT_B8G8R8A8_UNORM,
+                format: format,
                 extent: VkExtent3D(width: width, height: height, depth: 1),
                 mipLevels: 1,
                 arrayLayers: 1,
@@ -441,11 +443,27 @@ final class MpvVulkanBridge {
     /// render-target use case and pinning
     /// `allowGPUOptimizedContents = false` — without that, AGX lossless
     /// compression mangles the IOSurface bytes that AVSBDL reads.
+    /// Map our supported VkFormats to Metal pixel formats. The MTLTexture's
+    /// pixelFormat must match the VkImage format we pass to vkCreateImage —
+    /// MoltenVK uses the pre-built MTLTexture as ground truth.
+    private static func metalPixelFormat(for vkFormat: VkFormat) -> MTLPixelFormat {
+        switch vkFormat {
+        case VK_FORMAT_B8G8R8A8_UNORM:        return .bgra8Unorm
+        case VK_FORMAT_R16G16B16A16_SFLOAT:   return .rgba16Float
+        default:
+            // Fall back to BGRA8 — caller should not be using formats we
+            // don't recognise.
+            NSLog("[MpvVulkanBridge] unsupported VkFormat %d, falling back to BGRA8", vkFormat.rawValue)
+            return .bgra8Unorm
+        }
+    }
+
     private func makeIOSurfaceBackedMTLTexture(
-        ioSurface: IOSurfaceRef, width: Int, height: Int
+        ioSurface: IOSurfaceRef, width: Int, height: Int,
+        mtlPixelFormat: MTLPixelFormat
     ) throws -> MTLTexture {
         let desc = MTLTextureDescriptor.texture2DDescriptor(
-            pixelFormat: .bgra8Unorm,
+            pixelFormat: mtlPixelFormat,
             width: width, height: height,
             mipmapped: false
         )
