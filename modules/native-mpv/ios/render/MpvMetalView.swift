@@ -586,11 +586,13 @@ final class MpvMetalView: UIView {
         for ptr in deviceExtCStrings { free(ptr) }
         deviceExtCStrings.removeAll(keepingCapacity: false)
         deviceExtPtrs.removeAll(keepingCapacity: false)
-        // Defensive: if tearDown wasn't called (synthetic deinit path),
-        // run the visible-side cleanup too.
-        if controlTimebase != nil {
-            sampleBufferLayer.controlTimebase = nil
-        }
+        // (Removed the `sampleBufferLayer.controlTimebase = nil`
+        // defensive write — that's a CALayer property setter, and
+        // deinit may run on whatever thread releases the last retain.
+        // tearDown handles this on the main thread; if tearDown didn't
+        // run, the CALayer is being deinit'd anyway and clearing it is
+        // moot. Keeping it here was the documented source of the
+        // nav-back UAF — see `destroyCb` for the full chain.)
     }
 
     // MARK: C callbacks
@@ -626,22 +628,31 @@ final class MpvMetalView: UIView {
     /// Mpv signals end-of-vo via this callback. We hold a +1 retain on
     /// `self` for the lifetime of the registered pool (passed to
     /// `mpv_libmpv_apple_set_pool` as `priv`); release it here so the
-    /// MetalView can finally deinit. Fires from mpv's render thread —
-    /// keep work minimal and never call back into mpv.
+    /// MetalView can finally deinit. Fires from mpv's render thread.
     ///
-    /// Also signals the optional `destroySemaphore`, which `tearDown`
-    /// waits on (briefly, with timeout) so the React view tree can't
-    /// dealloc while mpv's render thread is still issuing Vulkan
-    /// submits. Use takeUnretainedValue first so we can read the
-    /// semaphore property before the retain release potentially
-    /// triggers deinit.
+    /// IMPORTANT: the release is dispatched to the main thread. If it
+    /// drops the last reference to MpvMetalView, `deinit` runs there
+    /// — and `deinit` touches CALayer state
+    /// (`sampleBufferLayer.controlTimebase = nil`) and releases
+    /// CVPixelBuffers which interact with CARenderServer. CALayer ops
+    /// from non-main threads corrupt sibling layers' state, which is
+    /// the documented nav-back UAF in
+    /// `project_rctswiftui_duplicate_class.md`: a sibling
+    /// RCTViewComponentView's `_backgroundColorLayer` is freed mid-
+    /// render, and the autorelease pool drain later faults trying to
+    /// release the stale ivar.
+    ///
+    /// Signal the semaphore first (so `tearDown`'s sync wait can
+    /// return) and then bounce the actual release to main.
     private static let destroyCb: (
         @convention(c) (UnsafeMutableRawPointer?) -> Void
     ) = { priv in
         guard let priv = priv else { return }
         let view = Unmanaged<MpvMetalView>.fromOpaque(priv).takeUnretainedValue()
         view.destroySemaphore?.signal()
-        Unmanaged<MpvMetalView>.fromOpaque(priv).release()
+        DispatchQueue.main.async {
+            Unmanaged<MpvMetalView>.fromOpaque(priv).release()
+        }
     }
 
     /// Set by `tearDown` before issuing `clear_pool` / `stop`; signaled
