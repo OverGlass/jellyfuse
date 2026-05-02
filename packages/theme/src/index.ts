@@ -11,6 +11,10 @@ export const spacing = {
   lg: 24,
   xl: 32,
   xxl: 48,
+  // `xxxl` is the marketing-page section rhythm step. Mobile screens
+  // never need this much air — it lives here so apps/web can pull from
+  // the same scale as everything else without redeclaring tokens.
+  xxxl: 96,
 } as const;
 export type Spacing = keyof typeof spacing;
 
@@ -192,6 +196,9 @@ export const radius = {
   sm: 4,
   md: 8,
   lg: 16,
+  // `xl` is reserved for the large card surfaces on the marketing page
+  // (privacy / open-source cards). Mobile uses `lg` for the same role.
+  xl: 24,
   full: 9999,
 } as const;
 export type RadiusToken = keyof typeof radius;
@@ -209,6 +216,8 @@ export const opacity = {
   overlay: 0.4,
   // Alpha composition scale — for glass surfaces, scrims, translucent
   // chrome over dynamic content (player controls over video).
+  // `alpha08` is the marketing-page hairline divider (text-primary @ 8%).
+  alpha08: 0.08,
   alpha10: 0.1,
   alpha15: 0.15,
   alpha20: 0.2,
