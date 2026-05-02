@@ -2,29 +2,33 @@
 # fetch-libmpv.sh — populate vendor/ios/libmpv-{device,simulator} from the
 # mpv-apple fork's XCFrameworks.
 #
-# Replaces fetch-mpvkit.sh. The fork is maintained at ~/projects/mpv-apple
-# (or wherever MPV_APPLE_BUILD_DIR points). Until we have GH releases set
-# up, this script defaults to copying directly from a local fork build:
+# Two source modes:
 #
-#   ~/projects/mpv-apple/build/xcframeworks/
-#       LibMpv.xcframework/
-#         ios-arm64/LibMpv.framework/{LibMpv, Headers, Modules, Info.plist}
-#         ios-arm64-simulator/LibMpv.framework/{...}
-#       LibAvcodec.xcframework/...
-#       (15 frameworks total)
+#   1. RELEASE (default) — download the pinned release zips from
+#      https://github.com/${MPV_APPLE_REPO}/releases/download/<tag>/.
+#      No local fork build required, suitable for CI and fresh dev
+#      machines. The version is pinned by MPV_APPLE_RELEASE_VERSION
+#      (defaults to the value baked into this script).
 #
-# We extract the static archive + headers per slice into a cache dir, then
-# symlink vendor/ios/libmpv-{device,simulator} into it. Idempotent: re-run
-# is a no-op when the cache is up to date.
+#   2. LOCAL DEV — set MPV_APPLE_RELEASE_VERSION=local-dev to skip the
+#      download and copy directly from a local fork build at
+#      ${MPV_APPLE_BUILD_DIR:-~/projects/mpv-apple/build/xcframeworks}.
+#      Useful when iterating on the fork itself.
 #
-# Future: when the fork starts shipping GH releases, set
-#   MPV_APPLE_RELEASE_VERSION=apple/v0.41.0-jf.1
-# and we'll download MANIFEST.json + per-framework .zips, verify SHA256,
-# and populate the cache from those.
+# Either way we end up with a per-version cache at
+# ~/Library/Caches/jellyfuse/libmpv-apple/<version>/{device,simulator}
+# that vendor/ios/libmpv-{device,simulator} symlinks into. Idempotent:
+# re-running is a no-op when the cache is already populated.
 
 set -euo pipefail
 
-LIBMPV_VERSION="${MPV_APPLE_RELEASE_VERSION:-local-dev}"
+# Pinned release tag. Bump when we publish a new fork release; the cache
+# is keyed on the version so old caches stay around for rollbacks.
+DEFAULT_RELEASE_VERSION="apple/v0.41.0-jf.6"
+DEFAULT_REPO="OverGlass/mpv"
+
+LIBMPV_VERSION="${MPV_APPLE_RELEASE_VERSION:-${DEFAULT_RELEASE_VERSION}}"
+MPV_APPLE_REPO="${MPV_APPLE_REPO:-${DEFAULT_REPO}}"
 LOCAL_BUILD="${MPV_APPLE_BUILD_DIR:-${HOME}/projects/mpv-apple/build/xcframeworks}"
 
 CACHE_ROOT="${HOME}/Library/Caches/jellyfuse/libmpv-apple/${LIBMPV_VERSION}"
@@ -68,6 +72,40 @@ cache_complete() {
 if cache_complete "${CACHE_DEVICE}" && cache_complete "${CACHE_SIM}"; then
   echo "libmpv-apple ${LIBMPV_VERSION} already cached at ${CACHE_ROOT}"
 else
+  # In RELEASE mode, materialize a download dir that looks like a local
+  # fork build (one .xcframework per framework) so the rest of the flow
+  # can stay shared with LOCAL DEV.
+  if [[ "${LIBMPV_VERSION}" != "local-dev" ]]; then
+    DOWNLOAD_DIR="${CACHE_ROOT}/_download"
+    # URL-encode the slash in the tag for the GitHub release URL.
+    URL_TAG="${LIBMPV_VERSION//\//%2F}"
+    BASE_URL="https://github.com/${MPV_APPLE_REPO}/releases/download/${URL_TAG}"
+
+    if [[ ! -d "${DOWNLOAD_DIR}" ]] || [[ ! -f "${DOWNLOAD_DIR}/.complete" ]]; then
+      echo "Downloading libmpv-apple ${LIBMPV_VERSION} from ${MPV_APPLE_REPO}..."
+      rm -rf "${DOWNLOAD_DIR}"
+      mkdir -p "${DOWNLOAD_DIR}"
+
+      for FW in "${FRAMEWORKS[@]}"; do
+        ZIP="${DOWNLOAD_DIR}/${FW}.xcframework.zip"
+        echo "  fetch ${FW}.xcframework.zip"
+        curl --fail --location --silent --show-error \
+          --output "${ZIP}" \
+          "${BASE_URL}/${FW}.xcframework.zip"
+        (cd "${DOWNLOAD_DIR}" && unzip -q "${FW}.xcframework.zip")
+        rm "${ZIP}"
+      done
+
+      curl --fail --location --silent --show-error \
+        --output "${DOWNLOAD_DIR}/MANIFEST.json" \
+        "${BASE_URL}/MANIFEST.json"
+
+      touch "${DOWNLOAD_DIR}/.complete"
+    fi
+
+    LOCAL_BUILD="${DOWNLOAD_DIR}"
+  fi
+
   if [[ ! -d "${LOCAL_BUILD}" ]]; then
     echo "ERROR: local fork build not found at ${LOCAL_BUILD}"
     echo "  Build it first:"
