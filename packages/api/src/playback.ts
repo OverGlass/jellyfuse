@@ -79,7 +79,8 @@ export function buildDeviceProfile(maxBitrate?: number) {
           {
             Condition: "EqualsAny",
             Property: "VideoRangeType",
-            Value: "SDR|HDR10|HLG|DOVI|DOVIWithHDR10|DOVIWithHLG|DOVIWithSDR",
+            Value:
+              "SDR|HDR10|HDR10Plus|HLG|DOVI|DOVIWithHDR10|DOVIWithHDR10Plus|DOVIWithHLG|DOVIWithSDR",
             IsRequired: false,
           },
         ],
@@ -109,7 +110,8 @@ export function buildDeviceProfile(maxBitrate?: number) {
           {
             Condition: "EqualsAny",
             Property: "VideoRangeType",
-            Value: "SDR|HDR10|HLG|DOVI|DOVIWithHDR10|DOVIWithHLG|DOVIWithSDR",
+            Value:
+              "SDR|HDR10|HDR10Plus|HLG|DOVI|DOVIWithHDR10|DOVIWithHDR10Plus|DOVIWithHLG|DOVIWithSDR",
             IsRequired: false,
           },
         ],

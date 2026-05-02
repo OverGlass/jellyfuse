@@ -56,14 +56,26 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
     var mpvHandle: OpaquePointer? { return mpv }
 
     /// Registered render views — must detach before mpv handle is destroyed.
-    private var attachedViews: [MpvGLView] = []
+    private var attachedViews: [MpvMetalView] = []
 
-    func registerView(_ view: MpvGLView) {
+    func registerView(_ view: MpvMetalView) {
         attachedViews.append(view)
     }
 
-    func unregisterView(_ view: MpvGLView) {
+    func unregisterView(_ view: MpvMetalView) {
         attachedViews.removeAll { $0 === view }
+    }
+
+    /// Called by `MpvMetalView.attach` once the headless VkImage pool is
+    /// registered with mpv. Flips `vid` from `no` (initial) to `auto`,
+    /// which is what triggers mpv to create its vo and start reading
+    /// from our pool. Without this gate, vo_create can fire on the very
+    /// first `loadfile` — before the React view has mounted and
+    /// registered its pool — and fail with "no headless image pool
+    /// registered".
+    func activateVideoOutput() {
+        guard let mpv = self.mpv else { return }
+        _ = mpv_set_property_string(mpv, "vid", "auto")
     }
 
     private var mpv: OpaquePointer?
@@ -95,15 +107,13 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
     private var nowPlayingBase: [String: Any]?
     private var remoteCommandsRegistered = false
 
-    // Silent AVAudioPlayer "primer" — plays 1 s of silence on loop at
-    // volume 0 whenever mpv is unpaused. libmpv's `ao_audiounit` uses
-    // a raw RemoteIO AudioUnit which iOS doesn't recognize as a media
-    // engine, so our app never qualifies for the Now Playing UI. Having
-    // an AVAudioPlayer alive in the same process is enough to flip that
-    // designation. Volume 0 + sampleRate 8 kHz mono keeps CPU / battery
-    // overhead negligible; it only runs while the user is actively
-    // watching, not 24/7.
-    private var silentPrimer: AVAudioPlayer?
+    // (Phase 2: removed `silentPrimer`. ao_avfoundation publishes real
+    // audio through AVSampleBufferAudioRenderer, which iOS recognises as
+    // a media engine — we no longer need a parallel AVAudioPlayer to
+    // qualify for Now Playing. The fork build is what unlocks this:
+    // MPVKit 0.41.0 didn't compile audio_out_avfoundation, so the
+    // consumer was stuck on ao_audiounit + workaround. See
+    // `project_ao_avfoundation_already_upstream.md`.)
 
     // MARK: Initialization
 
@@ -265,6 +275,13 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
     public func addStateChangeListener(onStateChange: @escaping (MpvPlaybackState) -> Void) throws -> MpvListener {
         let sub = Subscription(onStateChange)
         stateSubs.append(sub)
+        // Replay the current state to the new subscriber. mpv only fires
+        // the `pause` property observer on changes, so a JS UI that
+        // subscribes after autoplay has begun would otherwise stay at
+        // its default state forever (visible bug: play button stuck on
+        // the play icon while the video is actually playing).
+        let currentState: MpvPlaybackState = isPausedNow ? .paused : .playing
+        onStateChange(currentState)
         return makeListener { [weak self] in
             self?.stateSubs.removeAll { $0 === sub }
         }
@@ -497,17 +514,12 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         refreshNowPlaying()
     }
 
-    /// Applies our desired AVAudioSession configuration — `.playback`
-    /// category, `.moviePlayback` mode, `.longFormVideo` route-sharing
-    /// policy, no options (explicitly non-mixable). Safe to call from
-    /// any thread; hops to main internally so writes are serialised.
-    ///
-    /// Called once at mpv-handle creation AND again whenever libmpv's
-    /// `ao_audiounit` signals an audio reconfig (via the `audio-params`
-    /// property observer) — without the re-apply, mpv's 3-arg
-    /// `setCategory` clobbers our policy every time the AO restarts
-    /// (e.g. route change, audio device change, first audio frame on a
-    /// new file).
+    /// Configures our desired AVAudioSession at mpv-handle creation:
+    /// `.playback` category, `.moviePlayback` mode, `.longFormVideo`
+    /// route-sharing policy, no `mixWithOthers`. Called exactly once;
+    /// `ao_avfoundation` (Phase 2) does not clobber the configuration
+    /// the way `ao_audiounit` did, so we no longer need the
+    /// `audio-params` re-apply observer.
     private func applyAudioSessionConfig() {
         let work = {
             let session = AVAudioSession.sharedInstance()
@@ -530,62 +542,7 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         }
     }
 
-    /// Builds a 1 s silent 8 kHz mono 16-bit PCM WAV and starts playing
-    /// it on loop at volume 0. Must be called on main.
-    private func startSilentPrimerOnMain() {
-        dispatchPrecondition(condition: .onQueue(.main))
-        if silentPrimer != nil { return }
-        let sampleRate: UInt32 = 8000
-        let channels: UInt16 = 1
-        let bitsPerSample: UInt16 = 16
-        let numSamples: UInt32 = sampleRate
-        let dataSize: UInt32 = numSamples * UInt32(bitsPerSample / 8)
-        let byteRate: UInt32 = sampleRate * UInt32(bitsPerSample / 8)
-        let blockAlign: UInt16 = channels * (bitsPerSample / 8)
 
-        var wav = Data(capacity: 44 + Int(dataSize))
-        func appendLE<T: FixedWidthInteger>(_ value: T) {
-            var v = value.littleEndian
-            withUnsafeBytes(of: &v) { wav.append(contentsOf: $0) }
-        }
-        wav.append(contentsOf: [0x52, 0x49, 0x46, 0x46]) // "RIFF"
-        appendLE(UInt32(36 + dataSize))                   // file size - 8
-        wav.append(contentsOf: [0x57, 0x41, 0x56, 0x45]) // "WAVE"
-        wav.append(contentsOf: [0x66, 0x6D, 0x74, 0x20]) // "fmt "
-        appendLE(UInt32(16))                              // fmt chunk size
-        appendLE(UInt16(1))                               // PCM
-        appendLE(channels)
-        appendLE(sampleRate)
-        appendLE(byteRate)
-        appendLE(blockAlign)
-        appendLE(bitsPerSample)
-        wav.append(contentsOf: [0x64, 0x61, 0x74, 0x61]) // "data"
-        appendLE(dataSize)
-        wav.append(Data(count: Int(dataSize)))           // silence
-
-        do {
-            let player = try AVAudioPlayer(data: wav, fileTypeHint: AVFileType.wav.rawValue)
-            player.numberOfLoops = -1
-            player.volume = 0
-            player.prepareToPlay()
-            player.play()
-            silentPrimer = player
-            os_log("silent primer started", log: npLog, type: .default)
-        } catch {
-            NSLog("%{public}@", "[NativeMpv] silent primer failed: \(error)")
-        }
-    }
-
-    private func setSilentPrimerPlaying(_ playing: Bool) {
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self, let primer = self.silentPrimer else { return }
-            if playing {
-                if !primer.isPlaying { primer.play() }
-            } else {
-                if primer.isPlaying { primer.pause() }
-            }
-        }
-    }
 
     private func loadArtwork(from url: URL) {
         URLSession.shared.dataTask(with: url) { [weak self] data, _, error in
@@ -617,20 +574,17 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         // Audio session: .playback ignores the silent switch and
         // allows background audio. `.longFormVideo` route-sharing
         // policy (iOS 13+) tells the MediaRemote daemon explicitly
-        // that this session is long-form video — which is the
-        // documented API for apps that don't use AVPlayer to become
-        // a Now Playing candidate.
+        // that this session is long-form video — the documented API
+        // for apps that don't use AVPlayer to become a Now Playing
+        // candidate.
         //
-        // NOTE: libmpv's ao_audiounit.m also configures AVAudioSession
-        // when its audio output initializes, using the 3-arg
-        // setCategory(.playback, options:) API. Without the
-        // `audio-exclusive=yes` mpv option, it adds `mixWithOthers` —
-        // which per WWDC22 session 110338 disqualifies us from Now
-        // Playing. `audio-exclusive=yes` below makes mpv omit that
-        // option. The 3-arg call also drops routeSharingPolicy back to
-        // .default, so we re-apply the 4-arg config whenever mpv
-        // signals an audio-params change (see `audio-params` case in
-        // handlePropertyChange).
+        // Phase 2 simplification: ao_avfoundation (selected via
+        // --ao=avfoundation,audiounit below) routes audio through
+        // AVSampleBufferAudioRenderer + AVSampleBufferRenderSynchronizer,
+        // which respects the session we configured here and does not
+        // clobber routeSharingPolicy on AO restart. The audio-params
+        // re-apply observer + audio-exclusive=yes + AVAudioPlayer
+        // silent primer that we used with ao_audiounit are all gone.
         applyAudioSessionConfig()
 
         // Pre-populate a placeholder now-playing dict + register
@@ -641,7 +595,6 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         // picks nobody and doesn't re-evaluate on later writes.
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            self.startSilentPrimerOnMain()
             self.registerRemoteCommandsIfNeeded()
             if self.nowPlayingBase == nil {
                 var base: [String: Any] = [:]
@@ -654,37 +607,68 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
             }
         }
 
-        // Defaults matching the Rust backend:
-        // - `videotoolbox-copy` is required. Straight `videotoolbox`
-        //   (zero-copy) appears to negotiate correctly in mpv's logs
-        //   but the libmpv GLES renderer has two confirmed bugs:
-        //     1. nv12 (8-bit) frames render with a heavy green tint
-        //        (color-conversion matrix is wrong). Same bug the Rust
-        //        commit 51fec4ba hit.
-        //     2. p010 (10-bit HDR) frames are rejected by the VT↔GL
-        //        interop — "Format unsupported. Initializing texture
-        //        for hardware decoding failed" — and fall back to a
-        //        blue/black screen. The GLES interop doesn't register
-        //        the p010 pixel format.
-        //   Both are resolved by forcing `-copy`, which makes mpv do
-        //   the CPU readback + re-upload in a color-correct path.
-        //   The true zero-copy win needs the Metal backend (`vo=gpu`
-        //   / `gpu-next` + CAMetalLayer), not a hwdec flag change.
-        // - vid=no until MpvGLView.attach() plugs in the render context;
-        //   otherwise libmpv tries to open a window on its own.
-        _ = mpv_set_option_string(mpv, "hwdec", "videotoolbox-copy")
-        _ = mpv_set_option_string(mpv, "vo", "libmpv")
+        // Phase 1B render path: vo=gpu-next + libplacebo's pl_renderer
+        // running over MoltenVK, writing into IOSurface-backed VkImages
+        // we own. The fork-side ra_ctx (`gpu-context=libmpvvk`) imports
+        // our VkInstance/VkDevice — see `MpvMetalView.attach` →
+        // `mpv_libmpv_apple_set_pool`. hwdec=videotoolbox is true
+        // zero-copy now that the Vulkan path imports VideoToolbox's
+        // CVPixelBuffer-backed IOSurfaces directly via
+        // VK_EXT_metal_objects. Lifecycle: mpv_create → set options →
+        // mpv_initialize → idle until MpvMetalView.attach() registers
+        // the pool → JS calls load(streamUrl). Until attach lands, mpv
+        // has nothing to do.
+        _ = mpv_set_option_string(mpv, "vo", "gpu-next")
+        _ = mpv_set_option_string(mpv, "gpu-api", "vulkan")
+        _ = mpv_set_option_string(mpv, "gpu-context", "libmpvvk")
+        // Hardware decode via VideoToolbox, zero-copy to libplacebo via
+        // PL_HANDLE_IOSURFACE. Requires the patched MoltenVK 1.4.1
+        // (apple/patches/MoltenVK/0001-iosurface-plane-heuristic.patch)
+        // which selects the matching IOSurface plane by dimensions —
+        // upstream `VkImportMetalIOSurfaceInfoEXT` has no plane field.
+        _ = mpv_set_option_string(mpv, "hwdec", "videotoolbox")
+
+        // Phase 3 — HDR10 + HLG. Static libplacebo options applied
+        // unconditionally; SDR streams ignore them. With these set,
+        // HDR10/HLG sources are tone-mapped via libplacebo's BT.2390
+        // soft-knee curve into our current SDR BGRA output IOSurfaces.
+        // Steps 2-4 (video-params observer, AVSBDL EDR metadata, P010
+        // ring rebuild) follow.
+        //
+        //  - target-trc=auto / target-prim=auto: let libplacebo pick the
+        //    output transfer/primaries from the active swapchain. Our
+        //    pool is BT.709 SDR today; HDR rebuild flips this.
+        //  - tone-mapping=bt.2390: the standardised soft-knee tone-map.
+        //    Closest to "neutral" of the available curves; safe default.
+        //  - hdr-compute-peak=yes: dynamic peak detection per scene
+        //    (compute-shader-driven). Better than static peak metadata
+        //    for content with inaccurate MaxCLL.
+        //  - gamut-mapping-mode=perceptual: BT.2020 → BT.709 gamut
+        //    compression that preserves saturation relations rather
+        //    than hard-clipping.
+        _ = mpv_set_option_string(mpv, "target-trc", "auto")
+        _ = mpv_set_option_string(mpv, "target-prim", "auto")
+        _ = mpv_set_option_string(mpv, "tone-mapping", "bt.2390")
+        _ = mpv_set_option_string(mpv, "hdr-compute-peak", "yes")
+        _ = mpv_set_option_string(mpv, "gamut-mapping-mode", "perceptual")
+
+        // Phase 1B lifecycle gate: with `vid=no` mpv parses tracks during
+        // loadfile but doesn't initialise the video output. The view's
+        // `attach()` flips this back to `auto` once the consumer-side
+        // pool is registered with libmpvvk — only then does mpv create
+        // its vo and read our pool. Without this gate, JS code that
+        // calls `load()` before the React view mounts would trigger
+        // vo_create with an empty pool ("no headless image pool
+        // registered" → vo init fails → no video).
         _ = mpv_set_option_string(mpv, "vid", "no")
-        // Start paused — prevents mpv from freezing when vo=libmpv
-        // has no render context yet. MpvGLView.attach() unpauses
-        // after creating the render context.
-        _ = mpv_set_option_string(mpv, "pause", "yes")
         _ = mpv_set_option_string(mpv, "audio-device", "auto")
-        // CRITICAL: prevents ao_audiounit from OR'ing
-        // `AVAudioSessionCategoryOptionMixWithOthers` into our session
-        // when audio output starts. A mixable session is explicitly
-        // disqualified from Now Playing by iOS. See note above.
-        _ = mpv_set_option_string(mpv, "audio-exclusive", "yes")
+        // Phase 2: ao_avfoundation first (AVSampleBufferAudioRenderer +
+        // AVSampleBufferRenderSynchronizer — respects the
+        // .longFormVideo session configured above). audiounit kept as a
+        // bitstream-passthrough fallback: ao_avfoundation rejects SPDIF
+        // (per upstream `af_fmt_is_spdif` check), and mpv falls through
+        // to the next AO in the list for those sessions.
+        _ = mpv_set_option_string(mpv, "ao", "avfoundation,audiounit")
         _ = mpv_set_option_string(mpv, "cache", "yes")
         _ = mpv_set_option_string(mpv, "demuxer-max-bytes", "50MiB")
         _ = mpv_set_option_string(mpv, "demuxer-max-back-bytes", "25MiB")
@@ -694,6 +678,11 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
             return nil
         }
 
+        // Surface mpv core + libplacebo logs through MPV_EVENT_LOG_MESSAGE so
+        // failures inside `mpv_render_context_create` (e.g. libplacebo's
+        // "Missing device feature: ...") aren't swallowed silently.
+        _ = mpv_request_log_messages(mpv, "v")
+
         // Observe the properties we surface as events.
         mpv_observe_property(mpv, 1, "playback-time", MPV_FORMAT_DOUBLE)
         mpv_observe_property(mpv, 2, "duration", MPV_FORMAT_DOUBLE)
@@ -702,11 +691,14 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         mpv_observe_property(mpv, 5, "track-list", MPV_FORMAT_NODE)
         mpv_observe_property(mpv, 6, "paused-for-cache", MPV_FORMAT_FLAG)
         mpv_observe_property(mpv, 7, "cache-buffering-state", MPV_FORMAT_DOUBLE)
-        // audio-params fires whenever the AO is (re)configured; we
-        // use it as our signal to re-apply AVAudioSession since
-        // ao_audiounit has just called setCategory(.playback, options:)
-        // which drops routeSharingPolicy back to .default.
-        mpv_observe_property(mpv, 8, "audio-params", MPV_FORMAT_NODE)
+        // Phase 3 step 2: detect HDR mode from the source. video-params is a
+        // node-map; we read `gamma` (transfer) and `primaries` to classify the
+        // source as SDR / HDR10 / HLG. Step 3 uses this to flip
+        // wantsExtendedDynamicRangeContent + EDRMetadata on AVSBDL.
+        mpv_observe_property(mpv, 8, "video-params", MPV_FORMAT_NODE)
+        // (Phase 2 removed the audio-params observer — ao_avfoundation
+        // doesn't clobber routeSharingPolicy on restart, so the
+        // re-apply trick that ao_audiounit needed is gone.)
 
         // Background thread pumping `mpv_wait_event`. Phase 3b may
         // merge this with the render context's update callback.
@@ -737,10 +729,8 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
         bufferingSubs.removeAll()
         remoteSubs.removeAll()
         nowPlayingBase = nil
-        DispatchQueue.main.async { [weak self] in
+        DispatchQueue.main.async {
             MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
-            self?.silentPrimer?.stop()
-            self?.silentPrimer = nil
         }
         if remoteCommandsRegistered {
             let center = MPRemoteCommandCenter.shared()
@@ -774,6 +764,12 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
                 fireState(.ended)
             case MPV_EVENT_PROPERTY_CHANGE:
                 handlePropertyChange(event)
+            case MPV_EVENT_LOG_MESSAGE:
+                if let raw = event.data?.assumingMemoryBound(to: mpv_event_log_message.self) {
+                    let prefix = raw.pointee.prefix.map { String(cString: $0) } ?? "?"
+                    let text = raw.pointee.text.map { String(cString: $0) } ?? ""
+                    NSLog("[mpv:%@] %@", prefix, text.trimmingCharacters(in: .whitespacesAndNewlines))
+                }
             default:
                 break
             }
@@ -827,7 +823,6 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
             isPausedNow = paused
             let state: MpvPlaybackState = paused ? .paused : .playing
             fireState(state)
-            setSilentPrimerPlaying(!paused)
             refreshNowPlaying()
             syncViewPlaybackState()
 
@@ -848,17 +843,32 @@ public final class HybridNativeMpv: HybridNativeMpvSpec {
             let snap = bufferingSubs
             for s in snap { s.callback(progress < 1.0, progress) }
 
-        case "audio-params":
-            // ao_audiounit just (re)configured AVAudioSession with its
-            // own 3-arg setCategory, blowing away our .longFormVideo
-            // policy. Re-apply ours so the Now Playing / MediaRemote
-            // pipeline sees us as a long-form-video candidate.
-            applyAudioSessionConfig()
-            os_log("re-applied AVAudioSession after audio-params change",
-                   log: npLog, type: .default)
+        case "video-params":
+            guard prop.format == MPV_FORMAT_NODE, let valPtr = prop.data else { return }
+            let node = valPtr.assumingMemoryBound(to: mpv_node.self).pointee
+            let fields = readMpvNodeMapStrings(node, keys: ["gamma", "primaries"])
+            let mode = MpvHdrMode.classify(
+                transfer: fields["gamma"], primaries: fields["primaries"]
+            )
+            applyHdrMode(mode)
 
         default:
             break
+        }
+    }
+
+    /// Cached so we only forward when the classification actually changes —
+    /// `video-params` fires on every reconfig and most events are no-ops for
+    /// HDR mode (e.g. resolution changes, deinterlacer toggles).
+    private var currentHdrMode: MpvHdrMode = .sdr
+
+    private func applyHdrMode(_ mode: MpvHdrMode) {
+        guard mode != currentHdrMode else { return }
+        currentHdrMode = mode
+        NSLog("[HybridNativeMpv] hdr mode → %@", String(describing: mode))
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            for view in self.attachedViews { view.applyHdrMode(mode) }
         }
     }
 
