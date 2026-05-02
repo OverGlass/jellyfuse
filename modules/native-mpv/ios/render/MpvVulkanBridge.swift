@@ -483,6 +483,12 @@ final class MpvVulkanBridge {
         // Silicon AGX engages lossless compression for BGRA8 RT
         // textures when YES — the IOSurface bytes come back
         // compressed and AVSBDL displays them as a uniform clear.
+        //
+        // MoltenVK 1.4.1 verified — re-validate before bumping the
+        // pinned MoltenVK in the fork (apple/scripts/deps-lock.json).
+        // The whole `VkImportMetalTextureInfoEXT` short-circuit relies
+        // on `MVKImage::newMTLTextureDescriptor` not being reached;
+        // future versions may rework that path.
         desc.allowGPUOptimizedContents = false
         guard let tex = metalDevice.makeTexture(
             descriptor: desc, iosurface: ioSurface, plane: 0

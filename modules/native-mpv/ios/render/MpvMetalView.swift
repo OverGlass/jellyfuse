@@ -92,11 +92,13 @@ final class MpvMetalView: UIView {
     private var poolSelfRetainer: Unmanaged<MpvMetalView>?
 
     // ── Round-robin acquire ──────────────────────────────────────────
-    /// Atomic counter. `acquire` increments, mods by ringSize. With a
-    /// ring of 3 and `swapchain_depth = 2`, the swapchain holds at
-    /// most two images at a time and AVSBDL always has the third —
-    /// no extra free-list bookkeeping needed.
+    /// Counter incremented once per `acquire` callback (mpv render
+    /// thread). Protected by `ringIndexLock` rather than an atomic
+    /// because `OSAtomicIncrement32` is deprecated since iOS 10 and
+    /// the per-frame lock cost is below noise. Wraps at Int32.max via
+    /// `&+`; `Int32.modulo` handles the resulting negatives.
     private var nextRingIndex: Int32 = 0
+    private var ringIndexLock = os_unfair_lock()
 
     // ── PiP scrubber timebase ───────────────────────────────────────
     private var controlTimebase: CMTimebase?
@@ -107,7 +109,6 @@ final class MpvMetalView: UIView {
     // ── PiP controller ──────────────────────────────────────────────
     private var pipController: AVPictureInPictureController?
     private var isPipActive: Bool = false
-    private var isAppInBackground: Bool = false
 
     // MARK: Init
 
@@ -118,7 +119,6 @@ final class MpvMetalView: UIView {
         self.metalDevice = dev
         super.init(frame: frame)
         configureView()
-        registerLifecycleObservers()
     }
 
     required init?(coder: NSCoder) {
@@ -126,7 +126,6 @@ final class MpvMetalView: UIView {
         self.metalDevice = dev
         super.init(coder: coder)
         configureView()
-        registerLifecycleObservers()
     }
 
     private func configureView() {
@@ -154,17 +153,6 @@ final class MpvMetalView: UIView {
             sampleBufferLayer.toneMapMode = .automatic
         }
     }
-
-    private func registerLifecycleObservers() {
-        let nc = NotificationCenter.default
-        nc.addObserver(self, selector: #selector(handleDidEnterBackground),
-                       name: UIApplication.didEnterBackgroundNotification, object: nil)
-        nc.addObserver(self, selector: #selector(handleWillEnterForeground),
-                       name: UIApplication.willEnterForegroundNotification, object: nil)
-    }
-
-    @objc private func handleDidEnterBackground() { isAppInBackground = true }
-    @objc private func handleWillEnterForeground() { isAppInBackground = false }
 
     // MARK: Attach / detach
 
@@ -354,9 +342,12 @@ final class MpvMetalView: UIView {
 
     // MARK: Acquire / present (called from mpv's render thread)
 
-    /// Round-robin pick. Atomic CAS-free monotonic counter mod ringSize.
+    /// Round-robin pick. Lock-protected monotonic counter mod ringSize.
     private func acquire(outIndex: UnsafeMutablePointer<Int32>) -> Bool {
-        let next = OSAtomicIncrement32(&nextRingIndex)
+        os_unfair_lock_lock(&ringIndexLock)
+        nextRingIndex = nextRingIndex &+ 1
+        let next = nextRingIndex
+        os_unfair_lock_unlock(&ringIndexLock)
         outIndex.pointee = next.modulo(Int32(MpvMetalView.poolSize))
         return true
     }
@@ -615,7 +606,10 @@ final class MpvMetalView: UIView {
     /// when the display engine briefly stalls) can saturate a 3-slot
     /// ring and cause torn frames. 5 slots gives enough headroom for
     /// 24 fps 4K HEVC10 + tone-map without observable glitches.
-    /// Memory cost: 5 × 1920 × 1080 × 4 ≈ 40 MB.
+    /// Memory cost: 5 × 1920 × 1080 × 8 (RGBA16F) ≈ 80 MB resident per
+    /// player. Verified to absorb 4K HDR jitter at 24 fps; review if
+    /// dropping to 3 or 4 once a per-frame VkFence replaces
+    /// vkDeviceWaitIdle in `present()`.
     static let poolSize: Int = 5
 
     private static let acquireCb: (
@@ -757,8 +751,9 @@ extension MpvMetalView: AVPictureInPictureSampleBufferPlaybackDelegate {
 
 private extension Int32 {
     /// Always-positive modulo. Swift's `%` returns negative results for
-    /// negative dividends; OSAtomicIncrement32 wraps to negative once
-    /// it overflows past Int32.max, so we need this guard.
+    /// negative dividends; the ring counter uses `&+` overflow which
+    /// wraps to negative once it crosses Int32.max, so we need this
+    /// guard.
     func modulo(_ n: Int32) -> Int32 {
         let r = self % n
         return r < 0 ? r + n : r
