@@ -1,0 +1,219 @@
+/* Jellyfuse Design Tokens
+ * Ported from packages/theme/src/index.ts
+ *
+ * Single dark theme. Built on the One Dark Pro Darker palette so the
+ * UI recedes and cover art / video dominates the page. The accent is
+ * One Dark blue; semantic colors map to One Dark syntax red / green /
+ * orange.
+ *
+ * No light mode. No theme switching. The whole app lives in the dark.
+ */
+
+@font-face {
+  font-family: "JetBrainsMono Nerd Font Mono";
+  src: url("./fonts/JetBrainsMonoNerdFontMono-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  /* ── Surfaces ─────────────────────────────────────────────────── */
+  --jf-background: #1e2227; /* page / app background */
+  --jf-surface: #23272e; /* cards, sheets, inputs */
+  --jf-surface-elevated: #2c313c; /* hover / pressed card */
+  --jf-border: #181a1f; /* hairline divider */
+
+  /* ── Text ─────────────────────────────────────────────────────── */
+  --jf-text-primary: #d7dae0; /* 12.6:1 on background — AAA */
+  --jf-text-secondary: #abb2bf; /* 8.2:1 — AAA */
+  --jf-text-muted: #7f848e; /* comments / muted labels */
+
+  /* ── Brand / CTA — One Dark blue ─────────────────────────────── */
+  --jf-accent: #61afef; /* hyperlinks, focus rings, primary CTA bg */
+  --jf-accent-pressed: #528bff; /* pressed / active accent */
+  --jf-accent-contrast: #181a1f; /* foreground on accent surfaces */
+
+  /* ── Semantic — One Dark syntax ──────────────────────────────── */
+  --jf-success: #98c379; /* green — string literals */
+  --jf-warning: #d19a66; /* orange — constants / numbers */
+  --jf-danger: #e06c75; /* red — keywords / tags */
+
+  /* ── Profile palette (8 hues, FNV-1a hashed) ─────────────────── */
+  --jf-profile-1: #e06c75; /* red */
+  --jf-profile-2: #d19a66; /* orange */
+  --jf-profile-3: #e5c07b; /* yellow */
+  --jf-profile-4: #98c379; /* green */
+  --jf-profile-5: #56b6c2; /* cyan */
+  --jf-profile-6: #61afef; /* blue */
+  --jf-profile-7: #c678dd; /* purple */
+  --jf-profile-8: #be5046; /* atom dark red */
+
+  /* ── Neutrals (compose with alpha for glass) ─────────────────── */
+  --jf-white: #ffffff;
+  --jf-black: #000000;
+
+  /* ── Spacing scale (dp) ──────────────────────────────────────── */
+  --jf-space-xs: 4px;
+  --jf-space-sm: 8px;
+  --jf-space-md: 16px;
+  --jf-space-lg: 24px;
+  --jf-space-xl: 32px;
+  --jf-space-xxl: 48px;
+
+  /* ── Type scale (dp) ─────────────────────────────────────────── */
+  --jf-text-caption: 12px;
+  --jf-text-body: 14px;
+  --jf-text-body-large: 16px;
+  --jf-text-subtitle: 18px;
+  --jf-text-title: 24px;
+  --jf-text-display: 32px;
+
+  /* ── Font weights ────────────────────────────────────────────── */
+  --jf-weight-regular: 400;
+  --jf-weight-medium: 500;
+  --jf-weight-semibold: 600;
+  --jf-weight-bold: 700;
+
+  /* ── Font families ───────────────────────────────────────────── */
+  /* The app uses the iOS / Android system font for all UI text.
+   * Body type is San Francisco on iOS, Roboto on Android, system
+   * sans-serif on web. The icon font is JetBrainsMono Nerd Font Mono
+   * (FontAwesome codepoint range, `nf-fa-*`). */
+  --jf-font-system:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto,
+    system-ui, sans-serif;
+  --jf-font-icon: "JetBrainsMono Nerd Font Mono", monospace;
+
+  /* ── Radii ───────────────────────────────────────────────────── */
+  --jf-radius-none: 0;
+  --jf-radius-sm: 4px;
+  --jf-radius-md: 8px;
+  --jf-radius-lg: 16px;
+  --jf-radius-full: 9999px;
+
+  /* ── Opacity tokens ──────────────────────────────────────────── */
+  --jf-opacity-pressed: 0.75;
+  --jf-opacity-disabled: 0.5;
+  --jf-opacity-overlay: 0.4;
+  --jf-opacity-alpha10: 0.1;
+  --jf-opacity-alpha15: 0.15;
+  --jf-opacity-alpha20: 0.2;
+  --jf-opacity-alpha45: 0.45;
+  --jf-opacity-alpha50: 0.5;
+
+  /* ── Animation durations ─────────────────────────────────────── */
+  --jf-duration-fast: 120ms;
+  --jf-duration-normal: 200ms;
+  --jf-duration-slow: 320ms;
+
+  /* ── Layout ──────────────────────────────────────────────────── */
+  --jf-layout-screen-pt: 24px;
+  --jf-layout-screen-px: 24px; /* phone is 16; tablet 24; desktop 32 */
+  --jf-layout-screen-pb: 32px;
+  --jf-layout-heading-to-body: 32px;
+  --jf-layout-button-h: 52px;
+
+  /* ── Glass (UIVisualEffectView dark @ ~80) ───────────────────── */
+  --jf-glass-bg: rgba(30, 34, 39, 0.55);
+  --jf-glass-border: rgba(255, 255, 255, 0.12);
+}
+
+/* ─────────────────────────────────────────────────────────────────
+ * Semantic role classes — map to the role a token plays, not its
+ * raw value. Use these on real markup so the token system can shift
+ * underneath without touching every consumer.
+ * ─────────────────────────────────────────────────────────────── */
+
+body,
+.jf-page {
+  background: var(--jf-background);
+  color: var(--jf-text-primary);
+  font-family: var(--jf-font-system);
+  font-size: var(--jf-text-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Display — 32 / bold. Reserved for the auth screen heading and the
+ * media-card poster fallback glyph. Never used as an inline title. */
+.jf-display {
+  font-size: var(--jf-text-display);
+  font-weight: var(--jf-weight-bold);
+  color: var(--jf-text-primary);
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+
+/* Title — 24 / bold. Screen-level heading inside the auth header. */
+.jf-title {
+  font-size: var(--jf-text-title);
+  font-weight: var(--jf-weight-bold);
+  color: var(--jf-text-primary);
+  line-height: 1.2;
+}
+
+/* Subtitle — 18 / semibold. Shelf row title ("Continue Watching"). */
+.jf-subtitle {
+  font-size: var(--jf-text-subtitle);
+  font-weight: var(--jf-weight-semibold);
+  color: var(--jf-text-primary);
+  line-height: 1.3;
+}
+
+/* Body large — 16 / regular. The default reading size. Compact
+ * header titles use this with bold weight; auth subtitles, server
+ * URL labels, and form input text all sit here. */
+.jf-body-large {
+  font-size: var(--jf-text-body-large);
+  font-weight: var(--jf-weight-regular);
+  color: var(--jf-text-primary);
+  line-height: 1.4;
+}
+
+/* Body — 14 / regular. Card titles, secondary action labels, error
+ * messages. Most of the app text sits here, not at body-large. */
+.jf-body {
+  font-size: var(--jf-text-body);
+  font-weight: var(--jf-weight-regular);
+  color: var(--jf-text-primary);
+  line-height: 1.4;
+}
+
+/* Caption — 12 / medium. Card subtitles ("S2 · E4"), section labels,
+ * "See all" link, "Change server", error banners. */
+.jf-caption {
+  font-size: var(--jf-text-caption);
+  font-weight: var(--jf-weight-medium);
+  color: var(--jf-text-muted);
+  line-height: 1.35;
+}
+
+/* Eyebrow — caption upper-cased and tracked, used for form field
+ * labels ("USERNAME", "PASSWORD") and section section-header rows
+ * inside the search list ("IN YOUR LIBRARY"). */
+.jf-eyebrow {
+  font-size: var(--jf-text-caption);
+  font-weight: var(--jf-weight-semibold);
+  color: var(--jf-text-muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Mono / icon — JetBrainsMono Nerd Font Mono. FontAwesome codepoints
+ * via `\u{F015}` etc. Renders as a Text glyph, never an SVG. */
+.jf-icon {
+  font-family: var(--jf-font-icon);
+  font-feature-settings: "liga" off;
+  display: inline-block;
+  line-height: 1;
+}
+
+/* Pressed / disabled state helpers (parity with RN press callback) */
+.jf-pressed {
+  opacity: var(--jf-opacity-pressed);
+}
+.jf-disabled {
+  opacity: var(--jf-opacity-disabled);
+  pointer-events: none;
+}
