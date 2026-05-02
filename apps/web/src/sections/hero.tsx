@@ -57,7 +57,7 @@ export function Hero() {
         <Reveal delay={3} style={styles.ctaWrap}>
           <View style={styles.ctaRow}>
             <CtaButton
-              href={SITE.repoUrl}
+              href={SITE.testFlightUrl}
               label={HERO.primaryCta}
               variant="primary"
               target="_blank"

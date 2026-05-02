@@ -12,6 +12,9 @@ export const SITE = {
   issuesUrl: "https://github.com/OverGlass/jellyfuse/issues",
   releasesUrl: "https://github.com/OverGlass/jellyfuse/releases",
   licenseUrl: "https://github.com/OverGlass/jellyfuse/blob/main/LICENSE",
+  // v1.0 is currently in App Store review; the public TestFlight is the
+  // honest CTA target until the listing goes live.
+  testFlightUrl: "https://testflight.apple.com/join/rz3vDx8g",
 } as const;
 
 export const NAV_LINKS = [
@@ -21,12 +24,12 @@ export const NAV_LINKS = [
 ] as const;
 
 export const HERO = {
-  eyebrow: "Jellyfin client · v1.0",
+  eyebrow: "Jellyfin client · v1.0 in TestFlight",
   // Two-line headline: line two carries a gradient-clipped style.
   headlineLine1: "One Jellyfin client.",
   headlineLine2: "Every screen.",
   lead: "Watch your library. Request what's next. From your phone to the living room — same app, same player, no subscription.",
-  primaryCta: "Get on iPhone",
+  primaryCta: "Join the TestFlight",
   secondaryCta: "Star on GitHub",
   meta: ["Free & open source", "No telemetry", "GPL-3.0 licensed"],
 } as const;
@@ -113,10 +116,10 @@ export const PLATFORM_STEPS: readonly {
   {
     id: "iphone",
     status: "shipping",
-    statusLabel: "Shipping",
+    statusLabel: "Public TestFlight",
     headlineLine1: "iPhone.",
     headlineLine2: "The one you carry.",
-    body: "The flagship. Every feature lands here first — native MPV, offline downloads, blended search, requests, multi-user. Already in the App Store.",
+    body: "The flagship. Every feature lands here first — native MPV, offline downloads, blended search, requests, multi-user. v1.0 is in App Store review; the public TestFlight is open today.",
     bullets: [
       "Background audio & PiP",
       "Offline downloads with resume",
@@ -248,7 +251,7 @@ export const FAQ = {
     },
     {
       q: "Is it really free?",
-      a: "Yes. GPL-3.0 licensed, no paywall, no telemetry. Build it yourself from source, or grab the latest release through the App Store.",
+      a: "Yes. GPL-3.0 licensed, no paywall, no telemetry. Build it yourself from source, join the public TestFlight, or wait for the App Store listing once review clears.",
     },
     {
       q: "What about HDR and Dolby Vision?",
