@@ -119,9 +119,6 @@ final class MpvMetalView: UIView {
         super.init(frame: frame)
         configureView()
         registerLifecycleObservers()
-        let p = Unmanaged.passUnretained(self).toOpaque()
-        let rc = CFGetRetainCount(self)
-        print("[MpvMetalView][lifecycle] init \(p) rc=\(rc)")
     }
 
     required init?(coder: NSCoder) {
@@ -299,11 +296,6 @@ final class MpvMetalView: UIView {
         // Retain self for the C callback bridge. Released in tearDown.
         let retainer = Unmanaged.passRetained(self)
         poolSelfRetainer = retainer
-        do {
-            let p = Unmanaged.passUnretained(self).toOpaque()
-            let lifecycleRC = CFGetRetainCount(self)
-            print("[MpvMetalView][lifecycle] attach passRetained self=\(p) rc=\(lifecycleRC)")
-        }
 
         // Phase 3 step 3+4: BT.2020 / PQ output. libplacebo emits
         // PQ-encoded values into the RGBA16F pool. Both SDR and HDR
@@ -472,13 +464,14 @@ final class MpvMetalView: UIView {
 
     private var didTearDown = false
     private func tearDown() {
-        let p = Unmanaged.passUnretained(self).toOpaque()
-        let rc = CFGetRetainCount(self)
-        print("[MpvMetalView][lifecycle] tearDown enter \(p) rc=\(rc) already=\(didTearDown)")
         // Both `detachPlayer()` (JS-driven) and Fabric's `onDropView()`
-        // call into us via `detach()`. Guard against the second call —
-        // doing the work twice over-releases the destroyCb retainer
-        // (the documented nav-back UAF, root-caused 2026-05-02).
+        // route through `metalView.detach()`. Guard against the second
+        // call — doing the work twice over-releases the destroyCb
+        // retainer, which manifests later as `EXC_BAD_ACCESS` in the
+        // Fabric wrapper's `cxx_destruct +76` during nav-back. Each
+        // tearDown does its own clear_pool/stop sequence; running it
+        // twice is harmless for mpv but the retainer release is the
+        // bug.
         if didTearDown { return }
         didTearDown = true
         // Set up the sync handoff before issuing clear_pool/stop. The
@@ -583,8 +576,6 @@ final class MpvMetalView: UIView {
     }
 
     deinit {
-        let p = Unmanaged.passUnretained(self).toOpaque()
-        print("[MpvMetalView][lifecycle] deinit \(p)")
         NotificationCenter.default.removeObserver(self)
         // Heavy resources are deferred from tearDown to here — by the
         // time `deinit` fires, mpv has already released its +1 retain
@@ -660,12 +651,12 @@ final class MpvMetalView: UIView {
     ) = { priv in
         guard let priv = priv else { return }
         let view = Unmanaged<MpvMetalView>.fromOpaque(priv).takeUnretainedValue()
-        let rc = CFGetRetainCount(view)
-        print("[MpvMetalView][lifecycle] destroyCb fire \(priv) rc-before=\(rc)")
         // Nil the retainer ivar so a second tearDown call's ELSE branch
         // doesn't try to release the same +1 retain again (double-free).
         // A second tearDown can happen because both `detachPlayer()` and
         // Fabric's `onDropView()` dispatch through `metalView.detach()`.
+        // The `didTearDown` guard in tearDown handles this too — keeping
+        // both belts and braces.
         view.poolSelfRetainer = nil
         view.destroySemaphore?.signal()
         Unmanaged<MpvMetalView>.fromOpaque(priv).release()

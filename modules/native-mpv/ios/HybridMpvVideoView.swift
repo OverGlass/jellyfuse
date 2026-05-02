@@ -24,17 +24,6 @@ public final class HybridMpvVideoView: HybridMpvVideoViewSpec {
 
     public required override init() {
         super.init()
-        let s = Unmanaged.passUnretained(self).toOpaque()
-        let m = Unmanaged.passUnretained(metalView).toOpaque()
-        let rc = CFGetRetainCount(metalView)
-        print("[HybridMpvVideoView][lifecycle] init self=\(s) metalView=\(m) mvRC=\(rc)")
-    }
-
-    deinit {
-        let s = Unmanaged.passUnretained(self).toOpaque()
-        let m = Unmanaged.passUnretained(metalView).toOpaque()
-        let rc = CFGetRetainCount(metalView)
-        print("[HybridMpvVideoView][lifecycle] deinit self=\(s) metalView=\(m) mvRC=\(rc)")
     }
 
     public func attachPlayer(instanceId: String) throws {
@@ -60,16 +49,10 @@ public final class HybridMpvVideoView: HybridMpvVideoViewSpec {
     }
 
     public func detachPlayer() throws {
-        let s = Unmanaged.passUnretained(self).toOpaque()
-        let rc = CFGetRetainCount(metalView)
-        print("[HybridMpvVideoView][lifecycle] detachPlayer self=\(s) mvRC=\(rc)")
         metalView.detach()
     }
 
     public func onDropView() {
-        let s = Unmanaged.passUnretained(self).toOpaque()
-        let rc = CFGetRetainCount(metalView)
-        print("[HybridMpvVideoView][lifecycle] onDropView self=\(s) mvRC=\(rc)")
         metalView.detach()
     }
 }
