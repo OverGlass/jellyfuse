@@ -6,6 +6,8 @@
   "scripts": {
     "start": "expo start --web --port 8083",
     "build:web": "expo export -p web",
+    "build:preview": "WEB_BASE_URL='' expo export -p web",
+    "preview": "WEB_BASE_URL='' expo export -p web && bunx serve dist --listen 3000",
     "serve": "bunx serve dist --listen 3000",
     "typecheck": "tsgo -p tsconfig.json --noEmit",
     "lint": "expo lint",
