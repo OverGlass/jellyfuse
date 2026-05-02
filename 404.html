@@ -1,0 +1,652 @@
+<!DOCTYPE html><html  lang="en"><head><title data-rh="true">Jellyfuse — One Jellyfin client. Every screen.</title><meta data-rh="true" name="description" content="A Jellyfin client built around MPV. Watch your library, request what&#x27;s next, on every screen you own."/><meta data-rh="true" name="theme-color" content="#1e2227"/><meta data-rh="true" name="color-scheme" content="dark"/><meta data-rh="true" property="og:title" content="Jellyfuse — One Jellyfin client. Every screen."/><meta data-rh="true" property="og:description" content="A Jellyfin client built around MPV. Watch your library, request what&#x27;s next, on every screen you own."/><meta data-rh="true" property="og:type" content="website"/><meta data-rh="true" name="twitter:card" content="summary_large_image"/><link data-rh="true" rel="icon" href="favicon.png"/><style data-rh="true" >
+  html, body { margin: 0; padding: 0; }
+  html, body, #root {
+    background-color: #1e2227;
+    height: auto !important;
+    min-height: 100% !important;
+  }
+  body {
+    color: #d7dae0;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    overflow-y: auto !important;
+    overflow-x: hidden;
+  }
+  #root { display: block !important; min-height: 100vh; }
+  *::selection { background: #61afef; color: #181a1f; }
+  a:focus-visible, button:focus-visible, summary:focus-visible, [role="button"]:focus-visible, [role="link"]:focus-visible {
+    outline: 2px solid #61afef;
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+  @keyframes drift {
+    0%   { transform: translate3d(-2%, -1%, 0) scale(1); }
+    50%  { transform: translate3d(3%, 2%, 0) scale(1.04); }
+    100% { transform: translate3d(-3%, 3%, 0) scale(1.02); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+</style><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no"/><meta http-equiv="X-UA-Compatible" content="IE=edge"/><style id="expo-reset">#root,body,html{height:100%}body{overflow:hidden}#root{display:flex}</style><style id="react-native-stylesheet">[stylesheet-group="0"]{}
+body{margin:0;}
+button::-moz-focus-inner,input::-moz-focus-inner{border:0;padding:0;}
+html{-ms-text-size-adjust:100%;-webkit-text-size-adjust:100%;-webkit-tap-highlight-color:rgba(0,0,0,0);}
+input::-webkit-search-cancel-button,input::-webkit-search-decoration,input::-webkit-search-results-button,input::-webkit-search-results-decoration{display:none;}
+[stylesheet-group="1"]{}
+.css-11aywtz{-moz-appearance:textfield;-webkit-appearance:none;background-color:rgba(0,0,0,0.00);border-bottom-left-radius:0px;border-bottom-right-radius:0px;border-top-left-radius:0px;border-top-right-radius:0px;border:0 solid black;box-sizing:border-box;font:14px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;margin:0px;padding:0px;resize:none;}
+.css-146c3p1{background-color:rgba(0,0,0,0.00);border:0 solid black;box-sizing:border-box;color:rgba(0,0,0,1.00);display:inline;font:14px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;list-style:none;margin:0px;padding:0px;position:relative;text-align:start;text-decoration:none;white-space:pre-wrap;word-wrap:break-word;}
+.css-1jxf684{background-color:rgba(0,0,0,0.00);border:0 solid black;box-sizing:border-box;color:inherit;display:inline;font:inherit;list-style:none;margin:0px;padding:0px;position:relative;text-align:inherit;text-decoration:none;white-space:inherit;word-wrap:break-word;}
+.css-9pa8cd{bottom:0px;height:100%;left:0px;opacity:0;position:absolute;right:0px;top:0px;width:100%;z-index:-1;}
+.css-g5y9jx{align-content:flex-start;align-items:stretch;background-color:rgba(0,0,0,0.00);border:0 solid black;box-sizing:border-box;display:flex;flex-basis:auto;flex-direction:column;flex-shrink:0;list-style:none;margin:0px;min-height:0px;min-width:0px;padding:0px;position:relative;text-decoration:none;z-index:0;}
+[stylesheet-group="2"]{}
+.r-10mflh3{padding:clamp(28px, 4vw, 48px);}
+.r-11mg6pl{border-bottom-color:rgba(255,255,255,1.00);border-left-color:rgba(255,255,255,1.00);border-right-color:rgba(255,255,255,1.00);border-top-color:rgba(255,255,255,1.00);}
+.r-13awgt0{flex:1;}
+.r-15hsw4v{border-bottom-color:rgba(215,218,224,0.18);border-left-color:rgba(215,218,224,0.18);border-right-color:rgba(215,218,224,0.18);border-top-color:rgba(215,218,224,0.18);}
+.r-1867qdf{border-bottom-left-radius:16px;border-bottom-right-radius:16px;border-top-left-radius:16px;border-top-right-radius:16px;}
+.r-1awa8pu{border-bottom-color:rgba(101,119,134,1.00);border-left-color:rgba(101,119,134,1.00);border-right-color:rgba(101,119,134,1.00);border-top-color:rgba(101,119,134,1.00);}
+.r-1bq2mok{margin:3px;}
+.r-1c57tb8{border-bottom-left-radius:34px;border-bottom-right-radius:34px;border-top-left-radius:34px;border-top-right-radius:34px;}
+.r-1d4xg89{border-bottom-color:rgba(170,184,194,1.00);border-left-color:rgba(170,184,194,1.00);border-right-color:rgba(170,184,194,1.00);border-top-color:rgba(170,184,194,1.00);}
+.r-1d9yedq{flex:0;}
+.r-1dzdj1l{border-bottom-left-radius:10px;border-bottom-right-radius:10px;border-top-left-radius:10px;border-top-right-radius:10px;}
+.r-1f0042m{border-bottom-left-radius:5px;border-bottom-right-radius:5px;border-top-left-radius:5px;border-top-right-radius:5px;}
+.r-1gwj3me{border-bottom-color:rgba(215,218,224,0.22);border-left-color:rgba(215,218,224,0.22);border-right-color:rgba(215,218,224,0.22);border-top-color:rgba(215,218,224,0.22);}
+.r-1j16mh1{border-bottom-left-radius:100%;border-bottom-right-radius:100%;border-top-left-radius:100%;border-top-right-radius:100%;}
+.r-1jkafct{border-bottom-left-radius:2px;border-bottom-right-radius:2px;border-top-left-radius:2px;border-top-right-radius:2px;}
+.r-1jyn79y{border-bottom-color:rgba(0,150,136,1.00);border-left-color:rgba(0,150,136,1.00);border-right-color:rgba(0,150,136,1.00);border-top-color:rgba(0,150,136,1.00);}
+.r-1llaxt6{border-bottom-left-radius:30px;border-bottom-right-radius:30px;border-top-left-radius:30px;border-top-right-radius:30px;}
+.r-1m7mu0x{border-bottom-left-radius:36px;border-bottom-right-radius:36px;border-top-left-radius:36px;border-top-right-radius:36px;}
+.r-1pcd2l5{padding:20px;}
+.r-1phboty{border-bottom-style:solid;border-left-style:solid;border-right-style:solid;border-top-style:solid;}
+.r-1px6drs{border-bottom-left-radius:7px;border-bottom-right-radius:7px;border-top-left-radius:7px;border-top-right-radius:7px;}
+.r-1q9bdsx{border-bottom-left-radius:12px;border-bottom-right-radius:12px;border-top-left-radius:12px;border-top-right-radius:12px;}
+.r-1qsk4np{overflow-x:clip;overflow-y:clip;}
+.r-1rf8fdq{border-bottom-width:1.5px;border-left-width:1.5px;border-right-width:1.5px;border-top-width:1.5px;}
+.r-1rp614l{border-bottom-color:rgba(127,132,142,1.00);border-left-color:rgba(127,132,142,1.00);border-right-color:rgba(127,132,142,1.00);border-top-color:rgba(127,132,142,1.00);}
+.r-1rvyss1{border-bottom-color:rgba(255,255,255,0.20);border-left-color:rgba(255,255,255,0.20);border-right-color:rgba(255,255,255,0.20);border-top-color:rgba(255,255,255,0.20);}
+.r-1sp51qo{padding:10px;}
+.r-1udh08x{overflow-x:hidden;overflow-y:hidden;}
+.r-1ueegzj{border-bottom-left-radius:44px;border-bottom-right-radius:44px;border-top-left-radius:44px;border-top-right-radius:44px;}
+.r-1uu6nss{padding:5px;}
+.r-1wh0n7e{border-bottom-left-radius:42px;border-bottom-right-radius:42px;border-top-left-radius:42px;border-top-right-radius:42px;}
+.r-1xfd6ze{border-bottom-left-radius:8px;border-bottom-right-radius:8px;border-top-left-radius:8px;border-top-right-radius:8px;}
+.r-2kxcpj{inset:0px;}
+.r-42olwf{border-bottom-color:rgba(0,0,0,0.00);border-left-color:rgba(0,0,0,0.00);border-right-color:rgba(0,0,0,0.00);border-top-color:rgba(0,0,0,0.00);}
+.r-494qqr{padding:32px;}
+.r-4a18lf{border-bottom-color:rgba(255,0,0,1.00);border-left-color:rgba(255,0,0,1.00);border-right-color:rgba(255,0,0,1.00);border-top-color:rgba(255,0,0,1.00);}
+.r-4zvafu{border-bottom-left-radius:26px;border-bottom-right-radius:26px;border-top-left-radius:26px;border-top-right-radius:26px;}
+.r-60ke3l{border-bottom-color:rgba(0,128,0,1.00);border-left-color:rgba(0,128,0,1.00);border-right-color:rgba(0,128,0,1.00);border-top-color:rgba(0,128,0,1.00);}
+.r-6413gk{display:grid;}
+.r-6koalj{display:flex;}
+.r-6t2glc{border-bottom-left-radius:40px;border-bottom-right-radius:40px;border-top-left-radius:40px;border-top-right-radius:40px;}
+.r-9x6qib{border-bottom-color:rgba(204,214,221,1.00);border-left-color:rgba(204,214,221,1.00);border-right-color:rgba(204,214,221,1.00);border-top-color:rgba(204,214,221,1.00);}
+.r-cdmcib{border-bottom-left-radius:3px;border-bottom-right-radius:3px;border-top-left-radius:3px;border-top-right-radius:3px;}
+.r-cpet4d{border-bottom-left-radius:999px;border-bottom-right-radius:999px;border-top-left-radius:999px;border-top-right-radius:999px;}
+.r-crgep1{margin:0px;}
+.r-d045u9{border-bottom-width:2px;border-left-width:2px;border-right-width:2px;border-top-width:2px;}
+.r-d23pfw{padding:24px;}
+.r-dta0w2{flex:2;}
+.r-edyy15{padding:8px;}
+.r-fx7oqy{border-bottom-color:rgba(0,0,255,1.00);border-left-color:rgba(0,0,255,1.00);border-right-color:rgba(0,0,255,1.00);border-top-color:rgba(0,0,255,1.00);}
+.r-it2ac2{border-bottom-color:rgba(215,218,224,0.08);border-left-color:rgba(215,218,224,0.08);border-right-color:rgba(215,218,224,0.08);border-top-color:rgba(215,218,224,0.08);}
+.r-kdyh1x{border-bottom-left-radius:6px;border-bottom-right-radius:6px;border-top-left-radius:6px;border-top-right-radius:6px;}
+.r-krxsd3{display:-webkit-box;}
+.r-nsbfu8{padding:16px;}
+.r-qpntkw{padding:6px;}
+.r-qwd59z{border-bottom-left-radius:1px;border-bottom-right-radius:1px;border-top-left-radius:1px;border-top-right-radius:1px;}
+.r-rs99b7{border-bottom-width:1px;border-left-width:1px;border-right-width:1px;border-top-width:1px;}
+.r-sdzlij{border-bottom-left-radius:9999px;border-bottom-right-radius:9999px;border-top-left-radius:9999px;border-top-right-radius:9999px;}
+.r-t23y2h{border-bottom-left-radius:14px;border-bottom-right-radius:14px;border-top-left-radius:14px;border-top-right-radius:14px;}
+.r-t60dpp{padding:0px;}
+.r-voibxv{border-bottom-color:rgba(215,218,224,1.00);border-left-color:rgba(215,218,224,1.00);border-right-color:rgba(215,218,224,1.00);border-top-color:rgba(215,218,224,1.00);}
+.r-wg31gx{border-bottom-color:rgba(49,53,56,1.00);border-left-color:rgba(49,53,56,1.00);border-right-color:rgba(49,53,56,1.00);border-top-color:rgba(49,53,56,1.00);}
+.r-xoduu5{display:inline-flex;}
+.r-xyw6el{padding:12px;}
+.r-ywje51{margin:auto;}
+.r-z2wwpe{border-bottom-left-radius:4px;border-bottom-right-radius:4px;border-top-left-radius:4px;border-top-right-radius:4px;}
+[stylesheet-group="2.1"]{}
+.r-11f147o{padding-bottom:8px;padding-top:8px;}
+.r-1559e4e{padding-bottom:2px;padding-top:2px;}
+.r-17q4wm6{margin-left:5px;margin-right:5px;}
+.r-184id4b{margin-bottom:12px;margin-top:12px;}
+.r-18c5d7m{padding-left:6px;padding-right:6px;}
+.r-1c8wk46{padding-bottom:48px;padding-top:48px;}
+.r-1d7mnkm{padding-bottom:15px;padding-top:15px;}
+.r-1e084wi{padding-left:0px;padding-right:0px;}
+.r-1fkl15p{padding-left:32px;padding-right:32px;}
+.r-1ml3abn{padding-bottom:14px;padding-top:14px;}
+.r-1mmae3n{padding-bottom:12px;padding-top:12px;}
+.r-1ntr0p{padding-left:5px;padding-right:5px;}
+.r-1rsorjc{padding-left:36px;padding-right:36px;}
+.r-1ubuhtd{padding-left:10px;padding-right:10px;}
+.r-1yd117h{padding-bottom:7px;padding-top:7px;}
+.r-3o4zer{padding-left:12px;padding-right:12px;}
+.r-3pj75a{padding-left:16px;padding-right:16px;}
+.r-cnw61z{padding-bottom:4px;padding-top:4px;}
+.r-cxgwc0{padding-left:24px;padding-right:24px;}
+.r-e4572k{padding-left:26px;padding-right:26px;}
+.r-f8sm7e{margin-left:auto;margin-right:auto;}
+.r-fqkl7q{padding-left:clamp(20px, 4vw, 48px);padding-right:clamp(20px, 4vw, 48px);}
+.r-gu64tb{padding-left:14px;padding-right:14px;}
+.r-h0bjfv{padding-left:22px;padding-right:22px;}
+.r-is05cd{padding-left:8px;padding-right:8px;}
+.r-jdiy1a{margin-left:11px;margin-right:11px;}
+.r-jusfrs{margin-left:12px;margin-right:12px;}
+.r-n5f61p{margin-bottom:3px;margin-top:3px;}
+.r-n7gxbd{padding-left:4px;padding-right:4px;}
+.r-rehuqn{padding-bottom:5px;padding-top:5px;}
+.r-u9wvl5{padding-left:20px;padding-right:20px;}
+.r-ugi1tw{padding-left:5%;padding-right:5%;}
+.r-vuvdlw{padding-bottom:6px;padding-top:6px;}
+.r-w7s2jr{padding-bottom:16px;padding-top:16px;}
+.r-ytbthy{padding-bottom:10px;padding-top:10px;}
+.r-zo2zu6{padding-bottom:24px;padding-top:24px;}
+[stylesheet-group="2.2"]{}
+.r-10s2tm5{left:0%;}
+.r-16o8guy{right:100%;}
+.r-1a11zyx{margin-right:12px;}
+.r-1cwvpvk{margin-left:12px;}
+.r-1e97lx8{margin-right:3px;}
+.r-1euzeng{padding-left:24px;}
+.r-1g4tz6n{margin-right:-14.5px;}
+.r-1h31txp{padding-right:16px;}
+.r-1lhn9r{margin-left:-14.5px;}
+.r-1sqnqi2{margin-left:3px;}
+.r-1vl2501{padding-right:24px;}
+.r-9mo606{margin-right:10px;}
+.r-c59us2{left:-3px;}
+.r-dqe1q{right:0%;}
+.r-qb41rp{margin-right:5px;}
+.r-rci37q{left:100%;}
+.r-uhung1{margin-left:10px;}
+.r-vpmibe{right:-3px;}
+.r-w67my2{padding-left:16px;}
+.r-wizibn{margin-left:5px;}
+[stylesheet-group="3"]{}
+.r-102a1xi{width:clamp(220px, 26vw, 300px);}
+.r-105ug2t{pointer-events:auto!important;}
+.r-10fj5tc{margin-top:48px;}
+.r-10g5efv{width:4px;}
+.r-10htey3{outline-offset:3px;}
+.r-10ptun7{height:16px;}
+.r-10q7xpm{top:-40%;}
+.r-10sqg0u{margin-bottom:1px;}
+.r-10v3vxq{transform:scaleX(-1);}
+.r-10x49cs{font-size:10px;}
+.r-10xqauy{padding-top:env(safe-area-inset-top);}
+.r-10yl4k{line-height:21px;}
+.r-118y304{height:76vh;}
+.r-11c0sde{margin-top:24px;}
+.r-11j9u27{visibility:hidden;}
+.r-11mpjr4{background-color:rgba(223,223,223,1.00);}
+.r-11udlyb{background-color:rgba(0,150,136,1.00);}
+.r-11v9fek{min-width:180px;}
+.r-11yh6sk{overflow-x:hidden;}
+.r-12c3ph5{opacity:0.4;}
+.r-12f6czt{top:17px;}
+.r-12rgx7y{width:7px;}
+.r-12vffkv>* {pointer-events:auto;}
+.r-12vffkv{pointer-events:none!important;}
+.r-135wba7{line-height:24px;}
+.r-13aq9py{animation-name:r-1iq689l;}
+.r-13h23lk{letter-spacing:-0.01em;}
+.r-13hvk1q{line-height:22.1px;}
+.r-13l2t4g{border-right-width:1px;}
+.r-13na2be{max-width:44ch;}
+.r-13qz1uu{width:100%;}
+.r-13tjlyg{transition-duration:0.1s;}
+.r-13wfysu{-webkit-text-decoration-line:none;text-decoration-line:none;}
+.r-13yce4e{border-top-width:0px;}
+.r-1444osr{margin-top:18px;}
+.r-1472mwg{height:24px;}
+.r-14gqq1x{margin-top:4px;}
+.r-14l27qf{min-width:280px;}
+.r-14lw9ot{background-color:rgba(255,255,255,1.00);}
+.r-14muugr{background-image:linear-gradient(90deg, rgba(30,34,39,0.85), rgba(30,34,39,0.2) 60%, transparent), linear-gradient(135deg, #1a3a55, #2a1a3a);}
+.r-14qw7yl{transition-duration:200ms;}
+.r-14sbq61{background-color:rgba(33,150,243,1.00);}
+.r-150rngu{-webkit-overflow-scrolling:touch;}
+.r-159xmpb{transform:translateY(8px);}
+.r-15d164r{margin-bottom:10px;}
+.r-16cbgwe{letter-spacing:-0.02em;}
+.r-16eto9q{width:12px;}
+.r-16iroic{padding-top:clamp(64px, 10vw, 144px);}
+.r-16y2uox{flex-grow:1;}
+.r-16yuluz{max-width:56ch;}
+.r-173mn98{align-self:flex-end;}
+.r-173mzie{transform:scaleY(-1);}
+.r-1777fci{justify-content:center;}
+.r-17bb2tj{animation-duration:0.75s;}
+.r-17h9ebh{max-width:48ch;}
+.r-17leim2{background-repeat:repeat;}
+.r-17s6mgv{justify-content:flex-end;}
+.r-17tb59b{opacity:0.7;}
+.r-17tloay{opacity:0.6;}
+.r-17u3ijr{background-color:rgba(155,161,166,0.27);}
+.r-184en5c{z-index:1;}
+.r-18ctlrj{transform:rotate(0deg);}
+.r-18kxxzh{flex-grow:0;}
+.r-18nhz7w{top:-3px;}
+.r-18u1ve8{color:rgba(255,255,255,0.40);}
+.r-18u37iz{flex-direction:row;}
+.r-18yzcnr{height:22px;}
+.r-19554kt{width:90px;}
+.r-1968qo6{line-height:24.8px;}
+.r-19be1kl{padding-bottom:clamp(56px, 8vw, 112px);}
+.r-19brta4{min-height:calc(100vh - 56px);}
+.r-19i43ro{margin-top:-1px;}
+.r-19oahor{font-size:64px;}
+.r-19wmn03{width:20px;}
+.r-19z077z{touch-action:none;}
+.r-1a2p6p6{-webkit-text-decoration-style:solid;text-decoration-style:solid;}
+.r-1abnn5w{animation-play-state:paused;}
+.r-1acpoxo{width:36px;}
+.r-1aockid{width:40px;}
+.r-1asp59d{min-height:80vh;}
+.r-1awozwy{align-items:center;}
+.r-1ay1djp{animation-duration:1s;}
+.r-1b43r93{font-size:14px;}
+.r-1b6v2at{background-image:linear-gradient(180deg, #23272e 0%, #1b1e24 50%, #0e1014 100%);}
+.r-1b6yd1w{font-size:19px;}
+.r-1b807mt{background-image:linear-gradient(180deg, #d7dae0, #61afef 130%);}
+.r-1b8bd59{-moz-transition-property:transform, opacity;-webkit-transition-property:transform, opacity;transition-property:transform, opacity;}
+.r-1blnp2b{width:72px;}
+.r-1bymd8e{margin-top:2px;}
+.r-1c6unfx{forced-color-adjust:none;}
+.r-1c85bru{width:270px;}
+.r-1cad53l{margin-bottom:14px;}
+.r-1cmwbt1{gap:8px;}
+.r-1cwl3u0{line-height:16px;}
+.r-1czx8yk{letter-spacing:0.45px;}
+.r-1d2f490{left:0px;}
+.r-1d5kdc7{flex-direction:column-reverse;}
+.r-1ddef8g{-webkit-text-decoration-line:underline;text-decoration-line:underline;}
+.r-1dernwh{height:70%;}
+.r-1dl2dmu{-webkit-background-clip:text;}
+.r-1dpffg5{color:rgba(171,178,191,1.00);}
+.r-1dpl46z{border-bottom-right-radius:4px;}
+.r-1e1dj83{margin-left:-5%;}
+.r-1e4w4m1{aspect-ratio:1.3333333333333333;}
+.r-1e6yznf{margin-top:-6px;}
+.r-1e7qy43{background-color:rgba(97,175,239,0.18);}
+.r-1ei5mc7{cursor:inherit;}
+.r-1enofrn{font-size:12px;}
+.r-1euycsn{flex-direction:row-reverse;}
+.r-1ewcgjf{box-shadow:0px 1px 3px rgba(0,0,0,0.5);}
+.r-1ey2ra3{width:70px;}
+.r-1f12m5q{left:14px;}
+.r-1fasyvk{background-image:linear-gradient(90deg, #d7dae0 70%, transparent 70%);}
+.r-1fdih9r{gap:24px;}
+.r-1ff274t{text-align:right;}
+.r-1g40b8q{z-index:3;}
+.r-1g80hic{opacity:0.8;}
+.r-1g9dr39{width:38%;}
+.r-1gcrm54{font-size:clamp(22px, 2vw, 28px);}
+.r-1ge9hsw{max-width:960px;}
+.r-1ghxqbu{font-variant:tabular-nums;}
+.r-1gkfh8e{font-size:11px;}
+.r-1glkqn6{width:80px;}
+.r-1h0z5md{justify-content:flex-start;}
+.r-1h116bs{-webkit-clip-path:polygon(0 80%, 22% 80%, 22% 60%, 44% 60%, 44% 38%, 66% 38%, 66% 18%, 88% 18%, 88% 0, 100% 0, 100% 100%, 0 100%);clip-path:polygon(0 80%, 22% 80%, 22% 60%, 44% 60%, 44% 38%, 66% 38%, 66% 18%, 88% 18%, 88% 0, 100% 0, 100% 100%, 0 100%);}
+.r-1habvwh{align-items:flex-start;}
+.r-1hk78en{width:clamp(380px, 48vw, 600px);}
+.r-1hlnpa{height:3px;}
+.r-1i10wst{font-size:18px;}
+.r-1i4gbh2{max-width:42ch;}
+.r-1i6wzkk{-moz-transition-property:opacity;-webkit-transition-property:opacity;transition-property:opacity;}
+.r-1i71y14{gap:14px;}
+.r-1ib9hmf{background-image:linear-gradient(180deg, rgba(14,16,20,0) 0%, rgba(14,16,20,0.55) 60%, #1e2227 100%);}
+.r-1ifxtd0{margin-bottom:16px;}
+.r-1ikidpy{letter-spacing:0.5px;}
+.r-1iln25a{word-wrap:normal;}
+.r-1inkyih{font-size:17px;}
+.r-1iud8zs{height:50px;}
+.r-1iusvr4{flex-basis:0px;}
+.r-1iww7jx{width:28px;}
+.r-1janqcz{width:16px;}
+.r-1jkjb{margin-left:8px;}
+.r-1k6xs49{gap:clamp(32px, 6vw, 80px);}
+.r-1kb76zh{margin-right:8px;}
+.r-1kfrs79{font-weight:600;}
+.r-1kihuf0{align-self:center;}
+.r-1l7z4oj{padding-bottom:16px;}
+.r-1ld3bg{top:-4px;}
+.r-1ldzwu0{animation-timing-function:linear;}
+.r-1loqt21{cursor:pointer;}
+.r-1lquqo5{padding-top:clamp(48px, 7vw, 96px);}
+.r-1lybf8k{letter-spacing:1.1px;}
+.r-1m04atk{padding-left:8px;}
+.r-1m5ggi5{background-color:rgba(255,255,255,0.04);}
+.r-1mcorv5{width:14px;}
+.r-1mlwlqe{flex-basis:auto;}
+.r-1mnmksy{letter-spacing:-0.06em;}
+.r-1mrlafo{background-position:0;}
+.r-1muvv40{animation-iteration-count:infinite;}
+.r-1mwlp6a{height:56px;}
+.r-1ndaa2h{background-color:rgba(24,26,31,1.00);}
+.r-1niwhzg{background-color:rgba(0,0,0,0.00);}
+.r-1nlw0im{bottom:8px;}
+.r-1no09lo{margin-top:28px;}
+.r-1nxhmzv{margin-bottom:28px;}
+.r-1ny4l3l{outline-style:none;}
+.r-1ocf4r9{scroll-snap-type:y mandatory;}
+.r-1onu96p{border-curve:continuous;}
+.r-1op0lh7{letter-spacing:0.24px;}
+.r-1or9b2r{height:10px;}
+.r-1oszu61{align-items:stretch;}
+.r-1otgn73{touch-action:manipulation;}
+.r-1ozj4bg{font-family:"SF Pro Display", -apple-system, "Inter", system-ui, sans-serif;}
+.r-1ozsyd3{height:7px;}
+.r-1p0dtai{bottom:0px;}
+.r-1p3v3qi{transform:translateX(-55px);}
+.r-1p7hrbg{box-shadow:0 0 0 1.5px #2a2f37, 0 1px 0 0 #3a4049 inset, 0 40px 80px -20px rgba(0,0,0,0.6), 0 80px 160px -40px rgba(97,175,239,0.18);}
+.r-1pdhgt{background-color:rgba(35,39,46,1.00);}
+.r-1peese0{margin-bottom:24px;}
+.r-1pexk7n{height:14px;}
+.r-1pi2tsx{height:100%;}
+.r-1pimmuf{aspect-ratio:1.6;}
+.r-1pm8pkb{font-family:Courier;}
+.r-1ps2hv2{font-size:clamp(36px, 4.5vw, 64px);}
+.r-1q142lx{flex-shrink:0;}
+.r-1q67n59{letter-spacing:1.3px;}
+.r-1qd0xha{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+.r-1qfoi16{padding-right:10px;}
+.r-1qulhi1{animation-name:r-1pzkwqh;}
+.r-1qxgiz6{top:12vh;}
+.r-1r4fvd0{color:rgba(82,169,255,1.00);}
+.r-1r74h94{left:8px;}
+.r-1r8g8re{height:36px;}
+.r-1rabcb8{max-width:18ch;}
+.r-1rnoaur{overflow-y:auto;}
+.r-1rx1vvx{-webkit-background-clip:text;background-clip:text;}
+.r-1sed4dd{border-top-right-radius:14px;}
+.r-1sm3ja2{color:rgba(24,26,31,1.00);}
+.r-1sofzug{top:11px;}
+.r-1sp8lnq{max-width:1200px;}
+.r-1ssbvtb{gap:12px;}
+.r-1st3usi{color:rgba(127,132,142,1.00);}
+.r-1sxrcry{background-size:auto;}
+.r-1t07wo7{border-top-color:rgba(215,218,224,0.08);}
+.r-1t7uo4s{object-fit:cover;}
+.r-1t7zxhp{width:9px;}
+.r-1te17ho{padding-top:96px;}
+.r-1tihekz{outline-style:solid;}
+.r-1tp5e5a{width:110%;}
+.r-1tqf1nf{aspect-ratio:0.47368421052631576;}
+.r-1ts5s6y{aspect-ratio:1.7777777777777777;}
+.r-1tsgycv{letter-spacing:-0.22px;}
+.r-1u5l2ug{background-color:rgba(127,132,142,1.00);}
+.r-1uagazm{line-height:1.15;}
+.r-1udbk01{text-overflow:ellipsis;}
+.r-1ugchlj{height:44px;}
+.r-1ui5ee8{font-size:32px;}
+.r-1uy9biq{color:rgba(215,218,224,1.00);}
+.r-1v1z2uz{margin-top:32px;}
+.r-1v2oles{top:50%;}
+.r-1vamr63{max-width:720px;}
+.r-1vmdywc{grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));}
+.r-1vokwdq{background-image:linear-gradient(135deg, #355c7d, #2c3e50);}
+.r-1vr29t4{font-weight:800;}
+.r-1w6e6rj{flex-wrap:wrap;}
+.r-1waoohj{right:-20%;}
+.r-1wbh5a2{flex-shrink:1;}
+.r-1wh2hl7{border-bottom-left-radius:6px;}
+.r-1wie9e7{background-image:linear-gradient(180deg, #d7dae0 0%, #abb2bf 130%);}
+.r-1wjxbdk{letter-spacing:1.6800000000000002px;}
+.r-1wngk81{max-width:980px;}
+.r-1wpzndr{transform:translateY(0px);}
+.r-1wtj0ep{justify-content:space-between;}
+.r-1wyvozj{left:50%;}
+.r-1wyyakw{z-index:-1;}
+.r-1wzrnnt{margin-top:16px;}
+.r-1x93onp{width:110px;}
+.r-1xcajam{position:fixed;}
+.r-1xnzce8{-moz-user-select:text;-webkit-user-select:text;user-select:text;}
+.r-1xpe3eb{transform:rotate(90deg);}
+.r-1xpsq9i{box-shadow:0px 3px 3px rgba(0, 0, 0, 0.33);}
+.r-1xzupcd{width:13px;}
+.r-1y50co4{min-width:240px;}
+.r-1yef0xd{animation-name:r-11cv4x;}
+.r-1ygmrgt{padding-top:24px;}
+.r-1yxedwg{top:8px;}
+.r-2eszeu::-webkit-scrollbar{display:none}
+.r-2eszeu{scrollbar-width:none;}
+.r-30o5oe{-moz-appearance:none;-ms-appearance:none;-webkit-appearance:none;appearance:none;}
+.r-356f0p{letter-spacing:0.35px;}
+.r-3jl36a{gap:clamp(16px, 2.5vw, 36px);}
+.r-3mc0re{right:8px;}
+.r-3ncq8g{letter-spacing:-0.025em;}
+.r-3s2u2q{white-space:nowrap;}
+.r-3ysnhw{letter-spacing:-0.17px;}
+.r-417010{z-index:0;}
+.r-48tf01{line-height:24.7px;}
+.r-4gszlv{background-size:cover;}
+.r-4rt2lv{font-size:clamp(18px, 1.5vw, 22px);}
+.r-4v7adb{height:5px;}
+.r-53jvew{color:rgba(152,195,121,1.00);}
+.r-580adz{gap:5px;}
+.r-5kkj8d{border-top-width:1px;}
+.r-5oul0u{margin-bottom:8px;}
+.r-5qlx7g{border-bottom-left-radius:8px;}
+.r-5soawk{width:10px;}
+.r-5w41ue{line-height:1.45;}
+.r-5xr8s6{outline-width:2px;}
+.r-60vfwk{min-width:1px;}
+.r-633pao>* {pointer-events:none;}
+.r-633pao{pointer-events:none!important;}
+.r-65s87v{font-size:clamp(28px, 3.5vw, 44px);}
+.r-6dt33c{opacity:1;}
+.r-6gpygo{margin-bottom:12px;}
+.r-6t5ypu{border-bottom-left-radius:4px;}
+.r-6taxm2:-ms-input-placeholder{color:var(--placeholderTextColor);opacity:1;}
+.r-6taxm2::-moz-placeholder{color:var(--placeholderTextColor);opacity:1;}
+.r-6taxm2::-webkit-input-placeholder{color:var(--placeholderTextColor);opacity:1;}
+.r-6taxm2::placeholder{color:var(--placeholderTextColor);opacity:1;}
+.r-726pan{width:31px;}
+.r-76blku{height:21px;}
+.r-7cikom{font-size:inherit;}
+.r-7na9ed{background-color:rgba(255,255,255,0.02);}
+.r-7q8q6z{cursor:default;}
+.r-7y7eek{width:16%;}
+.r-8akbws{-webkit-box-orient:vertical;}
+.r-8ay8q1{letter-spacing:0.1px;}
+.r-8b1cjr{-webkit-text-fill-color:transparent;}
+.r-8fdsdq{z-index:4;}
+.r-92hvpk{background-color:rgba(30,34,39,1.00);}
+.r-93pacp{line-height:1.05;}
+.r-97e31f{padding-bottom:env(safe-area-inset-bottom);}
+.r-9aw3ui{gap:4px;}
+.r-9daxd3{animation-duration:250ms;}
+.r-9dcw1g{width:320px;}
+.r-9iso6{vertical-align:middle;}
+.r-a023e6{font-size:15px;}
+.r-a8ghvy{line-height:1.5;}
+.r-adyw6z{font-size:20px;}
+.r-agouwx{transform:translateZ(0);}
+.r-ah5dr5>* {pointer-events:none;}
+.r-ah5dr5{pointer-events:auto!important;}
+.r-aruset{font-weight:200;}
+.r-b2787t{background-color:rgba(97,175,239,0.12);}
+.r-b88u0q{font-weight:700;}
+.r-bcqeeo{min-width:0px;}
+.r-bi4vy9{transform:translateY(100%);}
+.r-bnwqim{position:relative;}
+.r-bqytpi{border-top-left-radius:14px;}
+.r-bt1l66{min-height:20px;}
+.r-buy8e9{overflow-y:hidden;}
+.r-bv2aro{padding-left:env(safe-area-inset-left);}
+.r-c68hjy{color:rgba(161,161,161,1.00);}
+.r-cpa5s6{scroll-snap-align:start;}
+.r-cqee49{color:rgba(0,0,0,1.00);}
+.r-dc5v9k{height:80%;}
+.r-dkge59{background-color:rgba(170,184,194,1.00);}
+.r-dnmrzs{max-width:100%;}
+.r-dukzhd{right:14px;}
+.r-e65k4z{border-bottom-right-radius:6px;}
+.r-e6ktq0{gap:32px;}
+.r-eafdt9{transition-duration:0.15s;}
+.r-ebwn4k{animation-name:r-q67da2;}
+.r-ehq7j7{background-size:contain;}
+.r-ek4qxl{min-width:260px;}
+.r-eljoum{line-height:1;}
+.r-epq5cr{height:2px;}
+.r-eqz5dr{flex-direction:column;}
+.r-eu3ka{height:40px;}
+.r-eug0r7{transform:scale(1);}
+.r-evnaw{font-size:22px;}
+.r-ey96lj{white-space:pre-line;}
+.r-f1odvy{margin-bottom:6px;}
+.r-f40wkz{background-color:rgba(152,195,121,0.18);}
+.r-f4gmv6{gap:16px;}
+.r-fdjqy7{text-align:left;}
+.r-fpub7{color:rgba(0,0,0,0.00);}
+.r-g1ag95{font-size:clamp(160px, 22vw, 320px);}
+.r-g3mlsw{animation-name:r-t2lo5v;}
+.r-gb3yrc{border-bottom-color:rgba(215,218,224,0.08);}
+.r-gc9cf3{background-color:rgba(215,218,224,1.00);}
+.r-ghxds0{transform:translateY(0%);}
+.r-gtdqiz{position:-webkit-sticky;position:sticky;}
+.r-h0d30l{height:28px;}
+.r-h7zev3{top:14px;}
+.r-hdaws3{height:4px;}
+.r-hfoyft{background-image:linear-gradient(180deg, #2a2f37, #1a1d22);}
+.r-hi2o0l{max-width:64ch;}
+.r-hnxvie{width:60%;}
+.r-hxflta{padding-right:env(safe-area-inset-right);}
+.r-i57ct1{background-color:rgba(44,49,60,1.00);}
+.r-icoktb{opacity:0.5;}
+.r-ipm5af{top:0px;}
+.r-j0ydsv{transform:translateX(-6px);}
+.r-j9nkxj{border-bottom-right-radius:12px;}
+.r-jpx62j{line-height:19.599999999999998px;}
+.r-jwli3a{color:rgba(255,255,255,1.00);}
+.r-k200y{align-self:flex-start;}
+.r-k5y9r7{height:9px;}
+.r-kemksi{background-color:rgba(0,0,0,1.00);}
+.r-keui8w{border-bottom-left-radius:12px;}
+.r-kizejy{color:rgba(155,161,166,1.00);}
+.r-knv0ih{margin-top:8px;}
+.r-krydu7{max-width:36ch;}
+.r-l71dzp{margin-top:14px;}
+.r-ldnaw6{margin-bottom:96px;}
+.r-leqjx2{animation-timing-function:cubic-bezier(0.215, 0.61, 0.355, 1);}
+.r-lltvgl{overflow-x:auto;}
+.r-lnti55{background-color:rgba(26,29,34,1.00);}
+.r-lpb231{height:168px;}
+.r-lq8hd6{aspect-ratio:0.46153846153846156;}
+.r-lrsllp{width:24px;}
+.r-lrvibr{-moz-user-select:none;-webkit-user-select:none;user-select:none;}
+.r-m2pi6t{padding-left:4px;}
+.r-m5arl1{width:2px;}
+.r-majxgm{font-weight:500;}
+.r-mfh4gg{scroll-snap-type:x mandatory;}
+.r-mhe3cw{z-index:10;}
+.r-mkx4ke{color:rgba(97,175,239,1.00);}
+.r-ml3ovg{padding-bottom:clamp(48px, 7vw, 96px);}
+.r-mro3nb{background-color:rgba(21,23,24,1.00);}
+.r-msqjqc{background-color:rgba(171,178,191,1.00);}
+.r-n4qkvd{width:clamp(420px, 55vw, 680px);}
+.r-n6v787{font-size:13px;}
+.r-ndvcnb{border-bottom-width:0px;}
+.r-nefvgx{border-bottom-right-radius:8px;}
+.r-o4n3w5{width:23px;}
+.r-oaqifd{-moz-transition-property:transform, background-color, border-color, color;-webkit-transition-property:transform, background-color, border-color, color;transition-property:transform, background-color, border-color, color;}
+.r-obd0qt{align-items:flex-end;}
+.r-ofmjrv{width:min(420px, 100%);}
+.r-ojf8lh{gap:6px;}
+.r-orgf3d{opacity:0;}
+.r-oucylx{border-bottom-color:rgba(0,0,0,0.00);}
+.r-pgkzmz{font-size:clamp(48px, 6.5vw, 96px);}
+.r-q2krsz{gap:clamp(32px, 6vw, 96px);}
+.r-q4m81j{text-align:center;}
+.r-qfi6ny{top:30000px;}
+.r-qhcjju{padding-top:clamp(56px, 8vw, 112px);}
+.r-qklmqi{border-bottom-width:1px;}
+.r-qn3fzs{padding-bottom:24px;}
+.r-qqjak8{font-size:9px;}
+.r-qrrmpc{width:clamp(420px, 55vw, 660px);}
+.r-qtbb1w{left:11px;}
+.r-qtfnoi{min-width:140px;}
+.r-qyww28{border-right-color:rgba(215,218,224,0.08);}
+.r-r4o3hb{background-image:radial-gradient(circle, rgba(97,175,239,0.10), transparent 60%);}
+.r-rjixqe{line-height:20px;}
+.r-rki7wi{bottom:12px;}
+.r-rs94m5{background-image:url("data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiIHN0YW5kYWxvbmU9Im5vIj8+CjxzdmcKICAgeG1sbnM6ZGM9Imh0dHA6Ly9wdXJsLm9yZy9kYy9lbGVtZW50cy8xLjEvIgogICB4bWxuczpjYz0iaHR0cDovL2NyZWF0aXZlY29tbW9ucy5vcmcvbnMjIgogICB4bWxuczpyZGY9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkvMDIvMjItcmRmLXN5bnRheC1ucyMiCiAgIHhtbG5zOnN2Zz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciCiAgIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIKICAgdmVyc2lvbj0iMS4xIgogICB2aWV3Qm94PSIwIDAgMSAxIgogICBwcmVzZXJ2ZUFzcGVjdFJhdGlvPSJ4TWluWU1pbiBtZWV0Ij4KICA8cGF0aAogICAgIGQ9Ik0gMC4wNDAzODA1OSwwLjYyNjc3NjcgMC4xNDY0NDY2MSwwLjUyMDcxMDY4IDAuNDI5Mjg5MzIsMC44MDM1NTMzOSAwLjMyMzIyMzMsMC45MDk2MTk0MSB6IE0gMC4yMTcxNTcyOSwwLjgwMzU1MzM5IDAuODUzNTUzMzksMC4xNjcxNTcyOSAwLjk1OTYxOTQxLDAuMjczMjIzMyAwLjMyMzIyMzMsMC45MDk2MTk0MSB6IgogICAgIGlkPSJyZWN0Mzc4MCIKICAgICBzdHlsZT0iZmlsbDojZmZmZmZmO2ZpbGwtb3BhY2l0eToxO3N0cm9rZTpub25lIiAvPgo8L3N2Zz4K");}
+.r-rxcuwo{height:50%;}
+.r-s62m2j{animation-timing-function:cubic-bezier(0.47, 0, 0.745, 0.715);}
+.r-s65cn9{outline-color:#61afef;}
+.r-sa2ff0{min-height:100vh;}
+.r-sfbmgh{z-index:9999;}
+.r-sga3zk{height:64px;}
+.r-so7y2g{line-height:64px;}
+.r-sywj37{padding-bottom:clamp(64px, 10vw, 144px);}
+.r-talcsl{transform:translateX(-45px);}
+.r-tbmifm{height:12px;}
+.r-tcguuw{background-color:rgba(13,15,18,1.00);}
+.r-tmq7zw{background-image:linear-gradient(180deg, transparent 50%, #1e2227 100%);}
+.r-tsynxw{text-transform:uppercase;}
+.r-u3fm8u{line-height:0.85;}
+.r-u6sd8q{background-repeat:no-repeat;}
+.r-u8s1d{position:absolute;}
+.r-u92y06{background-color:rgba(255,165,0,1.00);}
+.r-uaa2di{gap:10px;}
+.r-ubezar{font-size:16px;}
+.r-ue893e{aspect-ratio:0.5294117647058824;}
+.r-uho16t{font-size:34px;}
+.r-umhwjx{height:42%;}
+.r-usgzl9{width:44px;}
+.r-vacyoi{padding-bottom:64px;}
+.r-van48c{caret-color:transparent;}
+.r-vboj7i{top:-7px;}
+.r-vvn4in{background-position:center;}
+.r-vw2c0b{font-weight:bold;}
+.r-vz2u4x{height:11px;}
+.r-wfqgy4{transition-duration:100ms;}
+.r-wi6arp{padding-bottom:96px;}
+.r-wpvfa7{width:clamp(220px, 26vw, 310px);}
+.r-ws9h79{left:4px;}
+.r-x11e5r{font-family:SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;}
+.r-x3cy2q{background-size:100% 100%;}
+.r-xd6kpl{padding-bottom:8px;}
+.r-xn48z5{transform:scale(0.96);}
+.r-xragbq{letter-spacing:-0.035em;}
+.r-xx3c9p{animation-name:r-imtty0;}
+.r-y7v2we{background-color:rgba(32,36,37,1.00);}
+.r-yc9v9c{width:22px;}
+.r-yepxxq{background-color:rgba(97,175,239,1.00);}
+.r-yny3pl{padding-top:clamp(64px, 9vw, 120px);}
+.r-z80fyv{height:20px;}
+.r-zchlnj{right:0px;}
+.r-zd98yo{margin-bottom:32px;}
+.r-zexzw7{transform:scale(1.05);}
+.r-zl2h9q{margin-bottom:2px;}
+.r-zz5t5d{font-size:28px;}
+@-webkit-keyframes r-11cv4x{0%{transform:rotate(0deg);}100%{transform:rotate(360deg);}}
+@-webkit-keyframes r-1iq689l{0%{transform:translateY(0%);}100%{transform:translateY(100%);}}
+@-webkit-keyframes r-1pzkwqh{0%{transform:translateY(100%);}100%{transform:translateY(0%);}}
+@-webkit-keyframes r-imtty0{0%{opacity:0;}100%{opacity:1;}}
+@-webkit-keyframes r-q67da2{0%{transform:translateX(-100%);}100%{transform:translateX(400%);}}
+@-webkit-keyframes r-t2lo5v{0%{opacity:1;}100%{opacity:0;}}
+@keyframes r-11cv4x{0%{transform:rotate(0deg);}100%{transform:rotate(360deg);}}
+@keyframes r-1iq689l{0%{transform:translateY(0%);}100%{transform:translateY(100%);}}
+@keyframes r-1pzkwqh{0%{transform:translateY(100%);}100%{transform:translateY(0%);}}
+@keyframes r-imtty0{0%{opacity:0;}100%{opacity:1;}}
+@keyframes r-q67da2{0%{transform:translateX(-100%);}100%{transform:translateX(400%);}}
+@keyframes r-t2lo5v{0%{opacity:1;}100%{opacity:0;}}</style><script type="module">globalThis.__EXPO_ROUTER_HYDRATE__=true;</script><link rel="icon" href="/jellyfuse/favicon.ico" /></head><body><div id="root"><div class="css-g5y9jx r-13awgt0"><!--$--><div class="css-g5y9jx r-92hvpk r-13awgt0"><div style="position:absolute;left:0;right:0;top:0;bottom:0;pointer-events:none;visibility:hidden"></div><div class="css-g5y9jx r-13awgt0"><div class="css-g5y9jx r-13awgt0 r-1p0dtai r-1d2f490 r-u8s1d r-zchlnj r-ipm5af" style="background-color:rgba(242,242,242,1.00);display:flex"><div class="css-g5y9jx r-13awgt0"><div class="css-g5y9jx r-13awgt0" style="background-color:rgba(30,34,39,1.00)"><!--$--><div class="css-g5y9jx r-92hvpk r-13awgt0"><div aria-label="Site" class="css-g5y9jx r-1niwhzg r-oucylx r-qklmqi r-13qz1uu" style="position:sticky;top:0px;z-index:100;transition-property:background-color, backdrop-filter, border-color;transition-duration:200ms"><div class="css-g5y9jx r-1awozwy r-18u37iz r-1mwlp6a r-1wtj0ep r-f8sm7e r-1sp8lnq r-fqkl7q r-13qz1uu"><a href="#top" dir="auto" aria-label="Jellyfuse" role="link" class="css-146c3p1 r-1awozwy r-1uy9biq r-6koalj r-18u37iz r-1ozj4bg r-1i10wst r-1kfrs79 r-uaa2di r-13h23lk r-13wfysu"><div class="css-g5y9jx r-1mlwlqe r-1udh08x r-417010 r-xoduu5 r-1px6drs r-h0d30l r-1t7uo4s r-9iso6 r-1iww7jx"><div class="css-g5y9jx r-xoduu5 r-1niwhzg r-vvn4in r-u6sd8q r-1p0dtai r-1pi2tsx r-1d2f490 r-u8s1d r-zchlnj r-ipm5af r-13qz1uu r-1wyyakw r-4gszlv"></div></div><span class="css-1jxf684 r-1uy9biq r-1ozj4bg r-1i10wst r-1kfrs79 r-13h23lk r-eljoum">Jellyfuse</span></a><div aria-label="Primary" class="css-g5y9jx r-1awozwy r-18u37iz r-3jl36a"><a href="#features" dir="auto" role="link" class="css-146c3p1 r-1dpffg5 r-1b43r93 r-vuvdlw">Features</a><a href="#platforms" dir="auto" role="link" class="css-146c3p1 r-1dpffg5 r-1b43r93 r-vuvdlw">Platforms</a><a href="#faq" dir="auto" role="link" class="css-146c3p1 r-1dpffg5 r-1b43r93 r-vuvdlw">FAQ</a><a href="https://github.com/OverGlass/jellyfuse" dir="auto" role="link" class="css-146c3p1 r-gc9cf3 r-sdzlij r-1sm3ja2 r-1b43r93 r-1kfrs79 r-11f147o r-gu64tb">GitHub</a></div></div></div><div class="css-g5y9jx" id="top"><div aria-labelledby="hero-h" class="css-g5y9jx r-1awozwy r-1777fci r-19brta4 r-1udh08x r-wi6arp r-1te17ho r-bnwqim"><div aria-hidden="true" class="css-g5y9jx r-1b6v2at r-2kxcpj r-1udh08x r-633pao r-u8s1d r-417010"><svg viewBox="0 0 1600 900" preserveAspectRatio="none" width="100%" height="100%" class="r-1pi2tsx r-2kxcpj r-u8s1d r-13qz1uu"><defs><filter x="-15%" y="-15%" width="130%" height="130%" id="cellBlur"><feGaussianBlur stdDeviation="28"></feGaussianBlur></filter></defs><g filter="url(#cellBlur)"><path d="M 16 -90 C 56 90, 56 810.0000000000001, 16 990.0000000000001 C -24 810.0000000000001, -24 90, 16 -90 Z" fill="rgba(224,108,117,0.065)"></path><path d="M 90.66666666666666 -90 C 145.17913832199545 90, 145.17913832199545 810.0000000000001, 90.66666666666666 990.0000000000001 C 36.15419501133786 810.0000000000001, 36.15419501133786 90, 90.66666666666666 -90 Z" fill="rgba(219,123,112,0.08150793650793652)"></path><path d="M 165.33333333333331 -90 C 232.907029478458 90, 232.907029478458 810.0000000000001, 165.33333333333331 990.0000000000001 C 97.7596371882086 810.0000000000001, 97.7596371882086 90, 165.33333333333331 -90 Z" fill="rgba(214,139,107,0.09636507936507936)"></path><path d="M 240 -90 C 319.18367346938777 90, 319.18367346938777 810.0000000000001, 240 990.0000000000001 C 160.81632653061223 810.0000000000001, 160.81632653061223 90, 240 -90 Z" fill="rgba(209,154,102,0.10957142857142858)"></path><path d="M 314.66666666666663 -90 C 404.0090702947846 90, 404.0090702947846 810.0000000000001, 314.66666666666663 990.0000000000001 C 225.3242630385487 810.0000000000001, 225.3242630385487 90, 314.66666666666663 -90 Z" fill="rgba(216,167,109,0.12112698412698415)"></path><path d="M 389.3333333333333 -90 C 487.3832199546485 90, 487.3832199546485 810.0000000000001, 389.3333333333333 990.0000000000001 C 291.28344671201813 810.0000000000001, 291.28344671201813 90, 389.3333333333333 -90 Z" fill="rgba(222,179,116,0.13103174603174603)"></path><path d="M 464 -90 C 569.3061224489796 90, 569.3061224489796 810.0000000000001, 464 990.0000000000001 C 358.69387755102036 810.0000000000001, 358.69387755102036 90, 464 -90 Z" fill="rgba(229,192,123,0.1392857142857143)"></path><path d="M 538.6666666666666 -90 C 649.7777777777777 90, 649.7777777777777 810.0000000000001, 538.6666666666666 990.0000000000001 C 427.55555555555554 810.0000000000001, 427.55555555555554 90, 538.6666666666666 -90 Z" fill="rgba(203,193,122,0.1458888888888889)"></path><path d="M 613.3333333333333 -90 C 728.798185941043 90, 728.798185941043 810.0000000000001, 613.3333333333333 990.0000000000001 C 497.8684807256235 810.0000000000001, 497.8684807256235 90, 613.3333333333333 -90 Z" fill="rgba(178,194,122,0.15084126984126986)"></path><path d="M 688 -90 C 806.3673469387755 90, 806.3673469387755 810.0000000000001, 688 990.0000000000001 C 569.6326530612245 810.0000000000001, 569.6326530612245 90, 688 -90 Z" fill="rgba(152,195,121,0.15414285714285716)"></path><path d="M 762.6666666666666 -90 C 882.4852607709751 90, 882.4852607709751 810.0000000000001, 762.6666666666666 990.0000000000001 C 642.8480725623582 810.0000000000001, 642.8480725623582 90, 762.6666666666666 -90 Z" fill="rgba(130,191,145,0.15579365079365082)"></path><path d="M 837.3333333333334 -90 C 957.1519274376418 90, 957.1519274376418 810.0000000000001, 837.3333333333334 990.0000000000001 C 717.5147392290249 810.0000000000001, 717.5147392290249 90, 837.3333333333334 -90 Z" fill="rgba(108,186,170,0.15579365079365082)"></path><path d="M 912 -90 C 1030.3673469387754 90, 1030.3673469387754 810.0000000000001, 912 990.0000000000001 C 793.6326530612245 810.0000000000001, 793.6326530612245 90, 912 -90 Z" fill="rgba(86,182,194,0.15414285714285716)"></path><path d="M 986.6666666666667 -90 C 1102.1315192743764 90, 1102.1315192743764 810.0000000000001, 986.6666666666667 990.0000000000001 C 871.201814058957 810.0000000000001, 871.201814058957 90, 986.6666666666667 -90 Z" fill="rgba(90,180,209,0.15084126984126986)"></path><path d="M 1061.3333333333333 -90 C 1172.4444444444443 90, 1172.4444444444443 810.0000000000001, 1061.3333333333333 990.0000000000001 C 950.2222222222222 810.0000000000001, 950.2222222222222 90, 1061.3333333333333 -90 Z" fill="rgba(93,177,224,0.1458888888888889)"></path><path d="M 1136 -90 C 1241.3061224489795 90, 1241.3061224489795 810.0000000000001, 1136 990.0000000000001 C 1030.6938775510205 810.0000000000001, 1030.6938775510205 90, 1136 -90 Z" fill="rgba(97,175,239,0.1392857142857143)"></path><path d="M 1210.6666666666665 -90 C 1308.7165532879817 90, 1308.7165532879817 810.0000000000001, 1210.6666666666665 990.0000000000001 C 1112.6167800453513 810.0000000000001, 1112.6167800453513 90, 1210.6666666666665 -90 Z" fill="rgba(131,157,233,0.13103174603174605)"></path><path d="M 1285.3333333333333 -90 C 1374.675736961451 90, 1374.675736961451 810.0000000000001, 1285.3333333333333 990.0000000000001 C 1195.9909297052154 810.0000000000001, 1195.9909297052154 90, 1285.3333333333333 -90 Z" fill="rgba(164,138,227,0.12112698412698415)"></path><path d="M 1360 -90 C 1439.1836734693877 90, 1439.1836734693877 810.0000000000001, 1360 990.0000000000001 C 1280.8163265306123 810.0000000000001, 1280.8163265306123 90, 1360 -90 Z" fill="rgba(198,120,221,0.10957142857142858)"></path><path d="M 1434.6666666666667 -90 C 1502.2403628117916 90, 1502.2403628117916 810.0000000000001, 1434.6666666666667 990.0000000000001 C 1367.092970521542 810.0000000000001, 1367.092970521542 90, 1434.6666666666667 -90 Z" fill="rgba(195,107,171,0.09636507936507936)"></path><path d="M 1509.3333333333333 -90 C 1563.8458049886622 90, 1563.8458049886622 810.0000000000001, 1509.3333333333333 990.0000000000001 C 1454.8208616780043 810.0000000000001, 1454.8208616780043 90, 1509.3333333333333 -90 Z" fill="rgba(193,93,120,0.08150793650793653)"></path><path d="M 1584 -90 C 1624 90, 1624 810.0000000000001, 1584 990.0000000000001 C 1544 810.0000000000001, 1544 90, 1584 -90 Z" fill="rgba(190,80,70,0.065)"></path></g></svg><div class="css-g5y9jx r-1ib9hmf r-1p0dtai r-1d2f490 r-u8s1d r-zchlnj r-1v2oles"></div></div><div class="css-g5y9jx r-1awozwy r-1kihuf0 r-1wngk81 r-fqkl7q r-bnwqim r-13qz1uu r-184en5c"><div class="css-g5y9jx r-orgf3d r-159xmpb" style="transition-property:opacity, transform;transition-duration:600ms;transition-timing-function:cubic-bezier(.2,.8,.2,1);transition-delay:0ms"><div dir="auto" class="css-146c3p1 r-1enofrn r-1kfrs79 r-1wjxbdk r-1ifxtd0 r-tsynxw r-mkx4ke">Jellyfin client · v1.0 in TestFlight</div></div><div class="css-g5y9jx r-orgf3d r-159xmpb" style="transition-property:opacity, transform;transition-duration:600ms;transition-timing-function:cubic-bezier(.2,.8,.2,1);transition-delay:100ms"><h1 dir="auto" aria-level="1" role="heading" class="css-146c3p1 r-1uy9biq r-1ozj4bg r-crgep1 r-ey96lj r-pgkzmz r-b88u0q r-xragbq r-93pacp r-1peese0 r-q4m81j" id="hero-h">One Jellyfin client.<!-- -->
+<span class="css-1jxf684 r-1dl2dmu r-8b1cjr r-1rx1vvx r-1wie9e7 r-fpub7">Every screen.</span></h1></div><div class="css-g5y9jx r-orgf3d r-159xmpb r-1awozwy r-13qz1uu" style="transition-property:opacity, transform;transition-duration:600ms;transition-timing-function:cubic-bezier(.2,.8,.2,1);transition-delay:200ms"><div dir="auto" class="css-146c3p1 r-1dpffg5 r-4rt2lv r-5w41ue r-16yuluz r-q4m81j">Watch your library. Request what&#x27;s next. From your phone to the living room — same app, same player, no subscription.</div></div><div class="css-g5y9jx r-orgf3d r-159xmpb r-1awozwy r-1v1z2uz r-13qz1uu" style="transition-property:opacity, transform;transition-duration:600ms;transition-timing-function:cubic-bezier(.2,.8,.2,1);transition-delay:300ms"><div class="css-g5y9jx r-18u37iz r-1w6e6rj r-f4gmv6 r-1777fci"><a href="https://testflight.apple.com/join/rz3vDx8g" dir="auto" role="link" class="css-146c3p1 r-42olwf r-sdzlij r-rs99b7 r-1loqt21 r-1kfrs79 r-1ml3abn r-h0bjfv r-14qw7yl r-oaqifd r-gc9cf3 r-1sm3ja2"><span class="css-1jxf684 r-a023e6 r-1kfrs79 r-1cwl3u0 r-1sm3ja2">Join the TestFlight</span></a><a href="https://github.com/OverGlass/jellyfuse" dir="auto" role="link" class="css-146c3p1 r-sdzlij r-rs99b7 r-1loqt21 r-1kfrs79 r-1ml3abn r-h0bjfv r-14qw7yl r-oaqifd r-1niwhzg r-1gwj3me r-1uy9biq"><span class="css-1jxf684 r-a023e6 r-1kfrs79 r-1cwl3u0 r-1uy9biq">Star on GitHub</span></a></div></div><div class="css-g5y9jx r-orgf3d r-159xmpb" style="transition-property:opacity, transform;transition-duration:600ms;transition-timing-function:cubic-bezier(.2,.8,.2,1);transition-delay:300ms"><div class="css-g5y9jx r-1awozwy r-18u37iz r-1w6e6rj r-f4gmv6 r-1777fci r-1v1z2uz"><div class="css-g5y9jx r-1awozwy r-18u37iz r-f4gmv6"><div dir="auto" class="css-146c3p1 r-1st3usi r-n6v787">Free &amp; open source</div></div><div class="css-g5y9jx r-1awozwy r-18u37iz r-f4gmv6"><div class="css-g5y9jx r-1u5l2ug r-1jkafct r-hdaws3 r-10g5efv"></div><div dir="auto" class="css-146c3p1 r-1st3usi r-n6v787">No telemetry</div></div><div class="css-g5y9jx r-1awozwy r-18u37iz r-f4gmv6"><div class="css-g5y9jx r-1u5l2ug r-1jkafct r-hdaws3 r-10g5efv"></div><div dir="auto" class="css-146c3p1 r-1st3usi r-n6v787">GPL-3.0 licensed</div></div></div></div></div></div><div class="css-g5y9jx r-bnwqim r-13qz1uu r-gb3yrc r-qklmqi r-1t07wo7 r-5kkj8d"><div class="css-g5y9jx r-f8sm7e r-1sp8lnq r-fqkl7q r-13qz1uu r-sywj37 r-16iroic"><div class="css-g5y9jx r-1awozwy r-18u37iz r-1w6e6rj r-q2krsz"><div class="css-g5y9jx r-13awgt0 r-14l27qf"><div class="css-g5y9jx r-orgf3d r-159xmpb" style="transition-property:opacity, transform;transition-duration:600ms;transition-timing-function:cubic-bezier(.2,.8,.2,1);transition-delay:0ms"><div dir="auto" class="css-146c3p1 r-1enofrn r-1kfrs79 r-1wjxbdk r-1ifxtd0 r-tsynxw r-mkx4ke">The fusion</div></div><div class="css-g5y9jx r-orgf3d r-159xmpb" style="transition-property:opacity, transform;transition-duration:600ms;transition-timing-function:cubic-bezier(.2,.8,.2,1);transition-delay:100ms"><h2 dir="auto" aria-level="2" role="heading" class="css-146c3p1 r-1uy9biq r-1ozj4bg r-crgep1 r-ey96lj r-1ps2hv2 r-1kfrs79 r-3ncq8g r-93pacp r-1peese0">Watching and requesting,<!-- -->
+<!-- -->finally in one app.</h2></div><div class="css-g5y9jx r-orgf3d r-159xmpb" style="transition-property:opacity, transform;transition-duration:600ms;transition-timing-function:cubic-bezier(.2,.8,.2,1);transition-delay:200ms"><div dir="auto" class="css-146c3p1 r-1dpffg5 r-4rt2lv r-5w41ue r-zd98yo r-16yuluz">Search blends your library with what&#x27;s available to request. Tap a result to watch, or queue it up for your server to fetch.</div></div><div class="css-g5y9jx r-orgf3d r-159xmpb" style="transition-property:opacity, transform;transition-duration:600ms;transition-timing-function:cubic-bezier(.2,.8,.2,1);transition-delay:300ms"><div class="css-g5y9jx r-eqz5dr"><div class="css-g5y9jx r-1habvwh r-1t07wo7 r-5kkj8d r-18u37iz r-f4gmv6 r-w7s2jr"><div dir="auto" class="css-146c3p1 r-mkx4ke r-1ozj4bg r-1b43r93 r-1ghxqbu r-1kfrs79 r-1bymd8e">01</div><div dir="auto" class="css-146c3p1 r-1dpffg5 r-13awgt0 r-ubezar r-a8ghvy"><span class="css-1jxf684 r-1uy9biq r-1kfrs79">Browse and play your library.</span> Shelves, search, downloads — all the basics, native everywhere.</div></div><div class="css-g5y9jx r-1habvwh r-1t07wo7 r-5kkj8d r-18u37iz r-f4gmv6 r-w7s2jr"><div dir="auto" class="css-146c3p1 r-mkx4ke r-1ozj4bg r-1b43r93 r-1ghxqbu r-1kfrs79 r-1bymd8e">02</div><div dir="auto" class="css-146c3p1 r-1dpffg5 r-13awgt0 r-ubezar r-a8ghvy"><span class="css-1jxf684 r-1uy9biq r-1kfrs79">Request what&#x27;s missing.</span> Movies, full series or single seasons — Jellyseerr is built in, not a separate app.</div></div><div class="css-g5y9jx r-1habvwh r-1t07wo7 r-5kkj8d r-18u37iz r-f4gmv6 r-w7s2jr r-gb3yrc r-qklmqi"><div dir="auto" class="css-146c3p1 r-mkx4ke r-1ozj4bg r-1b43r93 r-1ghxqbu r-1kfrs79 r-1bymd8e">03</div><div dir="auto" class="css-146c3p1 r-1dpffg5 r-13awgt0 r-ubezar r-a8ghvy"><span class="css-1jxf684 r-1uy9biq r-1kfrs79">See progress in context.</span> Pending requests show up next to your shelves. No tab-hopping.</div></div></div></div></div><div aria-hidden="true" class="css-g5y9jx r-orgf3d r-159xmpb r-obd0qt r-13awgt0 r-14l27qf" style="transition-property:opacity, transform;transition-duration:600ms;transition-timing-function:cubic-bezier(.2,.8,.2,1);transition-delay:200ms"><div class="css-g5y9jx r-ue893e r-tcguuw r-1ueegzj r-1p7hrbg r-edyy15 r-bnwqim r-ofmjrv"><div class="css-g5y9jx r-92hvpk r-1m7mu0x r-13awgt0 r-1udh08x r-bnwqim"><div class="css-g5y9jx r-1kihuf0 r-kemksi r-cpet4d r-h0d30l r-1wyvozj r-u8s1d r-h7zev3 r-1p3v3qi r-1x93onp r-8fdsdq"></div><div class="css-g5y9jx r-obd0qt r-18u37iz r-1iud8zs r-1wtj0ep r-xd6kpl r-e4572k r-1g40b8q"><div dir="auto" class="css-146c3p1 r-1uy9biq r-1ozj4bg r-n6v787 r-1kfrs79">9:41</div><div class="css-g5y9jx r-1awozwy r-18u37iz r-580adz"><div class="css-g5y9jx r-gc9cf3 r-1h116bs r-k5y9r7 r-1janqcz"></div><div class="css-g5y9jx r-ndvcnb r-voibxv r-bqytpi r-1sed4dd r-d045u9 r-1or9b2r r-1mcorv5"></div><div class="css-g5y9jx r-1fasyvk r-voibxv r-cdmcib r-1rf8fdq r-vz2u4x r-lrsllp"></div></div></div><div class="css-g5y9jx r-3pj75a"><div class="css-g5y9jx r-1awozwy r-1pdhgt r-1dzdj1l r-18u37iz r-1cmwbt1 r-ytbthy r-3o4zer"><div class="css-g5y9jx r-1rp614l r-1px6drs r-d045u9 r-1pexk7n r-1mcorv5"></div><div dir="auto" class="css-146c3p1 r-1uy9biq r-1b43r93">Dune</div></div><div class="css-g5y9jx r-1awozwy r-18u37iz r-1wtj0ep r-15d164r r-1444osr"><div dir="auto" class="css-146c3p1 r-1st3usi r-1gkfh8e r-1kfrs79 r-1lybf8k r-tsynxw">In your library</div><div dir="auto" class="css-146c3p1 r-z2wwpe r-qqjak8 r-1kfrs79 r-1czx8yk r-1559e4e r-18c5d7m r-f40wkz r-53jvew">Library</div></div><div class="css-g5y9jx r-1awozwy r-1t07wo7 r-5kkj8d r-18u37iz r-uaa2di r-11f147o"><div class="css-g5y9jx r-i57ct1 r-z2wwpe r-sga3zk r-usgzl9" style="background-image:linear-gradient(135deg, #4a3a5a, #2a2030)"></div><div class="css-g5y9jx r-13awgt0 r-bcqeeo"><div dir="auto" class="css-146c3p1 r-dnmrzs r-1udh08x r-1udbk01 r-3s2u2q r-1iln25a r-1uy9biq r-n6v787 r-1kfrs79 r-zl2h9q">Dune: Part One</div><div dir="auto" class="css-146c3p1 r-dnmrzs r-1udh08x r-1udbk01 r-3s2u2q r-1iln25a r-1st3usi r-1gkfh8e">2021 · 4K HDR · 2h 35m</div></div><div dir="auto" class="css-146c3p1 r-yepxxq r-cpet4d r-1sm3ja2 r-1gkfh8e r-1kfrs79 r-vuvdlw r-1ubuhtd">Play</div></div><div class="css-g5y9jx r-1awozwy r-1t07wo7 r-5kkj8d r-18u37iz r-uaa2di r-11f147o"><div class="css-g5y9jx r-i57ct1 r-z2wwpe r-sga3zk r-usgzl9" style="background-image:linear-gradient(135deg, #2a4a3a, #1a3025)"></div><div class="css-g5y9jx r-13awgt0 r-bcqeeo"><div dir="auto" class="css-146c3p1 r-dnmrzs r-1udh08x r-1udbk01 r-3s2u2q r-1iln25a r-1uy9biq r-n6v787 r-1kfrs79 r-zl2h9q">Dune: Part Two</div><div dir="auto" class="css-146c3p1 r-dnmrzs r-1udh08x r-1udbk01 r-3s2u2q r-1iln25a r-1st3usi r-1gkfh8e">2024 · 4K · Watched 32%</div></div><div dir="auto" class="css-146c3p1 r-yepxxq r-cpet4d r-1sm3ja2 r-1gkfh8e r-1kfrs79 r-vuvdlw r-1ubuhtd">Resume</div></div><div class="css-g5y9jx r-1awozwy r-18u37iz r-1wtj0ep r-15d164r r-1444osr"><div dir="auto" class="css-146c3p1 r-1st3usi r-1gkfh8e r-1kfrs79 r-1lybf8k r-tsynxw">Available to request</div><div dir="auto" class="css-146c3p1 r-z2wwpe r-qqjak8 r-1kfrs79 r-1czx8yk r-1559e4e r-18c5d7m r-1e7qy43 r-mkx4ke">Request</div></div><div class="css-g5y9jx r-1awozwy r-1t07wo7 r-5kkj8d r-18u37iz r-uaa2di r-11f147o"><div class="css-g5y9jx r-i57ct1 r-z2wwpe r-sga3zk r-usgzl9" style="background-image:linear-gradient(135deg, #4a3525, #2f2018)"></div><div class="css-g5y9jx r-13awgt0 r-bcqeeo"><div dir="auto" class="css-146c3p1 r-dnmrzs r-1udh08x r-1udbk01 r-3s2u2q r-1iln25a r-1uy9biq r-n6v787 r-1kfrs79 r-zl2h9q">Dune: Prophecy</div><div dir="auto" class="css-146c3p1 r-dnmrzs r-1udh08x r-1udbk01 r-3s2u2q r-1iln25a r-1st3usi r-1gkfh8e">Series · 2024 · 6 episodes</div></div><div dir="auto" class="css-146c3p1 r-cpet4d r-1gkfh8e r-1kfrs79 r-vuvdlw r-1ubuhtd r-1niwhzg r-it2ac2 r-rs99b7 r-1dpffg5">Request</div></div><div class="css-g5y9jx r-1awozwy r-1t07wo7 r-5kkj8d r-18u37iz r-uaa2di r-11f147o"><div class="css-g5y9jx r-i57ct1 r-z2wwpe r-sga3zk r-usgzl9" style="background-image:linear-gradient(135deg, #2a3a55, #1a2435)"></div><div class="css-g5y9jx r-13awgt0 r-bcqeeo"><div dir="auto" class="css-146c3p1 r-dnmrzs r-1udh08x r-1udbk01 r-3s2u2q r-1iln25a r-1uy9biq r-n6v787 r-1kfrs79 r-zl2h9q">Dune (1984)</div><div dir="auto" class="css-146c3p1 r-dnmrzs r-1udh08x r-1udbk01 r-3s2u2q r-1iln25a r-1st3usi r-1gkfh8e">Movie · 2h 17m</div></div><div dir="auto" class="css-146c3p1 r-cpet4d r-1gkfh8e r-1kfrs79 r-vuvdlw r-1ubuhtd r-1niwhzg r-it2ac2 r-rs99b7 r-1dpffg5">Request</div></div></div></div></div></div></div></div></div><div class="css-g5y9jx r-bnwqim r-13qz1uu r-gb3yrc r-qklmqi r-1t07wo7 r-5kkj8d" style="background-color:rgba(35,39,46,1.00)"><div class="css-g5y9jx r-f8sm7e r-1sp8lnq r-fqkl7q r-13qz1uu r-sywj37 r-16iroic"><div class="css-g5y9jx r-1awozwy r-18u37iz r-1w6e6rj r-1k6xs49"><div class="css-g5y9jx r-orgf3d r-159xmpb" style="transition-property:opacity, transform;transition-duration:600ms;transition-timing-function:cubic-bezier(.2,.8,.2,1);transition-delay:0ms"><div dir="auto" class="css-146c3p1 r-1dl2dmu r-8b1cjr r-1rx1vvx r-1b807mt r-fpub7 r-1ozj4bg r-g1ag95 r-b88u0q r-1mnmksy r-u3fm8u r-1vl2501">1</div></div><div class="css-g5y9jx r-13awgt0 r-ek4qxl"><div class="css-g5y9jx r-orgf3d r-159xmpb" style="transition-property:opacity, transform;transition-duration:600ms;transition-timing-function:cubic-bezier(.2,.8,.2,1);transition-delay:0ms"><div dir="auto" class="css-146c3p1 r-1enofrn r-1kfrs79 r-1wjxbdk r-1ifxtd0 r-tsynxw r-mkx4ke">One player</div></div><div class="css-g5y9jx r-orgf3d r-159xmpb" style="transition-property:opacity, transform;transition-duration:600ms;transition-timing-function:cubic-bezier(.2,.8,.2,1);transition-delay:100ms"><h2 dir="auto" aria-level="2" role="heading" class="css-146c3p1 r-1uy9biq r-1ozj4bg r-crgep1 r-ey96lj r-1ps2hv2 r-1kfrs79 r-3ncq8g r-93pacp r-1ifxtd0 r-1rabcb8">One player.<!-- -->
+<!-- -->Every codec.</h2></div><div class="css-g5y9jx r-orgf3d r-159xmpb" style="transition-property:opacity, transform;transition-duration:600ms;transition-timing-function:cubic-bezier(.2,.8,.2,1);transition-delay:200ms"><div dir="auto" class="css-146c3p1 r-1dpffg5 r-4rt2lv r-5w41ue r-16yuluz">MPV powers playback on every platform — same subtitles, same audio routing, same codec ceiling, whether you&#x27;re on the couch or in line at the airport.</div></div><div class="css-g5y9jx r-orgf3d r-159xmpb" style="transition-property:opacity, transform;transition-duration:600ms;transition-timing-function:cubic-bezier(.2,.8,.2,1);transition-delay:300ms"><div aria-label="Supported formats" class="css-g5y9jx r-18u37iz r-1w6e6rj r-1cmwbt1 r-1v1z2uz"><div dir="auto" class="css-146c3p1 r-92hvpk r-sdzlij r-rs99b7 r-n6v787 r-1ghxqbu r-majxgm r-11f147o r-gu64tb r-15hsw4v r-1uy9biq">HEVC</div><div dir="auto" class="css-146c3p1 r-92hvpk r-sdzlij r-rs99b7 r-n6v787 r-1ghxqbu r-majxgm r-11f147o r-gu64tb r-15hsw4v r-1uy9biq">H.264</div><div dir="auto" class="css-146c3p1 r-92hvpk r-sdzlij r-rs99b7 r-n6v787 r-1ghxqbu r-majxgm r-11f147o r-gu64tb r-15hsw4v r-1uy9biq">AV1</div><div dir="auto" class="css-146c3p1 r-92hvpk r-sdzlij r-rs99b7 r-n6v787 r-1ghxqbu r-majxgm r-11f147o r-gu64tb r-it2ac2 r-1dpffg5">VP9</div><div dir="auto" class="css-146c3p1 r-92hvpk r-sdzlij r-rs99b7 r-n6v787 r-1ghxqbu r-majxgm r-11f147o r-gu64tb r-it2ac2 r-1dpffg5">HDR10</div><div dir="auto" class="css-146c3p1 r-92hvpk r-sdzlij r-rs99b7 r-n6v787 r-1ghxqbu r-majxgm r-11f147o r-gu64tb r-it2ac2 r-1dpffg5">HLG</div><div dir="auto" class="css-146c3p1 r-92hvpk r-sdzlij r-rs99b7 r-n6v787 r-1ghxqbu r-majxgm r-11f147o r-gu64tb r-it2ac2 r-1dpffg5">Dolby Vision*</div><div dir="auto" class="css-146c3p1 r-92hvpk r-sdzlij r-rs99b7 r-n6v787 r-1ghxqbu r-majxgm r-11f147o r-gu64tb r-it2ac2 r-1dpffg5">TrueHD</div><div dir="auto" class="css-146c3p1 r-92hvpk r-sdzlij r-rs99b7 r-n6v787 r-1ghxqbu r-majxgm r-11f147o r-gu64tb r-it2ac2 r-1dpffg5">DTS-HD</div><div dir="auto" class="css-146c3p1 r-92hvpk r-sdzlij r-rs99b7 r-n6v787 r-1ghxqbu r-majxgm r-11f147o r-gu64tb r-it2ac2 r-1dpffg5">PGS</div><div dir="auto" class="css-146c3p1 r-92hvpk r-sdzlij r-rs99b7 r-n6v787 r-1ghxqbu r-majxgm r-11f147o r-gu64tb r-it2ac2 r-1dpffg5">SRT</div><div dir="auto" class="css-146c3p1 r-92hvpk r-sdzlij r-rs99b7 r-n6v787 r-1ghxqbu r-majxgm r-11f147o r-gu64tb r-it2ac2 r-1dpffg5">ASS</div><div dir="auto" class="css-146c3p1 r-92hvpk r-sdzlij r-rs99b7 r-n6v787 r-1ghxqbu r-majxgm r-11f147o r-gu64tb r-it2ac2 r-1dpffg5">External tracks</div></div></div></div></div></div></div><div class="css-g5y9jx r-bnwqim r-13qz1uu r-1t07wo7 r-5kkj8d" id="platforms"><div class="css-g5y9jx r-f8sm7e r-1sp8lnq r-fqkl7q r-13qz1uu"><div class="css-g5y9jx r-yny3pl"><div class="css-g5y9jx r-orgf3d r-159xmpb r-1awozwy r-1kihuf0 r-ldnaw6 r-f8sm7e r-1vamr63 r-fqkl7q r-13qz1uu" style="transition-property:opacity, transform;transition-duration:600ms;transition-timing-function:cubic-bezier(.2,.8,.2,1);transition-delay:0ms"><div dir="auto" class="css-146c3p1 r-1enofrn r-1kfrs79 r-1wjxbdk r-1ifxtd0 r-tsynxw r-mkx4ke">Platforms</div><h2 dir="auto" aria-level="2" role="heading" class="css-146c3p1 r-1uy9biq r-1ozj4bg r-crgep1 r-ey96lj r-1ps2hv2 r-1kfrs79 r-3ncq8g r-93pacp r-q4m81j">Built for every screen<!-- -->
+<!-- -->you already own.</h2></div><div class="css-g5y9jx r-1habvwh r-18u37iz r-1w6e6rj r-q2krsz r-f8sm7e r-1sp8lnq r-fqkl7q r-13qz1uu"><div class="css-g5y9jx r-13awgt0 r-eqz5dr r-14l27qf"><div class="css-g5y9jx r-1t07wo7 r-eqz5dr r-1777fci r-1asp59d r-1c8wk46 r-13yce4e"><div class="css-g5y9jx r-1awozwy r-k200y r-1m5ggi5 r-sdzlij r-rs99b7 r-18u37iz r-ojf8lh r-rehuqn r-1m04atk r-1qfoi16" style="border-top-color:rgba(152,195,121,0.28);border-right-color:rgba(152,195,121,0.28);border-bottom-color:rgba(152,195,121,0.28);border-left-color:rgba(152,195,121,0.28)"><div class="css-g5y9jx r-sdzlij r-1ozsyd3 r-12rgx7y" style="background-color:rgba(152,195,121,1.00);box-shadow:0 0 8px rgba(152,195,121,0.7)"></div><div dir="auto" class="css-146c3p1 r-1enofrn r-1kfrs79 r-1op0lh7" style="color:rgba(152,195,121,1.00)">Public TestFlight</div></div><h3 dir="auto" aria-level="3" role="heading" class="css-146c3p1 r-1uy9biq r-1ozj4bg r-crgep1 r-ey96lj r-1kfrs79 r-13h23lk r-1uagazm r-65s87v r-1ifxtd0 r-1wzrnnt">iPhone.<!-- -->
+<!-- -->The one you carry.</h3><div dir="auto" class="css-146c3p1 r-1dpffg5 r-1inkyih r-a8ghvy r-1peese0 r-13na2be">The flagship. Every feature lands here first — native MPV, offline downloads, blended search, requests, multi-user. v1.0 is in App Store review; the public TestFlight is open today.</div><div class="css-g5y9jx r-uaa2di r-13na2be"><div class="css-g5y9jx r-1awozwy r-7na9ed r-it2ac2 r-1xfd6ze r-rs99b7 r-18u37iz r-1ssbvtb r-ytbthy r-3o4zer"><div class="css-g5y9jx r-1awozwy r-i57ct1 r-kdyh1x r-18yzcnr r-1777fci r-yc9v9c"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 8l3 3l5-6" stroke="#61afef" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg></div><div dir="auto" class="css-146c3p1 r-1dpffg5 r-13awgt0 r-1b43r93 r-jpx62j r-1559e4e">Background audio &amp; PiP</div></div><div class="css-g5y9jx r-1awozwy r-7na9ed r-it2ac2 r-1xfd6ze r-rs99b7 r-18u37iz r-1ssbvtb r-ytbthy r-3o4zer"><div class="css-g5y9jx r-1awozwy r-i57ct1 r-kdyh1x r-18yzcnr r-1777fci r-yc9v9c"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 8l3 3l5-6" stroke="#61afef" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg></div><div dir="auto" class="css-146c3p1 r-1dpffg5 r-13awgt0 r-1b43r93 r-jpx62j r-1559e4e">Offline downloads with resume</div></div><div class="css-g5y9jx r-1awozwy r-7na9ed r-it2ac2 r-1xfd6ze r-rs99b7 r-18u37iz r-1ssbvtb r-ytbthy r-3o4zer"><div class="css-g5y9jx r-1awozwy r-i57ct1 r-kdyh1x r-18yzcnr r-1777fci r-yc9v9c"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 8l3 3l5-6" stroke="#61afef" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg></div><div dir="auto" class="css-146c3p1 r-1dpffg5 r-13awgt0 r-1b43r93 r-jpx62j r-1559e4e">Trickplay scrubbing &amp; chapters</div></div></div></div><div class="css-g5y9jx r-1t07wo7 r-5kkj8d r-eqz5dr r-1777fci r-1asp59d r-1c8wk46"><div class="css-g5y9jx r-1awozwy r-k200y r-1m5ggi5 r-sdzlij r-rs99b7 r-18u37iz r-ojf8lh r-rehuqn r-1m04atk r-1qfoi16" style="border-top-color:rgba(209,154,102,0.28);border-right-color:rgba(209,154,102,0.28);border-bottom-color:rgba(209,154,102,0.28);border-left-color:rgba(209,154,102,0.28)"><div class="css-g5y9jx r-sdzlij r-1ozsyd3 r-12rgx7y" style="background-color:rgba(209,154,102,1.00)"></div><div dir="auto" class="css-146c3p1 r-1enofrn r-1kfrs79 r-1op0lh7" style="color:rgba(209,154,102,1.00)">Coming soon</div></div><h3 dir="auto" aria-level="3" role="heading" class="css-146c3p1 r-1uy9biq r-1ozj4bg r-crgep1 r-ey96lj r-1kfrs79 r-13h23lk r-1uagazm r-65s87v r-1ifxtd0 r-1wzrnnt">iPad.<!-- -->
+<!-- -->More canvas, more shelves.</h3><div dir="auto" class="css-146c3p1 r-1dpffg5 r-1inkyih r-a8ghvy r-1peese0 r-13na2be">A sidebar layout that takes advantage of the bigger screen. Multitasking-friendly, hover-aware, built for split view.</div><div class="css-g5y9jx r-uaa2di r-13na2be"><div class="css-g5y9jx r-1awozwy r-7na9ed r-it2ac2 r-1xfd6ze r-rs99b7 r-18u37iz r-1ssbvtb r-ytbthy r-3o4zer"><div class="css-g5y9jx r-1awozwy r-i57ct1 r-kdyh1x r-18yzcnr r-1777fci r-yc9v9c"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 8l3 3l5-6" stroke="#61afef" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg></div><div dir="auto" class="css-146c3p1 r-1dpffg5 r-13awgt0 r-1b43r93 r-jpx62j r-1559e4e">Sidebar navigation</div></div><div class="css-g5y9jx r-1awozwy r-7na9ed r-it2ac2 r-1xfd6ze r-rs99b7 r-18u37iz r-1ssbvtb r-ytbthy r-3o4zer"><div class="css-g5y9jx r-1awozwy r-i57ct1 r-kdyh1x r-18yzcnr r-1777fci r-yc9v9c"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 8l3 3l5-6" stroke="#61afef" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg></div><div dir="auto" class="css-146c3p1 r-1dpffg5 r-13awgt0 r-1b43r93 r-jpx62j r-1559e4e">Split view multitasking</div></div><div class="css-g5y9jx r-1awozwy r-7na9ed r-it2ac2 r-1xfd6ze r-rs99b7 r-18u37iz r-1ssbvtb r-ytbthy r-3o4zer"><div class="css-g5y9jx r-1awozwy r-i57ct1 r-kdyh1x r-18yzcnr r-1777fci r-yc9v9c"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 8l3 3l5-6" stroke="#61afef" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg></div><div dir="auto" class="css-146c3p1 r-1dpffg5 r-13awgt0 r-1b43r93 r-jpx62j r-1559e4e">AirPlay to your TV</div></div></div></div><div class="css-g5y9jx r-1t07wo7 r-5kkj8d r-eqz5dr r-1777fci r-1asp59d r-1c8wk46"><div class="css-g5y9jx r-1awozwy r-k200y r-1m5ggi5 r-sdzlij r-rs99b7 r-18u37iz r-ojf8lh r-rehuqn r-1m04atk r-1qfoi16" style="border-top-color:rgba(97,175,239,0.28);border-right-color:rgba(97,175,239,0.28);border-bottom-color:rgba(97,175,239,0.28);border-left-color:rgba(97,175,239,0.28)"><div class="css-g5y9jx r-sdzlij r-1ozsyd3 r-12rgx7y" style="background-color:rgba(97,175,239,1.00)"></div><div dir="auto" class="css-146c3p1 r-1enofrn r-1kfrs79 r-1op0lh7" style="color:rgba(97,175,239,1.00)">In development</div></div><h3 dir="auto" aria-level="3" role="heading" class="css-146c3p1 r-1uy9biq r-1ozj4bg r-crgep1 r-ey96lj r-1kfrs79 r-13h23lk r-1uagazm r-65s87v r-1ifxtd0 r-1wzrnnt">Living-room TV.<!-- -->
+<!-- -->Lean back, focus forward.</h3><div dir="auto" class="css-146c3p1 r-1dpffg5 r-1inkyih r-a8ghvy r-1peese0 r-13na2be">A focus-driven UI for remote-friendly browsing. The same MPV engine, optimized for 10-foot reading distance.</div><div class="css-g5y9jx r-uaa2di r-13na2be"><div class="css-g5y9jx r-1awozwy r-7na9ed r-it2ac2 r-1xfd6ze r-rs99b7 r-18u37iz r-1ssbvtb r-ytbthy r-3o4zer"><div class="css-g5y9jx r-1awozwy r-i57ct1 r-kdyh1x r-18yzcnr r-1777fci r-yc9v9c"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 8l3 3l5-6" stroke="#61afef" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg></div><div dir="auto" class="css-146c3p1 r-1dpffg5 r-13awgt0 r-1b43r93 r-jpx62j r-1559e4e">Focus engine + remote control</div></div><div class="css-g5y9jx r-1awozwy r-7na9ed r-it2ac2 r-1xfd6ze r-rs99b7 r-18u37iz r-1ssbvtb r-ytbthy r-3o4zer"><div class="css-g5y9jx r-1awozwy r-i57ct1 r-kdyh1x r-18yzcnr r-1777fci r-yc9v9c"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 8l3 3l5-6" stroke="#61afef" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg></div><div dir="auto" class="css-146c3p1 r-1dpffg5 r-13awgt0 r-1b43r93 r-jpx62j r-1559e4e">4K HDR pass-through</div></div><div class="css-g5y9jx r-1awozwy r-7na9ed r-it2ac2 r-1xfd6ze r-rs99b7 r-18u37iz r-1ssbvtb r-ytbthy r-3o4zer"><div class="css-g5y9jx r-1awozwy r-i57ct1 r-kdyh1x r-18yzcnr r-1777fci r-yc9v9c"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 8l3 3l5-6" stroke="#61afef" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg></div><div dir="auto" class="css-146c3p1 r-1dpffg5 r-13awgt0 r-1b43r93 r-jpx62j r-1559e4e">Dolby Atmos pass-through</div></div></div></div><div class="css-g5y9jx r-1t07wo7 r-5kkj8d r-eqz5dr r-1777fci r-1asp59d r-1c8wk46"><div class="css-g5y9jx r-1awozwy r-k200y r-1m5ggi5 r-sdzlij r-rs99b7 r-18u37iz r-ojf8lh r-rehuqn r-1m04atk r-1qfoi16" style="border-top-color:rgba(97,175,239,0.28);border-right-color:rgba(97,175,239,0.28);border-bottom-color:rgba(97,175,239,0.28);border-left-color:rgba(97,175,239,0.28)"><div class="css-g5y9jx r-sdzlij r-1ozsyd3 r-12rgx7y" style="background-color:rgba(97,175,239,1.00)"></div><div dir="auto" class="css-146c3p1 r-1enofrn r-1kfrs79 r-1op0lh7" style="color:rgba(97,175,239,1.00)">In development</div></div><h3 dir="auto" aria-level="3" role="heading" class="css-146c3p1 r-1uy9biq r-1ozj4bg r-crgep1 r-ey96lj r-1kfrs79 r-13h23lk r-1uagazm r-65s87v r-1ifxtd0 r-1wzrnnt">Mac.<!-- -->
+<!-- -->A first-class target.</h3><div dir="auto" class="css-146c3p1 r-1dpffg5 r-1inkyih r-a8ghvy r-1peese0 r-13na2be">Mac Catalyst, not a wrapped iPad app. Window management, keyboard shortcuts, menu bar — handled like a real desktop client.</div><div class="css-g5y9jx r-uaa2di r-13na2be"><div class="css-g5y9jx r-1awozwy r-7na9ed r-it2ac2 r-1xfd6ze r-rs99b7 r-18u37iz r-1ssbvtb r-ytbthy r-3o4zer"><div class="css-g5y9jx r-1awozwy r-i57ct1 r-kdyh1x r-18yzcnr r-1777fci r-yc9v9c"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 8l3 3l5-6" stroke="#61afef" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg></div><div dir="auto" class="css-146c3p1 r-1dpffg5 r-13awgt0 r-1b43r93 r-jpx62j r-1559e4e">Native window chrome</div></div><div class="css-g5y9jx r-1awozwy r-7na9ed r-it2ac2 r-1xfd6ze r-rs99b7 r-18u37iz r-1ssbvtb r-ytbthy r-3o4zer"><div class="css-g5y9jx r-1awozwy r-i57ct1 r-kdyh1x r-18yzcnr r-1777fci r-yc9v9c"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 8l3 3l5-6" stroke="#61afef" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg></div><div dir="auto" class="css-146c3p1 r-1dpffg5 r-13awgt0 r-1b43r93 r-jpx62j r-1559e4e">Keyboard-first navigation</div></div><div class="css-g5y9jx r-1awozwy r-7na9ed r-it2ac2 r-1xfd6ze r-rs99b7 r-18u37iz r-1ssbvtb r-ytbthy r-3o4zer"><div class="css-g5y9jx r-1awozwy r-i57ct1 r-kdyh1x r-18yzcnr r-1777fci r-yc9v9c"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 8l3 3l5-6" stroke="#61afef" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg></div><div dir="auto" class="css-146c3p1 r-1dpffg5 r-13awgt0 r-1b43r93 r-jpx62j r-1559e4e">Background downloads</div></div></div></div><div class="css-g5y9jx r-1t07wo7 r-5kkj8d r-eqz5dr r-1777fci r-1asp59d r-1c8wk46"><div class="css-g5y9jx r-1awozwy r-k200y r-1m5ggi5 r-sdzlij r-rs99b7 r-18u37iz r-ojf8lh r-rehuqn r-1m04atk r-1qfoi16" style="border-top-color:rgba(97,175,239,0.28);border-right-color:rgba(97,175,239,0.28);border-bottom-color:rgba(97,175,239,0.28);border-left-color:rgba(97,175,239,0.28)"><div class="css-g5y9jx r-sdzlij r-1ozsyd3 r-12rgx7y" style="background-color:rgba(97,175,239,1.00)"></div><div dir="auto" class="css-146c3p1 r-1enofrn r-1kfrs79 r-1op0lh7" style="color:rgba(97,175,239,1.00)">In development</div></div><h3 dir="auto" aria-level="3" role="heading" class="css-146c3p1 r-1uy9biq r-1ozj4bg r-crgep1 r-ey96lj r-1kfrs79 r-13h23lk r-1uagazm r-65s87v r-1ifxtd0 r-1wzrnnt">Android.<!-- -->
+<!-- -->Same engine, different OS.</h3><div dir="auto" class="css-146c3p1 r-1dpffg5 r-1inkyih r-a8ghvy r-1peese0 r-13na2be">One MPV build. One feature set. Whether you&#x27;re on iOS or Android, you get the same player and the same UI vocabulary.</div><div class="css-g5y9jx r-uaa2di r-13na2be"><div class="css-g5y9jx r-1awozwy r-7na9ed r-it2ac2 r-1xfd6ze r-rs99b7 r-18u37iz r-1ssbvtb r-ytbthy r-3o4zer"><div class="css-g5y9jx r-1awozwy r-i57ct1 r-kdyh1x r-18yzcnr r-1777fci r-yc9v9c"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 8l3 3l5-6" stroke="#61afef" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg></div><div dir="auto" class="css-146c3p1 r-1dpffg5 r-13awgt0 r-1b43r93 r-jpx62j r-1559e4e">Phone &amp; tablet</div></div><div class="css-g5y9jx r-1awozwy r-7na9ed r-it2ac2 r-1xfd6ze r-rs99b7 r-18u37iz r-1ssbvtb r-ytbthy r-3o4zer"><div class="css-g5y9jx r-1awozwy r-i57ct1 r-kdyh1x r-18yzcnr r-1777fci r-yc9v9c"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 8l3 3l5-6" stroke="#61afef" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg></div><div dir="auto" class="css-146c3p1 r-1dpffg5 r-13awgt0 r-1b43r93 r-jpx62j r-1559e4e">Android TV (roadmap)</div></div><div class="css-g5y9jx r-1awozwy r-7na9ed r-it2ac2 r-1xfd6ze r-rs99b7 r-18u37iz r-1ssbvtb r-ytbthy r-3o4zer"><div class="css-g5y9jx r-1awozwy r-i57ct1 r-kdyh1x r-18yzcnr r-1777fci r-yc9v9c"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 8l3 3l5-6" stroke="#61afef" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg></div><div dir="auto" class="css-146c3p1 r-1dpffg5 r-13awgt0 r-1b43r93 r-jpx62j r-1559e4e">Chromecast (roadmap)</div></div></div></div></div><div aria-hidden="true" class="css-g5y9jx r-1awozwy r-13awgt0 r-118y304 r-1777fci r-14l27qf r-gtdqiz r-1qxgiz6"><div class="css-g5y9jx r-1awozwy r-1pi2tsx r-1777fci r-bnwqim r-13qz1uu"><div class="css-g5y9jx r-1awozwy r-2kxcpj r-1777fci r-633pao r-u8s1d r-6dt33c r-eug0r7" style="transition-property:opacity, transform;transition-duration:700ms;transition-timing-function:cubic-bezier(.2,.8,.2,1)"><div class="css-g5y9jx r-1tqf1nf r-tcguuw r-1wh0n7e r-edyy15 r-wpvfa7" style="box-shadow:0 0 0 2px #2a2f37, 0 30px 60px -10px rgba(0,0,0,0.6), 0 60px 120px -30px rgba(97,175,239,0.18)"><div class="css-g5y9jx r-92hvpk r-1c57tb8 r-13awgt0 r-1udh08x r-bnwqim"><div class="css-g5y9jx r-1kihuf0 r-kemksi r-sdzlij r-1472mwg r-1wyvozj r-u8s1d r-1yxedwg r-talcsl r-19554kt r-8fdsdq"></div><div class="css-g5y9jx r-1l7z4oj"><div class="css-g5y9jx r-obd0qt r-18u37iz r-1iud8zs r-1wtj0ep r-xd6kpl r-e4572k"><div dir="auto" class="css-146c3p1 r-1uy9biq r-1ozj4bg r-n6v787 r-1kfrs79">9:41</div><div class="css-g5y9jx r-1awozwy r-18u37iz r-580adz"><div class="css-g5y9jx r-gc9cf3 r-1h116bs r-k5y9r7 r-1janqcz"></div><div class="css-g5y9jx r-ndvcnb r-voibxv r-bqytpi r-1sed4dd r-d045u9 r-1or9b2r r-1mcorv5"></div><div class="css-g5y9jx r-1fasyvk r-voibxv r-cdmcib r-1rf8fdq r-vz2u4x r-lrsllp"></div></div></div><div class="css-g5y9jx r-1vokwdq r-umhwjx r-1udh08x r-bnwqim"><div class="css-g5y9jx r-tmq7zw r-2kxcpj r-u8s1d"></div><div dir="auto" class="css-146c3p1 r-rki7wi r-1uy9biq r-1b43r93 r-b88u0q r-1f12m5q r-u8s1d r-dukzhd">Continue Watching</div></div><div class="css-g5y9jx"><div dir="auto" class="css-146c3p1 r-1uy9biq r-1enofrn r-1kfrs79 r-5oul0u r-l71dzp r-3o4zer">For You</div><div class="css-g5y9jx r-18u37iz r-1cmwbt1 r-1cad53l r-3o4zer"><div class="css-g5y9jx r-i57ct1 r-kdyh1x r-18kxxzh r-1q142lx r-1blnp2b" style="background-image:linear-gradient(135deg, #4a3a5a, #2a2030);aspect-ratio:0.6666666666666666"></div><div class="css-g5y9jx r-i57ct1 r-kdyh1x r-18kxxzh r-1q142lx r-1blnp2b" style="background-image:linear-gradient(135deg, #2a4a3a, #1a3025);aspect-ratio:0.6666666666666666"></div><div class="css-g5y9jx r-i57ct1 r-kdyh1x r-18kxxzh r-1q142lx r-1blnp2b" style="background-image:linear-gradient(135deg, #4a3525, #2f2018);aspect-ratio:0.6666666666666666"></div><div class="css-g5y9jx r-i57ct1 r-kdyh1x r-18kxxzh r-1q142lx r-1blnp2b" style="background-image:linear-gradient(135deg, #2a3a55, #1a2435);aspect-ratio:0.6666666666666666"></div></div></div><div class="css-g5y9jx"><div dir="auto" class="css-146c3p1 r-1uy9biq r-1enofrn r-1kfrs79 r-5oul0u r-l71dzp r-3o4zer">Recently Added</div><div class="css-g5y9jx r-18u37iz r-1cmwbt1 r-1cad53l r-3o4zer"><div class="css-g5y9jx r-i57ct1 r-kdyh1x r-18kxxzh r-1q142lx r-1blnp2b" style="background-image:linear-gradient(135deg, #553555, #2f1830);aspect-ratio:0.6666666666666666"></div><div class="css-g5y9jx r-i57ct1 r-kdyh1x r-18kxxzh r-1q142lx r-1blnp2b" style="background-image:linear-gradient(135deg, #355555, #183030);aspect-ratio:0.6666666666666666"></div><div class="css-g5y9jx r-i57ct1 r-kdyh1x r-18kxxzh r-1q142lx r-1blnp2b" style="background-image:linear-gradient(135deg, #2a4a3a, #1a3025);aspect-ratio:0.6666666666666666"></div><div class="css-g5y9jx r-i57ct1 r-kdyh1x r-18kxxzh r-1q142lx r-1blnp2b" style="background-image:linear-gradient(135deg, #4a3a5a, #2a2030);aspect-ratio:0.6666666666666666"></div></div></div></div></div></div></div><div class="css-g5y9jx r-1awozwy r-2kxcpj r-1777fci r-orgf3d r-633pao r-u8s1d r-xn48z5" style="transition-property:opacity, transform;transition-duration:700ms;transition-timing-function:cubic-bezier(.2,.8,.2,1)"><div class="css-g5y9jx r-1e4w4m1 r-tcguuw r-4zvafu r-xyw6el r-1hk78en" style="box-shadow:0 0 0 2px #2a2f37, 0 30px 60px -10px rgba(0,0,0,0.6), 0 60px 120px -30px rgba(97,175,239,0.18)"><div class="css-g5y9jx r-92hvpk r-1867qdf r-13awgt0 r-1udh08x r-bnwqim"><div class="css-g5y9jx r-13awgt0 r-18u37iz"><div class="css-g5y9jx r-1pdhgt r-qyww28 r-13l2t4g r-9aw3ui r-w7s2jr r-18c5d7m r-1glkqn6"><div class="css-g5y9jx r-1awozwy r-z2wwpe r-18u37iz r-9aw3ui r-10sqg0u r-vuvdlw r-is05cd r-yepxxq"><div class="css-g5y9jx r-1jkafct r-1or9b2r r-5soawk r-1ndaa2h r-6dt33c"></div><div dir="auto" class="css-146c3p1 r-qqjak8 r-1sm3ja2 r-1kfrs79">Home</div></div><div class="css-g5y9jx r-1awozwy r-z2wwpe r-18u37iz r-9aw3ui r-10sqg0u r-vuvdlw r-is05cd"><div class="css-g5y9jx r-msqjqc r-1jkafct r-1or9b2r r-12c3ph5 r-5soawk"></div><div dir="auto" class="css-146c3p1 r-1dpffg5 r-qqjak8">Movies</div></div><div class="css-g5y9jx r-1awozwy r-z2wwpe r-18u37iz r-9aw3ui r-10sqg0u r-vuvdlw r-is05cd"><div class="css-g5y9jx r-msqjqc r-1jkafct r-1or9b2r r-12c3ph5 r-5soawk"></div><div dir="auto" class="css-146c3p1 r-1dpffg5 r-qqjak8">Shows</div></div><div class="css-g5y9jx r-1awozwy r-z2wwpe r-18u37iz r-9aw3ui r-10sqg0u r-vuvdlw r-is05cd"><div class="css-g5y9jx r-msqjqc r-1jkafct r-1or9b2r r-12c3ph5 r-5soawk"></div><div dir="auto" class="css-146c3p1 r-1dpffg5 r-qqjak8">Downloads</div></div><div class="css-g5y9jx r-1awozwy r-z2wwpe r-18u37iz r-9aw3ui r-10sqg0u r-vuvdlw r-is05cd"><div class="css-g5y9jx r-msqjqc r-1jkafct r-1or9b2r r-12c3ph5 r-5soawk"></div><div dir="auto" class="css-146c3p1 r-1dpffg5 r-qqjak8">Search</div></div><div class="css-g5y9jx r-1awozwy r-z2wwpe r-18u37iz r-9aw3ui r-10sqg0u r-vuvdlw r-is05cd"><div class="css-g5y9jx r-msqjqc r-1jkafct r-1or9b2r r-12c3ph5 r-5soawk"></div><div dir="auto" class="css-146c3p1 r-1dpffg5 r-qqjak8">Requests</div></div></div><div class="css-g5y9jx r-13awgt0 r-1udh08x r-xyw6el"><div class="css-g5y9jx r-1vokwdq r-1xfd6ze r-rxcuwo r-1udh08x r-bnwqim"><div class="css-g5y9jx r-tmq7zw r-2kxcpj r-u8s1d"></div><div class="css-g5y9jx r-rki7wi r-1f12m5q r-u8s1d r-dukzhd"><div dir="auto" class="css-146c3p1 r-1uy9biq r-1b43r93 r-b88u0q">The Lost Ledger</div><div dir="auto" class="css-146c3p1 r-1dpffg5 r-10x49cs r-1bymd8e">S2 · E4 · 47m</div></div></div><div dir="auto" class="css-146c3p1 r-1uy9biq r-1enofrn r-1kfrs79 r-5oul0u r-l71dzp">Continue Watching</div><div class="css-g5y9jx r-18u37iz r-1cmwbt1"><div class="css-g5y9jx r-i57ct1 r-kdyh1x r-18kxxzh r-1q142lx" style="background-image:linear-gradient(135deg, #4a3a5a, #2a2030);aspect-ratio:0.75;width:96px"></div><div class="css-g5y9jx r-i57ct1 r-kdyh1x r-18kxxzh r-1q142lx" style="background-image:linear-gradient(135deg, #2a4a3a, #1a3025);aspect-ratio:0.75;width:96px"></div><div class="css-g5y9jx r-i57ct1 r-kdyh1x r-18kxxzh r-1q142lx" style="background-image:linear-gradient(135deg, #4a3525, #2f2018);aspect-ratio:0.75;width:96px"></div><div class="css-g5y9jx r-i57ct1 r-kdyh1x r-18kxxzh r-1q142lx" style="background-image:linear-gradient(135deg, #2a3a55, #1a2435);aspect-ratio:0.75;width:96px"></div></div></div></div></div></div></div><div class="css-g5y9jx r-1awozwy r-2kxcpj r-1777fci r-orgf3d r-633pao r-u8s1d r-xn48z5" style="transition-property:opacity, transform;transition-duration:700ms;transition-timing-function:cubic-bezier(.2,.8,.2,1)"><div class="css-g5y9jx r-1awozwy"><div class="css-g5y9jx r-1ts5s6y r-tcguuw r-t23y2h r-1sp51qo r-qrrmpc" style="box-shadow:0 0 0 2px #2a2f37, 0 30px 60px -10px rgba(0,0,0,0.6), 0 60px 120px -30px rgba(97,175,239,0.18)"><div class="css-g5y9jx r-92hvpk r-kdyh1x r-13awgt0 r-1udh08x r-bnwqim"><div class="css-g5y9jx r-13awgt0 r-eqz5dr"><div class="css-g5y9jx r-14muugr r-13awgt0 r-ojf8lh r-17s6mgv r-zo2zu6 r-1fkl15p"><div dir="auto" class="css-146c3p1 r-1uy9biq r-evnaw r-b88u0q r-1tsgycv">Whitewater</div><div dir="auto" class="css-146c3p1 r-1dpffg5 r-1gkfh8e">Documentary · 2024 · 1h 32m</div></div><div class="css-g5y9jx r-18u37iz r-1cmwbt1 r-1mmae3n r-1fkl15p"><div class="css-g5y9jx r-1ts5s6y r-i57ct1 r-z2wwpe r-1glkqn6 r-s65cn9 r-10htey3 r-1tihekz r-5xr8s6 r-zexzw7"></div><div class="css-g5y9jx r-1ts5s6y r-i57ct1 r-z2wwpe r-1glkqn6"></div><div class="css-g5y9jx r-1ts5s6y r-i57ct1 r-z2wwpe r-1glkqn6"></div><div class="css-g5y9jx r-1ts5s6y r-i57ct1 r-z2wwpe r-1glkqn6"></div><div class="css-g5y9jx r-1ts5s6y r-i57ct1 r-z2wwpe r-1glkqn6"></div><div class="css-g5y9jx r-1ts5s6y r-i57ct1 r-z2wwpe r-1glkqn6"></div></div></div></div></div><div class="css-g5y9jx r-hfoyft r-5qlx7g r-nefvgx r-10ptun7 r-19i43ro r-1g9dr39"></div></div></div><div class="css-g5y9jx r-1awozwy r-2kxcpj r-1777fci r-orgf3d r-633pao r-u8s1d r-xn48z5" style="transition-property:opacity, transform;transition-duration:700ms;transition-timing-function:cubic-bezier(.2,.8,.2,1)"><div class="css-g5y9jx r-1awozwy r-n4qkvd"><div class="css-g5y9jx r-1pimmuf r-tcguuw r-6t5ypu r-1dpl46z r-bqytpi r-1sed4dd r-1udh08x r-nsbfu8 r-13qz1uu" style="box-shadow:0 0 0 2px #2a2f37, 0 30px 60px -10px rgba(0,0,0,0.6), 0 60px 120px -30px rgba(97,175,239,0.18)"><div class="css-g5y9jx r-1kihuf0 r-lnti55 r-6t5ypu r-1dpl46z r-4v7adb r-f1odvy r-1e6yznf r-1ey2ra3"></div><div class="css-g5y9jx r-92hvpk r-z2wwpe r-13awgt0 r-1udh08x r-bnwqim"><div class="css-g5y9jx r-13awgt0 r-18u37iz"><div class="css-g5y9jx r-1pdhgt r-qyww28 r-13l2t4g r-w7s2jr r-is05cd r-1x93onp"><div class="css-g5y9jx r-18u37iz r-ojf8lh r-1cad53l r-m2pi6t"><div class="css-g5y9jx r-sdzlij r-k5y9r7 r-1t7zxhp" style="background-color:rgba(255,95,87,1.00)"></div><div class="css-g5y9jx r-sdzlij r-k5y9r7 r-1t7zxhp" style="background-color:rgba(254,188,46,1.00)"></div><div class="css-g5y9jx r-sdzlij r-k5y9r7 r-1t7zxhp" style="background-color:rgba(40,200,64,1.00)"></div></div><div class="css-g5y9jx r-1awozwy r-z2wwpe r-18u37iz r-10sqg0u r-ojf8lh r-rehuqn r-is05cd r-yepxxq"><div class="css-g5y9jx r-1jkafct r-1or9b2r r-5soawk r-1ndaa2h r-6dt33c"></div><div dir="auto" class="css-146c3p1 r-1sm3ja2 r-1kfrs79 r-10x49cs">Home</div></div><div class="css-g5y9jx r-1awozwy r-z2wwpe r-18u37iz r-10sqg0u r-ojf8lh r-rehuqn r-is05cd"><div class="css-g5y9jx r-msqjqc r-1jkafct r-1or9b2r r-12c3ph5 r-5soawk"></div><div dir="auto" class="css-146c3p1 r-1dpffg5 r-10x49cs">Movies</div></div><div class="css-g5y9jx r-1awozwy r-z2wwpe r-18u37iz r-10sqg0u r-ojf8lh r-rehuqn r-is05cd"><div class="css-g5y9jx r-msqjqc r-1jkafct r-1or9b2r r-12c3ph5 r-5soawk"></div><div dir="auto" class="css-146c3p1 r-1dpffg5 r-10x49cs">Shows</div></div><div class="css-g5y9jx r-1awozwy r-z2wwpe r-18u37iz r-10sqg0u r-ojf8lh r-rehuqn r-is05cd"><div class="css-g5y9jx r-msqjqc r-1jkafct r-1or9b2r r-12c3ph5 r-5soawk"></div><div dir="auto" class="css-146c3p1 r-1dpffg5 r-10x49cs">Music</div></div><div class="css-g5y9jx r-1awozwy r-z2wwpe r-18u37iz r-10sqg0u r-ojf8lh r-rehuqn r-is05cd"><div class="css-g5y9jx r-msqjqc r-1jkafct r-1or9b2r r-12c3ph5 r-5soawk"></div><div dir="auto" class="css-146c3p1 r-1dpffg5 r-10x49cs">Search</div></div><div class="css-g5y9jx r-1awozwy r-z2wwpe r-18u37iz r-10sqg0u r-ojf8lh r-rehuqn r-is05cd"><div class="css-g5y9jx r-msqjqc r-1jkafct r-1or9b2r r-12c3ph5 r-5soawk"></div><div dir="auto" class="css-146c3p1 r-1dpffg5 r-10x49cs">Requests</div></div><div class="css-g5y9jx r-1awozwy r-z2wwpe r-18u37iz r-10sqg0u r-ojf8lh r-rehuqn r-is05cd"><div class="css-g5y9jx r-msqjqc r-1jkafct r-1or9b2r r-12c3ph5 r-5soawk"></div><div dir="auto" class="css-146c3p1 r-1dpffg5 r-10x49cs">Downloads</div></div></div><div class="css-g5y9jx r-13awgt0 r-xyw6el"><div class="css-g5y9jx r-18u37iz r-1w6e6rj r-ojf8lh"><div class="css-g5y9jx r-i57ct1 r-kdyh1x r-18kxxzh r-1q142lx r-1blnp2b" style="background-image:linear-gradient(135deg, #4a3a5a, #2a2030);aspect-ratio:0.6666666666666666"></div><div class="css-g5y9jx r-i57ct1 r-kdyh1x r-18kxxzh r-1q142lx r-1blnp2b" style="background-image:linear-gradient(135deg, #2a4a3a, #1a3025);aspect-ratio:0.6666666666666666"></div><div class="css-g5y9jx r-i57ct1 r-kdyh1x r-18kxxzh r-1q142lx r-1blnp2b" style="background-image:linear-gradient(135deg, #4a3525, #2f2018);aspect-ratio:0.6666666666666666"></div><div class="css-g5y9jx r-i57ct1 r-kdyh1x r-18kxxzh r-1q142lx r-1blnp2b" style="background-image:linear-gradient(135deg, #2a3a55, #1a2435);aspect-ratio:0.6666666666666666"></div><div class="css-g5y9jx r-i57ct1 r-kdyh1x r-18kxxzh r-1q142lx r-1blnp2b" style="background-image:linear-gradient(135deg, #553555, #2f1830);aspect-ratio:0.6666666666666666"></div><div class="css-g5y9jx r-i57ct1 r-kdyh1x r-18kxxzh r-1q142lx r-1blnp2b" style="background-image:linear-gradient(135deg, #355555, #183030);aspect-ratio:0.6666666666666666"></div><div class="css-g5y9jx r-i57ct1 r-kdyh1x r-18kxxzh r-1q142lx r-1blnp2b" style="background-image:linear-gradient(135deg, #2a4a3a, #1a3025);aspect-ratio:0.6666666666666666"></div><div class="css-g5y9jx r-i57ct1 r-kdyh1x r-18kxxzh r-1q142lx r-1blnp2b" style="background-image:linear-gradient(135deg, #4a3a5a, #2a2030);aspect-ratio:0.6666666666666666"></div><div class="css-g5y9jx r-i57ct1 r-kdyh1x r-18kxxzh r-1q142lx r-1blnp2b" style="background-image:linear-gradient(135deg, #4a3525, #2f2018);aspect-ratio:0.6666666666666666"></div><div class="css-g5y9jx r-i57ct1 r-kdyh1x r-18kxxzh r-1q142lx r-1blnp2b" style="background-image:linear-gradient(135deg, #2a3a55, #1a2435);aspect-ratio:0.6666666666666666"></div><div class="css-g5y9jx r-i57ct1 r-kdyh1x r-18kxxzh r-1q142lx r-1blnp2b" style="background-image:linear-gradient(135deg, #553555, #2f1830);aspect-ratio:0.6666666666666666"></div><div class="css-g5y9jx r-i57ct1 r-kdyh1x r-18kxxzh r-1q142lx r-1blnp2b" style="background-image:linear-gradient(135deg, #355555, #183030);aspect-ratio:0.6666666666666666"></div></div></div></div></div></div><div class="css-g5y9jx r-hfoyft r-keui8w r-j9nkxj r-tbmifm r-1e1dj83 r-bnwqim r-1tp5e5a"><div class="css-g5y9jx r-1kihuf0 r-tcguuw r-1wh2hl7 r-e65k4z r-1hlnpa r-u8s1d r-ipm5af r-7y7eek"></div></div></div></div><div class="css-g5y9jx r-1awozwy r-2kxcpj r-1777fci r-orgf3d r-633pao r-u8s1d r-xn48z5" style="transition-property:opacity, transform;transition-duration:700ms;transition-timing-function:cubic-bezier(.2,.8,.2,1)"><div class="css-g5y9jx r-lq8hd6 r-tcguuw r-1m7mu0x r-qpntkw r-102a1xi" style="box-shadow:0 0 0 2px #2a2f37, 0 30px 60px -10px rgba(0,0,0,0.6), 0 60px 120px -30px rgba(152,195,121,0.16)"><div class="css-g5y9jx r-92hvpk r-1llaxt6 r-13awgt0 r-1udh08x r-bnwqim"><div class="css-g5y9jx r-1kihuf0 r-kemksi r-sdzlij r-tbmifm r-u8s1d r-h7zev3 r-j0ydsv r-16eto9q r-1g40b8q"></div><div class="css-g5y9jx r-obd0qt r-18u37iz r-1iud8zs r-1wtj0ep r-xd6kpl r-e4572k"><div dir="auto" class="css-146c3p1 r-1uy9biq r-1ozj4bg r-n6v787 r-1kfrs79">9:41</div><div class="css-g5y9jx r-1awozwy r-18u37iz r-580adz"><div class="css-g5y9jx r-gc9cf3 r-1h116bs r-k5y9r7 r-1janqcz"></div><div class="css-g5y9jx r-ndvcnb r-voibxv r-bqytpi r-1sed4dd r-d045u9 r-1or9b2r r-1mcorv5"></div><div class="css-g5y9jx r-1fasyvk r-voibxv r-cdmcib r-1rf8fdq r-vz2u4x r-lrsllp"></div></div></div><div class="css-g5y9jx r-1vokwdq r-umhwjx r-1udh08x r-bnwqim"><div class="css-g5y9jx r-tmq7zw r-2kxcpj r-u8s1d"></div><div class="css-g5y9jx r-rki7wi r-1f12m5q r-u8s1d r-dukzhd"><div dir="auto" class="css-146c3p1 r-1uy9biq r-1b43r93 r-b88u0q">Cobalt Sky</div><div dir="auto" class="css-146c3p1 r-1dpffg5 r-10x49cs r-1bymd8e">Movie · 2024 · 1h 58m</div></div></div><div class="css-g5y9jx"><div dir="auto" class="css-146c3p1 r-1uy9biq r-1enofrn r-1kfrs79 r-5oul0u r-l71dzp r-3o4zer">Recently Added</div><div class="css-g5y9jx r-18u37iz r-1cmwbt1 r-1cad53l r-3o4zer"><div class="css-g5y9jx r-i57ct1 r-kdyh1x r-18kxxzh r-1q142lx r-1blnp2b" style="background-image:linear-gradient(135deg, #4a3525, #2f2018);aspect-ratio:0.6666666666666666"></div><div class="css-g5y9jx r-i57ct1 r-kdyh1x r-18kxxzh r-1q142lx r-1blnp2b" style="background-image:linear-gradient(135deg, #2a3a55, #1a2435);aspect-ratio:0.6666666666666666"></div><div class="css-g5y9jx r-i57ct1 r-kdyh1x r-18kxxzh r-1q142lx r-1blnp2b" style="background-image:linear-gradient(135deg, #553555, #2f1830);aspect-ratio:0.6666666666666666"></div><div class="css-g5y9jx r-i57ct1 r-kdyh1x r-18kxxzh r-1q142lx r-1blnp2b" style="background-image:linear-gradient(135deg, #355555, #183030);aspect-ratio:0.6666666666666666"></div></div></div><div class="css-g5y9jx"><div dir="auto" class="css-146c3p1 r-1uy9biq r-1enofrn r-1kfrs79 r-5oul0u r-l71dzp r-3o4zer">Continue Watching</div><div class="css-g5y9jx r-18u37iz r-1cmwbt1 r-1cad53l r-3o4zer"><div class="css-g5y9jx r-i57ct1 r-kdyh1x r-18kxxzh r-1q142lx r-1blnp2b" style="background-image:linear-gradient(135deg, #4a3a5a, #2a2030);aspect-ratio:0.6666666666666666"></div><div class="css-g5y9jx r-i57ct1 r-kdyh1x r-18kxxzh r-1q142lx r-1blnp2b" style="background-image:linear-gradient(135deg, #2a4a3a, #1a3025);aspect-ratio:0.6666666666666666"></div><div class="css-g5y9jx r-i57ct1 r-kdyh1x r-18kxxzh r-1q142lx r-1blnp2b" style="background-image:linear-gradient(135deg, #4a3525, #2f2018);aspect-ratio:0.6666666666666666"></div></div></div></div></div></div></div></div></div></div></div></div><div class="css-g5y9jx r-bnwqim r-13qz1uu r-1t07wo7 r-5kkj8d"><div class="css-g5y9jx r-f8sm7e r-1sp8lnq r-fqkl7q r-13qz1uu r-sywj37 r-16iroic"><div class="css-g5y9jx r-orgf3d r-159xmpb" style="transition-property:opacity, transform;transition-duration:600ms;transition-timing-function:cubic-bezier(.2,.8,.2,1);transition-delay:0ms"><div dir="auto" class="css-146c3p1 r-1enofrn r-1kfrs79 r-1wjxbdk r-1ifxtd0 r-tsynxw r-mkx4ke">Yours, on your terms</div></div><div class="css-g5y9jx r-18u37iz r-1w6e6rj r-1fdih9r r-11c0sde"><div class="css-g5y9jx r-orgf3d r-159xmpb r-13awgt0 r-14l27qf" style="transition-property:opacity, transform;transition-duration:600ms;transition-timing-function:cubic-bezier(.2,.8,.2,1);transition-delay:0ms"><div class="css-g5y9jx r-1pdhgt r-it2ac2 r-1867qdf r-rs99b7 r-1udh08x r-10mflh3 r-bnwqim"><div class="css-g5y9jx r-r4o3hb r-dc5v9k r-633pao r-u8s1d r-1waoohj r-10q7xpm r-hnxvie"></div><div class="css-g5y9jx r-1awozwy r-i57ct1 r-1q9bdsx r-1ugchlj r-1777fci r-1peese0 r-usgzl9"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 2L4 6v6c0 5 3.5 8.5 8 10c4.5-1.5 8-5 8-10V6z" stroke="#61afef" stroke-width="1.6" stroke-linejoin="round"></path><path d="M9 12l2 2l4-4" stroke="#61afef" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></div><h3 dir="auto" aria-level="3" role="heading" class="css-146c3p1 r-1uy9biq r-1ozj4bg r-crgep1 r-ey96lj r-1uagazm r-zz5t5d r-1kfrs79 r-16cbgwe r-1ifxtd0">Yours, end to end.</h3><div dir="auto" class="css-146c3p1 r-1dpffg5 r-ubezar r-a8ghvy r-1i4gbh2">Jellyfuse talks only to your server. No analytics. No telemetry. No third-party SDKs. Inspect every byte if you want — the source is public.</div></div></div><div class="css-g5y9jx r-orgf3d r-159xmpb r-13awgt0 r-14l27qf" style="transition-property:opacity, transform;transition-duration:600ms;transition-timing-function:cubic-bezier(.2,.8,.2,1);transition-delay:100ms"><div class="css-g5y9jx r-1pdhgt r-it2ac2 r-1867qdf r-rs99b7 r-1udh08x r-10mflh3 r-bnwqim"><div class="css-g5y9jx r-r4o3hb r-dc5v9k r-633pao r-u8s1d r-1waoohj r-10q7xpm r-hnxvie"></div><div class="css-g5y9jx r-1awozwy r-i57ct1 r-1q9bdsx r-1ugchlj r-1777fci r-1peese0 r-usgzl9"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M4 12h16M4 17h10" stroke="#61afef" stroke-width="1.6" stroke-linecap="round"></path><circle cx="18" cy="17" r="3" stroke="#61afef" stroke-width="1.6"></circle></svg></div><h3 dir="auto" aria-level="3" role="heading" class="css-146c3p1 r-1uy9biq r-1ozj4bg r-crgep1 r-ey96lj r-1uagazm r-zz5t5d r-1kfrs79 r-16cbgwe r-1ifxtd0">Free, forever.</h3><div dir="auto" class="css-146c3p1 r-1dpffg5 r-ubezar r-a8ghvy r-1i4gbh2">GPL-3.0 licensed. No Pro tier. No paywalled features. No accounts. Build it yourself or grab the latest release — the choice is yours.</div></div></div></div></div></div><div class="css-g5y9jx r-bnwqim r-13qz1uu" id="features"><div class="css-g5y9jx r-f8sm7e r-1sp8lnq r-fqkl7q r-13qz1uu r-sywj37 r-16iroic"><div class="css-g5y9jx r-orgf3d r-159xmpb r-1awozwy r-1kihuf0 r-ldnaw6 r-1vamr63 r-13qz1uu" style="transition-property:opacity, transform;transition-duration:600ms;transition-timing-function:cubic-bezier(.2,.8,.2,1);transition-delay:0ms"><div dir="auto" class="css-146c3p1 r-1enofrn r-1kfrs79 r-1wjxbdk r-1ifxtd0 r-tsynxw r-mkx4ke">Built right</div><h2 dir="auto" aria-level="2" role="heading" class="css-146c3p1 r-1uy9biq r-1ozj4bg r-crgep1 r-ey96lj r-1ps2hv2 r-1kfrs79 r-3ncq8g r-93pacp r-q4m81j">The details that matter.</h2><div dir="auto" class="css-146c3p1 r-1dpffg5 r-4rt2lv r-5w41ue r-1wzrnnt r-16yuluz r-q4m81j">Nine years of Jellyfin clients have taught us what people actually use. We built those things first.</div></div><div class="css-g5y9jx r-6413gk r-f4gmv6 r-1vmdywc"><div class="css-g5y9jx r-orgf3d r-159xmpb r-1pi2tsx r-bcqeeo" style="transition-property:opacity, transform;transition-duration:600ms;transition-timing-function:cubic-bezier(.2,.8,.2,1);transition-delay:0ms"><div class="css-g5y9jx r-13awgt0 r-1pi2tsx"><div class="css-g5y9jx r-1pdhgt r-it2ac2 r-1867qdf r-rs99b7 r-13awgt0 r-1pi2tsx r-494qqr"><div class="css-g5y9jx r-1awozwy r-b2787t r-1dzdj1l r-1r8g8re r-1777fci r-1ifxtd0 r-1acpoxo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" stroke="#61afef" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path><path d="M7 10l5 5 5-5" stroke="#61afef" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path><path d="M12 15V3" stroke="#61afef" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></div><h4 dir="auto" aria-level="4" role="heading" class="css-146c3p1 r-1uy9biq r-1ozj4bg r-1inkyih r-1kfrs79 r-3ysnhw r-f1odvy">Offline downloads</h4><div dir="auto" class="css-146c3p1 r-1dpffg5 r-1b43r93 r-10yl4k">Pause, resume, skip, retry. Built for spotty Wi-Fi and long flights.</div></div></div></div><div class="css-g5y9jx r-orgf3d r-159xmpb r-1pi2tsx r-bcqeeo" style="transition-property:opacity, transform;transition-duration:600ms;transition-timing-function:cubic-bezier(.2,.8,.2,1);transition-delay:100ms"><div class="css-g5y9jx r-13awgt0 r-1pi2tsx"><div class="css-g5y9jx r-1pdhgt r-it2ac2 r-1867qdf r-rs99b7 r-13awgt0 r-1pi2tsx r-494qqr"><div class="css-g5y9jx r-1awozwy r-b2787t r-1dzdj1l r-1r8g8re r-1777fci r-1ifxtd0 r-1acpoxo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M9 18V5l12-2v13" stroke="#61afef" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"></path><circle cx="6" cy="18" r="3" stroke="#61afef" stroke-width="1.6"></circle><circle cx="18" cy="16" r="3" stroke="#61afef" stroke-width="1.6"></circle></svg></div><h4 dir="auto" aria-level="4" role="heading" class="css-146c3p1 r-1uy9biq r-1ozj4bg r-1inkyih r-1kfrs79 r-3ysnhw r-f1odvy">Background audio</h4><div dir="auto" class="css-146c3p1 r-1dpffg5 r-1b43r93 r-10yl4k">Lock the screen, keep listening. Audiobooks and concerts work the way you&#x27;d expect.</div></div></div></div><div class="css-g5y9jx r-orgf3d r-159xmpb r-1pi2tsx r-bcqeeo" style="transition-property:opacity, transform;transition-duration:600ms;transition-timing-function:cubic-bezier(.2,.8,.2,1);transition-delay:200ms"><div class="css-g5y9jx r-13awgt0 r-1pi2tsx"><div class="css-g5y9jx r-1pdhgt r-it2ac2 r-1867qdf r-rs99b7 r-13awgt0 r-1pi2tsx r-494qqr"><div class="css-g5y9jx r-1awozwy r-b2787t r-1dzdj1l r-1r8g8re r-1777fci r-1ifxtd0 r-1acpoxo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="2" y="4" width="20" height="14" rx="2" stroke="#61afef" stroke-width="1.6"></rect><rect x="13" y="11" width="7" height="5" rx="1" fill="#61afef" opacity="0.3"></rect></svg></div><h4 dir="auto" aria-level="4" role="heading" class="css-146c3p1 r-1uy9biq r-1ozj4bg r-1inkyih r-1kfrs79 r-3ysnhw r-f1odvy">Picture in Picture</h4><div dir="auto" class="css-146c3p1 r-1dpffg5 r-1b43r93 r-10yl4k">Float your show in a corner while you reply to that message. System-native PiP.</div></div></div></div><div class="css-g5y9jx r-orgf3d r-159xmpb r-1pi2tsx r-bcqeeo" style="transition-property:opacity, transform;transition-duration:600ms;transition-timing-function:cubic-bezier(.2,.8,.2,1);transition-delay:0ms"><div class="css-g5y9jx r-13awgt0 r-1pi2tsx"><div class="css-g5y9jx r-1pdhgt r-it2ac2 r-1867qdf r-rs99b7 r-13awgt0 r-1pi2tsx r-494qqr"><div class="css-g5y9jx r-1awozwy r-b2787t r-1dzdj1l r-1r8g8re r-1777fci r-1ifxtd0 r-1acpoxo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="2" y="6" width="20" height="12" rx="1" stroke="#61afef" stroke-width="1.6"></rect><path d="M2 12h20M8 6v12M16 6v12" stroke="#61afef" stroke-width="1.6" stroke-linecap="round"></path></svg></div><h4 dir="auto" aria-level="4" role="heading" class="css-146c3p1 r-1uy9biq r-1ozj4bg r-1inkyih r-1kfrs79 r-3ysnhw r-f1odvy">Trickplay scrubbing</h4><div dir="auto" class="css-146c3p1 r-1dpffg5 r-1b43r93 r-10yl4k">Frame-accurate previews under the seek bar — no more guessing where you are.</div></div></div></div><div class="css-g5y9jx r-orgf3d r-159xmpb r-1pi2tsx r-bcqeeo" style="transition-property:opacity, transform;transition-duration:600ms;transition-timing-function:cubic-bezier(.2,.8,.2,1);transition-delay:100ms"><div class="css-g5y9jx r-13awgt0 r-1pi2tsx"><div class="css-g5y9jx r-1pdhgt r-it2ac2 r-1867qdf r-rs99b7 r-13awgt0 r-1pi2tsx r-494qqr"><div class="css-g5y9jx r-1awozwy r-b2787t r-1dzdj1l r-1r8g8re r-1777fci r-1ifxtd0 r-1acpoxo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 6h2M9 6h12M3 12h2M9 12h12M3 18h2M9 18h12" stroke="#61afef" stroke-width="1.6" stroke-linecap="round"></path></svg></div><h4 dir="auto" aria-level="4" role="heading" class="css-146c3p1 r-1uy9biq r-1ozj4bg r-1inkyih r-1kfrs79 r-3ysnhw r-f1odvy">Chapter markers</h4><div dir="auto" class="css-146c3p1 r-1dpffg5 r-1b43r93 r-10yl4k">Jump straight to the cold open, the title sequence, or the credits. Honor your time.</div></div></div></div><div class="css-g5y9jx r-orgf3d r-159xmpb r-1pi2tsx r-bcqeeo" style="transition-property:opacity, transform;transition-duration:600ms;transition-timing-function:cubic-bezier(.2,.8,.2,1);transition-delay:200ms"><div class="css-g5y9jx r-13awgt0 r-1pi2tsx"><div class="css-g5y9jx r-1pdhgt r-it2ac2 r-1867qdf r-rs99b7 r-13awgt0 r-1pi2tsx r-494qqr"><div class="css-g5y9jx r-1awozwy r-b2787t r-1dzdj1l r-1r8g8re r-1777fci r-1ifxtd0 r-1acpoxo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M5 12h7l3-7 3 14 3-7h2" stroke="#61afef" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></div><h4 dir="auto" aria-level="4" role="heading" class="css-146c3p1 r-1uy9biq r-1ozj4bg r-1inkyih r-1kfrs79 r-3ysnhw r-f1odvy">Intro &amp; outro skip</h4><div dir="auto" class="css-146c3p1 r-1dpffg5 r-1b43r93 r-10yl4k">One tap. Already detected. Get to the story faster.</div></div></div></div><div class="css-g5y9jx r-orgf3d r-159xmpb r-1pi2tsx r-bcqeeo" style="transition-property:opacity, transform;transition-duration:600ms;transition-timing-function:cubic-bezier(.2,.8,.2,1);transition-delay:0ms"><div class="css-g5y9jx r-13awgt0 r-1pi2tsx"><div class="css-g5y9jx r-1pdhgt r-it2ac2 r-1867qdf r-rs99b7 r-13awgt0 r-1pi2tsx r-494qqr"><div class="css-g5y9jx r-1awozwy r-b2787t r-1dzdj1l r-1r8g8re r-1777fci r-1ifxtd0 r-1acpoxo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h12M4 18h8" stroke="#61afef" stroke-width="1.6" stroke-linecap="round"></path><path d="M14 15l2 2 4-4" stroke="#61afef" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></div><h4 dir="auto" aria-level="4" role="heading" class="css-146c3p1 r-1uy9biq r-1ozj4bg r-1inkyih r-1kfrs79 r-3ysnhw r-f1odvy">External subtitles</h4><div dir="auto" class="css-146c3p1 r-1dpffg5 r-1b43r93 r-10yl4k">Drop in .srt or .ass — full styling, including karaoke and overrides. MPV does the rendering.</div></div></div></div><div class="css-g5y9jx r-orgf3d r-159xmpb r-1pi2tsx r-bcqeeo" style="transition-property:opacity, transform;transition-duration:600ms;transition-timing-function:cubic-bezier(.2,.8,.2,1);transition-delay:100ms"><div class="css-g5y9jx r-13awgt0 r-1pi2tsx"><div class="css-g5y9jx r-1pdhgt r-it2ac2 r-1867qdf r-rs99b7 r-13awgt0 r-1pi2tsx r-494qqr"><div class="css-g5y9jx r-1awozwy r-b2787t r-1dzdj1l r-1r8g8re r-1777fci r-1ifxtd0 r-1acpoxo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8" r="3" stroke="#61afef" stroke-width="1.6"></circle><circle cx="17" cy="9" r="2.5" stroke="#61afef" stroke-width="1.6"></circle><path d="M3 19c0-3 3-5 6-5s6 2 6 5M16 18c0-2 2-4 5-3" stroke="#61afef" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></div><h4 dir="auto" aria-level="4" role="heading" class="css-146c3p1 r-1uy9biq r-1ozj4bg r-1inkyih r-1kfrs79 r-3ysnhw r-f1odvy">Multi-user profiles</h4><div dir="auto" class="css-146c3p1 r-1dpffg5 r-1b43r93 r-10yl4k">Switch accounts in two taps. Each profile keeps its own resume points and settings.</div></div></div></div><div class="css-g5y9jx r-orgf3d r-159xmpb r-1pi2tsx r-bcqeeo" style="transition-property:opacity, transform;transition-duration:600ms;transition-timing-function:cubic-bezier(.2,.8,.2,1);transition-delay:200ms"><div class="css-g5y9jx r-13awgt0 r-1pi2tsx"><div class="css-g5y9jx r-1pdhgt r-it2ac2 r-1867qdf r-rs99b7 r-13awgt0 r-1pi2tsx r-494qqr"><div class="css-g5y9jx r-1awozwy r-b2787t r-1dzdj1l r-1r8g8re r-1777fci r-1ifxtd0 r-1acpoxo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="6" stroke="#61afef" stroke-width="1.6"></circle><path d="M16 16l5 5" stroke="#61afef" stroke-width="1.6" stroke-linecap="round"></path></svg></div><h4 dir="auto" aria-level="4" role="heading" class="css-146c3p1 r-1uy9biq r-1ozj4bg r-1inkyih r-1kfrs79 r-3ysnhw r-f1odvy">Blended search</h4><div dir="auto" class="css-146c3p1 r-1dpffg5 r-1b43r93 r-10yl4k">One search bar. Library hits and request candidates side by side, clearly labeled.</div></div></div></div></div></div></div><div class="css-g5y9jx r-bnwqim r-13qz1uu r-1t07wo7 r-5kkj8d" id="faq"><div class="css-g5y9jx r-f8sm7e r-1sp8lnq r-fqkl7q r-13qz1uu r-sywj37 r-16iroic"><div class="css-g5y9jx r-1habvwh r-18u37iz r-1w6e6rj r-q2krsz"><div class="css-g5y9jx r-1d9yedq r-ek4qxl r-9dcw1g"><div class="css-g5y9jx r-orgf3d r-159xmpb" style="transition-property:opacity, transform;transition-duration:600ms;transition-timing-function:cubic-bezier(.2,.8,.2,1);transition-delay:0ms"><div dir="auto" class="css-146c3p1 r-1enofrn r-1kfrs79 r-1wjxbdk r-1ifxtd0 r-tsynxw r-mkx4ke">Questions</div></div><div class="css-g5y9jx r-orgf3d r-159xmpb" style="transition-property:opacity, transform;transition-duration:600ms;transition-timing-function:cubic-bezier(.2,.8,.2,1);transition-delay:100ms"><h2 dir="auto" aria-level="2" role="heading" class="css-146c3p1 r-1uy9biq r-1ozj4bg r-crgep1 r-ey96lj r-1ps2hv2 r-1kfrs79 r-3ncq8g r-93pacp">The short answers.</h2></div></div><div class="css-g5y9jx r-orgf3d r-159xmpb r-13awgt0 r-14l27qf" style="transition-property:opacity, transform;transition-duration:600ms;transition-timing-function:cubic-bezier(.2,.8,.2,1);transition-delay:100ms"><div class="css-g5y9jx r-1t07wo7 r-5kkj8d r-1wzrnnt"><div class="css-g5y9jx r-gb3yrc r-qklmqi r-zo2zu6"><button aria-expanded="false" role="button" tabindex="0" class="css-g5y9jx r-1otgn73 r-1awozwy r-1loqt21 r-18u37iz r-f4gmv6 r-1wtj0ep" type="button"><div dir="auto" class="css-146c3p1 r-1uy9biq r-13awgt0 r-1ozj4bg r-1b6yd1w r-majxgm r-13h23lk r-48tf01">Do I need a Jellyfin server?</div><div class="css-g5y9jx r-1472mwg r-bnwqim r-lrsllp"><div class="css-g5y9jx r-msqjqc r-qwd59z r-epq5cr r-1d2f490 r-u8s1d r-zchlnj r-1sofzug"></div><div class="css-g5y9jx r-msqjqc r-qwd59z r-1p0dtai r-qtbb1w r-u8s1d r-ipm5af r-18ctlrj r-14qw7yl r-1b8bd59 r-m5arl1"></div></div></button></div><div class="css-g5y9jx r-gb3yrc r-qklmqi r-zo2zu6"><button aria-expanded="false" role="button" tabindex="0" class="css-g5y9jx r-1otgn73 r-1awozwy r-1loqt21 r-18u37iz r-f4gmv6 r-1wtj0ep" type="button"><div dir="auto" class="css-146c3p1 r-1uy9biq r-13awgt0 r-1ozj4bg r-1b6yd1w r-majxgm r-13h23lk r-48tf01">Do I need Jellyseerr?</div><div class="css-g5y9jx r-1472mwg r-bnwqim r-lrsllp"><div class="css-g5y9jx r-msqjqc r-qwd59z r-epq5cr r-1d2f490 r-u8s1d r-zchlnj r-1sofzug"></div><div class="css-g5y9jx r-msqjqc r-qwd59z r-1p0dtai r-qtbb1w r-u8s1d r-ipm5af r-18ctlrj r-14qw7yl r-1b8bd59 r-m5arl1"></div></div></button></div><div class="css-g5y9jx r-gb3yrc r-qklmqi r-zo2zu6"><button aria-expanded="false" role="button" tabindex="0" class="css-g5y9jx r-1otgn73 r-1awozwy r-1loqt21 r-18u37iz r-f4gmv6 r-1wtj0ep" type="button"><div dir="auto" class="css-146c3p1 r-1uy9biq r-13awgt0 r-1ozj4bg r-1b6yd1w r-majxgm r-13h23lk r-48tf01">Which devices are supported?</div><div class="css-g5y9jx r-1472mwg r-bnwqim r-lrsllp"><div class="css-g5y9jx r-msqjqc r-qwd59z r-epq5cr r-1d2f490 r-u8s1d r-zchlnj r-1sofzug"></div><div class="css-g5y9jx r-msqjqc r-qwd59z r-1p0dtai r-qtbb1w r-u8s1d r-ipm5af r-18ctlrj r-14qw7yl r-1b8bd59 r-m5arl1"></div></div></button></div><div class="css-g5y9jx r-gb3yrc r-qklmqi r-zo2zu6"><button aria-expanded="false" role="button" tabindex="0" class="css-g5y9jx r-1otgn73 r-1awozwy r-1loqt21 r-18u37iz r-f4gmv6 r-1wtj0ep" type="button"><div dir="auto" class="css-146c3p1 r-1uy9biq r-13awgt0 r-1ozj4bg r-1b6yd1w r-majxgm r-13h23lk r-48tf01">Is it really free?</div><div class="css-g5y9jx r-1472mwg r-bnwqim r-lrsllp"><div class="css-g5y9jx r-msqjqc r-qwd59z r-epq5cr r-1d2f490 r-u8s1d r-zchlnj r-1sofzug"></div><div class="css-g5y9jx r-msqjqc r-qwd59z r-1p0dtai r-qtbb1w r-u8s1d r-ipm5af r-18ctlrj r-14qw7yl r-1b8bd59 r-m5arl1"></div></div></button></div><div class="css-g5y9jx r-gb3yrc r-qklmqi r-zo2zu6"><button aria-expanded="false" role="button" tabindex="0" class="css-g5y9jx r-1otgn73 r-1awozwy r-1loqt21 r-18u37iz r-f4gmv6 r-1wtj0ep" type="button"><div dir="auto" class="css-146c3p1 r-1uy9biq r-13awgt0 r-1ozj4bg r-1b6yd1w r-majxgm r-13h23lk r-48tf01">What about HDR and Dolby Vision?</div><div class="css-g5y9jx r-1472mwg r-bnwqim r-lrsllp"><div class="css-g5y9jx r-msqjqc r-qwd59z r-epq5cr r-1d2f490 r-u8s1d r-zchlnj r-1sofzug"></div><div class="css-g5y9jx r-msqjqc r-qwd59z r-1p0dtai r-qtbb1w r-u8s1d r-ipm5af r-18ctlrj r-14qw7yl r-1b8bd59 r-m5arl1"></div></div></button></div><div class="css-g5y9jx r-gb3yrc r-qklmqi r-zo2zu6"><button aria-expanded="false" role="button" tabindex="0" class="css-g5y9jx r-1otgn73 r-1awozwy r-1loqt21 r-18u37iz r-f4gmv6 r-1wtj0ep" type="button"><div dir="auto" class="css-146c3p1 r-1uy9biq r-13awgt0 r-1ozj4bg r-1b6yd1w r-majxgm r-13h23lk r-48tf01">Why MPV?</div><div class="css-g5y9jx r-1472mwg r-bnwqim r-lrsllp"><div class="css-g5y9jx r-msqjqc r-qwd59z r-epq5cr r-1d2f490 r-u8s1d r-zchlnj r-1sofzug"></div><div class="css-g5y9jx r-msqjqc r-qwd59z r-1p0dtai r-qtbb1w r-u8s1d r-ipm5af r-18ctlrj r-14qw7yl r-1b8bd59 r-m5arl1"></div></div></button></div></div></div></div></div></div></div><div class="css-g5y9jx r-bnwqim r-13qz1uu r-1t07wo7 r-5kkj8d"><div class="css-g5y9jx r-f8sm7e r-1sp8lnq r-fqkl7q r-13qz1uu r-19be1kl r-qhcjju"><div class="css-g5y9jx r-18u37iz r-1w6e6rj r-e6ktq0"><div class="css-g5y9jx r-dta0w2 r-1y50co4"><a href="#top" dir="auto" role="link" class="css-146c3p1 r-1awozwy r-1uy9biq r-6koalj r-18u37iz r-1ozj4bg r-1i10wst r-1kfrs79 r-uaa2di r-13h23lk r-13wfysu"><div class="css-g5y9jx r-1mlwlqe r-1udh08x r-417010 r-xoduu5 r-1px6drs r-h0d30l r-9iso6 r-1iww7jx"><div class="css-g5y9jx r-xoduu5 r-1niwhzg r-vvn4in r-u6sd8q r-1p0dtai r-1pi2tsx r-1d2f490 r-u8s1d r-zchlnj r-ipm5af r-13qz1uu r-1wyyakw r-4gszlv"></div></div><span class="css-1jxf684 r-1uy9biq r-1ozj4bg r-1i10wst r-1kfrs79 r-13h23lk r-eljoum">Jellyfuse</span></a><div dir="auto" class="css-146c3p1 r-1dpffg5 r-1b43r93 r-a8ghvy r-1wzrnnt r-krydu7">A Jellyfin client built around MPV. Watch your library, request what&#x27;s next, on every screen you own.</div></div><div class="css-g5y9jx r-13awgt0 r-qtfnoi"><div dir="auto" class="css-146c3p1 r-1uy9biq r-1ozj4bg r-n6v787 r-1kfrs79 r-1q67n59 r-1ifxtd0 r-tsynxw">Project</div><a href="https://github.com/OverGlass/jellyfuse" dir="auto" role="link" class="css-146c3p1 r-1dpffg5 r-1b43r93 r-cnw61z">GitHub</a><a href="https://github.com/OverGlass/jellyfuse/releases" dir="auto" role="link" class="css-146c3p1 r-1dpffg5 r-1b43r93 r-cnw61z">Release notes</a><a href="https://github.com/OverGlass/jellyfuse/issues" dir="auto" role="link" class="css-146c3p1 r-1dpffg5 r-1b43r93 r-cnw61z">Issues</a><a href="https://github.com/OverGlass/jellyfuse#status" dir="auto" role="link" class="css-146c3p1 r-1dpffg5 r-1b43r93 r-cnw61z">Roadmap</a></div><div class="css-g5y9jx r-13awgt0 r-qtfnoi"><div dir="auto" class="css-146c3p1 r-1uy9biq r-1ozj4bg r-n6v787 r-1kfrs79 r-1q67n59 r-1ifxtd0 r-tsynxw">Legal</div><a href="https://overglass.github.io/jellyfuse/privacy.html" dir="auto" role="link" class="css-146c3p1 r-1dpffg5 r-1b43r93 r-cnw61z">Privacy</a><a href="https://github.com/OverGlass/jellyfuse/blob/main/LICENSE" dir="auto" role="link" class="css-146c3p1 r-1dpffg5 r-1b43r93 r-cnw61z">License (GPL-3.0)</a></div><div class="css-g5y9jx r-13awgt0 r-qtfnoi"><div dir="auto" class="css-146c3p1 r-1uy9biq r-1ozj4bg r-n6v787 r-1kfrs79 r-1q67n59 r-1ifxtd0 r-tsynxw">Source</div><a href="https://github.com/OverGlass/jellyfuse/blob/main/CLAUDE.md" dir="auto" role="link" class="css-146c3p1 r-1dpffg5 r-1b43r93 r-cnw61z">CLAUDE.md</a><a href="https://github.com/OverGlass/jellyfuse#readme" dir="auto" role="link" class="css-146c3p1 r-1dpffg5 r-1b43r93 r-cnw61z">README</a></div></div><div class="css-g5y9jx r-1t07wo7 r-5kkj8d r-18u37iz r-1w6e6rj r-f4gmv6 r-1wtj0ep r-10fj5tc r-1ygmrgt"><div dir="auto" class="css-146c3p1 r-1st3usi r-1enofrn">Made with care · 2026</div><div dir="auto" class="css-146c3p1 r-1st3usi r-1enofrn">Jellyfuse is not affiliated with the Jellyfin project.</div></div></div></div></div><!--/$--></div></div></div></div></div><!--/$--></div></div><script src="/jellyfuse/_expo/static/js/web/entry-acd201cbb94d8140fe7324397617ca0f.js" defer></script>
+</body></html>

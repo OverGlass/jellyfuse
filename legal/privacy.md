@@ -1,0 +1,73 @@
+---
+layout: default
+title: Privacy Policy
+permalink: /privacy.html
+---
+
+# Jellyfuse Privacy Policy
+
+_Last updated: 2026-04-25_
+
+Jellyfuse is a third-party client for self-hosted Jellyfin and (optionally) Jellyseerr servers. It is not affiliated with the Jellyfin or Jellyseerr projects. This policy describes what data Jellyfuse stores on your device and what it sends over the network.
+
+## What Jellyfuse stores on your device
+
+Jellyfuse stores the minimum data needed to use the app. Everything below stays on the device unless you sync it via your own iCloud/iTunes backup.
+
+| Data                                                               | Where stored                               | Why                                                |
+| ------------------------------------------------------------------ | ------------------------------------------ | -------------------------------------------------- |
+| Your Jellyfin server URL                                           | iOS Keychain (via expo-secure-store)       | To reconnect across launches                       |
+| Your Jellyfin auth token                                           | iOS Keychain (via expo-secure-store)       | To authenticate API requests to your server        |
+| Your Jellyseerr server URL and session cookie (if you connect one) | iOS Keychain + cookie jar                  | To authenticate Jellyseerr requests                |
+| App preferences (theme, playback defaults, language)               | MMKV (encrypted on-device key/value store) | To remember your choices                           |
+| TanStack Query cache (library entries, posters, recently played)   | MMKV (persisted query cache)               | To make the app fast and usable offline            |
+| Downloaded media files                                             | App-private file system                    | To enable offline playback                         |
+| Pending playback progress reports                                  | MMKV                                       | To send progress to your server when you reconnect |
+
+## What Jellyfuse sends over the network
+
+Jellyfuse only talks to servers you configure:
+
+- **Your Jellyfin server.** Library browsing, item metadata, image fetching, playback streams, and progress reports. The URL and credentials come from you.
+- **Your Jellyseerr server (optional).** Request submissions and request status. Skipped entirely if you do not configure a Jellyseerr URL.
+- **Your local network.** To discover Jellyfin servers running on the same LAN, Jellyfuse uses Apple's Local Network discovery. iOS will ask for your permission the first time.
+
+Jellyfuse does **not** send data to the developer, to the Jellyfin project, to the Jellyseerr project, or to any analytics, advertising, crash-reporting, or telemetry service. There are no third-party SDKs collecting data in Jellyfuse.
+
+## Tracking
+
+Jellyfuse does **not** track you. The app does not request the App Tracking Transparency permission and does not access the IDFA, advertising identifier, or any cross-app signal.
+
+## Children
+
+Jellyfuse plays whatever media is on the Jellyfin server you connect to. Because the app provides unrestricted access to user-supplied content, the App Store rates it 17+. Jellyfuse is not directed at children.
+
+## Data deletion
+
+To delete all data Jellyfuse has stored:
+
+1. Sign out from **Settings → Account → Sign Out**, which clears the Keychain entries and the on-device caches.
+2. Or, uninstall the app from iOS — this deletes the Keychain items, MMKV stores, and downloaded files.
+
+## Changes to this policy
+
+If this policy changes, the updated version is committed to the Jellyfuse repository at `docs/privacy.md` and published at the same URL. The "Last updated" date at the top reflects the most recent revision.
+
+## Contact
+
+Issues, questions, or data-deletion requests: open an issue at the [Jellyfuse GitHub repository](https://github.com/OverGlass/jellyfuse) or contact the maintainer at antonin.carlin@icloud.com.
+
+---
+
+## Privacy manifest cross-check (technical appendix)
+
+For Apple's required reasons API:
+
+| Accessed API category                    | Declared reason                               | Triggered by                  |
+| ---------------------------------------- | --------------------------------------------- | ----------------------------- |
+| `FileTimestamp` (C617.1, 0A2A.1, 3B52.1) | App functionality                             | expo-file-system / downloader |
+| `UserDefaults` (CA92.1)                  | App functionality                             | expo-secure-store / MMKV      |
+| `SystemBootTime` (35F9.1)                | Measure time elapsed for sync/cache freshness | React Native runtime          |
+| `DiskSpace` (E174.1, 85F4.1)             | App functionality (download space check)      | expo-file-system              |
+
+`NSPrivacyTracking` is `false`; `NSPrivacyCollectedDataTypes` is empty (no data leaves the device for the developer).
