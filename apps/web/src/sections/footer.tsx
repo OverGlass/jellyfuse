@@ -80,7 +80,7 @@ const styles = webStyles({
     maxWidth: "36ch",
     fontSize: 14,
     color: colors.textSecondary,
-    lineHeight: 1.5,
+    lineHeight: "1.5",
   },
   linkCol: {
     flex: 1,

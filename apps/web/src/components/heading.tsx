@@ -43,24 +43,28 @@ const styles = webStyles({
   },
 });
 
+// `lineHeight` ratios MUST be strings — react-native-web treats numeric
+// `lineHeight` as pixels (RN convention), not as the CSS unitless ratio.
+// Passing "1.05" as a string round-trips to `line-height: 1.05` in CSS,
+// which the browser then interprets as 1.05 × font-size as expected.
 const levelStyles = webStyles({
   1: {
     fontSize: "clamp(48px, 6.5vw, 96px)",
     fontWeight: fontWeight.bold,
     letterSpacing: "-0.035em",
-    lineHeight: 1.05,
+    lineHeight: "1.05",
   },
   2: {
     fontSize: "clamp(36px, 4.5vw, 64px)",
     fontWeight: fontWeight.semibold,
     letterSpacing: "-0.025em",
-    lineHeight: 1.05,
+    lineHeight: "1.05",
   },
   3: {
     fontSize: "clamp(22px, 2vw, 28px)",
     fontWeight: fontWeight.semibold,
     letterSpacing: "-0.01em",
-    lineHeight: 1.15,
+    lineHeight: "1.15",
   },
   4: {
     fontSize: 17,

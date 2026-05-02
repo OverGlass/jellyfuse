@@ -286,7 +286,7 @@ const styles = webStyles({
   stepBody: {
     color: colors.textSecondary,
     fontSize: 17,
-    lineHeight: 1.5,
+    lineHeight: "1.5",
     maxWidth: "44ch",
     marginBottom: spacing.lg,
   },
@@ -325,14 +325,14 @@ const styles = webStyles({
   },
   scrHero: {
     height: "42%",
-    background: "linear-gradient(135deg, #355c7d, #2c3e50)",
+    backgroundImage: "linear-gradient(135deg, #355c7d, #2c3e50)",
     position: "relative",
     overflow: "hidden",
   },
   scrHeroFade: {
     position: "absolute",
     inset: 0,
-    background: `linear-gradient(180deg, transparent 50%, ${colors.background} 100%)`,
+    backgroundImage: `linear-gradient(180deg, transparent 50%, ${colors.background} 100%)`,
   },
   scrHeroTitle: {
     position: "absolute",
@@ -366,7 +366,7 @@ const styles = webStyles({
     height: "50%",
     borderRadius: 8,
     overflow: "hidden",
-    background: "linear-gradient(135deg, #355c7d, #2c3e50)",
+    backgroundImage: "linear-gradient(135deg, #355c7d, #2c3e50)",
     position: "relative",
   },
   ipadHeroLabel: {
@@ -405,7 +405,7 @@ const styles = webStyles({
     flex: 1,
     paddingHorizontal: 32,
     paddingVertical: 24,
-    background:
+    backgroundImage:
       "linear-gradient(90deg, rgba(30,34,39,0.85), rgba(30,34,39,0.2) 60%, transparent), linear-gradient(135deg, #1a3a55, #2a1a3a)",
     justifyContent: "flex-end",
     gap: 6,

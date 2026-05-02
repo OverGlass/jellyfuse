@@ -58,7 +58,7 @@ const styles = webStyles({
     fontFamily: '"SF Pro Display", -apple-system, "Inter", system-ui, sans-serif',
     fontSize: "clamp(160px, 22vw, 320px)",
     fontWeight: fontWeight.bold,
-    lineHeight: 0.85,
+    lineHeight: "0.85",
     letterSpacing: "-0.06em",
     backgroundImage: `linear-gradient(180deg, ${colors.textPrimary}, ${colors.accent} 130%)`,
     WebkitBackgroundClip: "text",
@@ -78,7 +78,7 @@ const styles = webStyles({
   lead: {
     fontSize: "clamp(18px, 1.5vw, 22px)",
     color: colors.textSecondary,
-    lineHeight: 1.45,
+    lineHeight: "1.45",
     maxWidth: "56ch",
   },
   chipRail: {

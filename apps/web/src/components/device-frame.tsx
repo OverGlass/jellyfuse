@@ -141,7 +141,7 @@ const styles = webStyles({
   tvStand: {
     width: "38%",
     height: 16,
-    background: "linear-gradient(180deg, #2a2f37, #1a1d22)",
+    backgroundImage: "linear-gradient(180deg, #2a2f37, #1a1d22)",
     borderBottomLeftRadius: 8,
     borderBottomRightRadius: 8,
     marginTop: -1,
@@ -182,7 +182,7 @@ const styles = webStyles({
   macBase: {
     width: "110%",
     height: 12,
-    background: "linear-gradient(180deg, #2a2f37, #1a1d22)",
+    backgroundImage: "linear-gradient(180deg, #2a2f37, #1a1d22)",
     borderBottomLeftRadius: 12,
     borderBottomRightRadius: 12,
     marginLeft: "-5%",

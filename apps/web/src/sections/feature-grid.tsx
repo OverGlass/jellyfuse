@@ -50,7 +50,7 @@ const styles = webStyles({
   lead: {
     fontSize: "clamp(18px, 1.5vw, 22px)",
     color: colors.textSecondary,
-    lineHeight: 1.45,
+    lineHeight: "1.45",
     textAlign: "center",
     marginTop: spacing.md,
     maxWidth: "56ch",

@@ -123,7 +123,7 @@ function SearchRow({ poster, title, meta, action, ghost }: SearchRowProps) {
   const grad = POSTER_GRADS[poster - 1] ?? POSTER_GRADS[0]!;
   return (
     <View style={styles.searchRow}>
-      <View style={[styles.searchPoster, { background: grad }]} />
+      <View style={[styles.searchPoster, { backgroundImage: grad }]} />
       <View style={styles.searchMeta}>
         <Text style={styles.searchTitle} numberOfLines={1}>
           {title}
@@ -159,7 +159,7 @@ const styles = webStyles({
   lead: {
     fontSize: "clamp(18px, 1.5vw, 22px)",
     color: colors.textSecondary,
-    lineHeight: 1.45,
+    lineHeight: "1.45",
     maxWidth: "56ch",
     marginBottom: spacing.xl,
   },
@@ -190,7 +190,7 @@ const styles = webStyles({
     flex: 1,
     fontSize: 16,
     color: colors.textSecondary,
-    lineHeight: 1.5,
+    lineHeight: "1.5",
   },
   strong: {
     color: colors.textPrimary,

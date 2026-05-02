@@ -103,7 +103,7 @@ const styles = webStyles({
     pointerEvents: "none",
     zIndex: 0,
     overflow: "hidden",
-    background: "linear-gradient(180deg, #23272e 0%, #1b1e24 50%, #0e1014 100%)",
+    backgroundImage: "linear-gradient(180deg, #23272e 0%, #1b1e24 50%, #0e1014 100%)",
   },
   cells: {
     position: "absolute",
@@ -117,7 +117,7 @@ const styles = webStyles({
     right: 0,
     top: "50%",
     bottom: 0,
-    background:
+    backgroundImage:
       "linear-gradient(180deg, rgba(14,16,20,0) 0%, rgba(14,16,20,0.55) 60%, #1e2227 100%)",
   },
   inner: {
@@ -147,7 +147,7 @@ const styles = webStyles({
   lead: {
     fontSize: "clamp(18px, 1.5vw, 22px)",
     color: colors.textSecondary,
-    lineHeight: 1.45,
+    lineHeight: "1.45",
     maxWidth: "56ch",
     textAlign: "center",
   },

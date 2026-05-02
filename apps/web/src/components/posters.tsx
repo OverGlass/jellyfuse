@@ -31,7 +31,11 @@ export function Poster({ variant, shape = "tall", width, highlighted }: PosterPr
     <View
       style={[
         styles.poster,
-        { background: `linear-gradient(135deg, ${grad.from}, ${grad.to})` },
+        // Use `backgroundImage` (not the `background` shorthand) so RNW
+        // round-trips the gradient string verbatim. The shorthand would
+        // sometimes get merged with `backgroundColor` and the gradient
+        // disappears.
+        { backgroundImage: `linear-gradient(135deg, ${grad.from}, ${grad.to})` },
         { aspectRatio: aspect },
         width ? { width } : null,
         highlighted ? styles.highlighted : null,
@@ -90,7 +94,12 @@ export function MockStatusBar() {
 
 const styles = webStyles({
   poster: {
-    flex: 0,
+    // `flex: 0` in RN expands to `0 1 0%` and would shrink each poster
+    // down to zero width inside a flex row. We want `flex: none` (no
+    // grow, no shrink, basis from explicit width). Set the shrink and
+    // grow tokens explicitly instead.
+    flexShrink: 0,
+    flexGrow: 0,
     width: 72,
     borderRadius: radius.sm + 2,
     backgroundColor: colors.surfaceElevated,
@@ -118,14 +127,14 @@ const styles = webStyles({
   },
   mockHero: {
     height: "42%",
-    background: "linear-gradient(135deg, #355c7d, #2c3e50)",
+    backgroundImage: "linear-gradient(135deg, #355c7d, #2c3e50)",
     position: "relative",
     overflow: "hidden",
   },
   mockHeroFade: {
     position: "absolute",
     inset: 0,
-    background: `linear-gradient(180deg, transparent 50%, ${colors.background} 100%)`,
+    backgroundImage: `linear-gradient(180deg, transparent 50%, ${colors.background} 100%)`,
   },
   mockHeroLabel: {
     position: "absolute",

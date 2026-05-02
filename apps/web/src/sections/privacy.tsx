@@ -96,7 +96,7 @@ const styles = webStyles({
     right: "-20%",
     width: "60%",
     height: "80%",
-    background: "radial-gradient(circle, rgba(97,175,239,0.10), transparent 60%)",
+    backgroundImage: "radial-gradient(circle, rgba(97,175,239,0.10), transparent 60%)",
     pointerEvents: "none",
   },
   iconWrap: {
@@ -117,7 +117,7 @@ const styles = webStyles({
   cardBody: {
     color: colors.textSecondary,
     fontSize: 16,
-    lineHeight: 1.5,
+    lineHeight: "1.5",
     maxWidth: "42ch",
   },
 });
