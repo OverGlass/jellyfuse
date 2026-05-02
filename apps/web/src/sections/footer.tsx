@@ -14,7 +14,7 @@ export function Footer() {
         <View style={styles.brandCol}>
           <TextLink href="#top" style={styles.brand}>
             <Image source={require("../../public/icon.png")} style={styles.brandMark} />
-            <Text style={styles.brandText}> {SITE.name}</Text>
+            <Text style={styles.brandText}>{SITE.name}</Text>
           </TextLink>
           <Text style={styles.blurb}>{FOOTER.blurb}</Text>
         </View>
@@ -57,20 +57,27 @@ const styles = webStyles({
     minWidth: 240,
   },
   brand: {
+    display: "flex",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
     color: colors.textPrimary,
     fontFamily: '"SF Pro Display", -apple-system, "Inter", system-ui, sans-serif',
     fontSize: 18,
     fontWeight: fontWeight.semibold,
     letterSpacing: "-0.01em",
+    textDecorationLine: "none",
   },
   brandMark: {
     width: 28,
     height: 28,
     borderRadius: 7,
+    verticalAlign: "middle",
   },
   brandText: {
     fontFamily: '"SF Pro Display", -apple-system, "Inter", system-ui, sans-serif',
     fontSize: 18,
+    lineHeight: "1",
     fontWeight: fontWeight.semibold,
     color: colors.textPrimary,
     letterSpacing: "-0.01em",

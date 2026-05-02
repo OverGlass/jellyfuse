@@ -38,7 +38,7 @@ export function Nav() {
       <View style={styles.inner}>
         <TextLink href="#top" aria-label={SITE.name} style={styles.brand}>
           <Image source={require("../../public/icon.png")} style={styles.brandMark} />
-          <Text style={styles.brandText}> {SITE.name}</Text>
+          <Text style={styles.brandText}>{SITE.name}</Text>
         </TextLink>
         <View aria-label="Primary" style={styles.linksRow}>
           {NAV_LINKS.map((link) => (
@@ -77,22 +77,33 @@ const styles = webStyles({
     alignItems: "center",
     justifyContent: "space-between",
   },
+  // The brand link wraps an <img> + text inside an <a>. Default <a>
+  // is inline, so the image baseline-aligns to the text and looks low.
+  // Force flex-row + alignItems:center to vertically centre the icon
+  // against the text x-height.
   brand: {
+    display: "flex",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
     color: colors.textPrimary,
     fontFamily: '"SF Pro Display", -apple-system, "Inter", system-ui, sans-serif',
     fontSize: 18,
     fontWeight: fontWeight.semibold,
     letterSpacing: "-0.01em",
+    textDecorationLine: "none",
   },
   brandMark: {
     width: 28,
     height: 28,
     borderRadius: 7,
     objectFit: "cover",
+    verticalAlign: "middle",
   },
   brandText: {
     fontFamily: '"SF Pro Display", -apple-system, "Inter", system-ui, sans-serif',
     fontSize: 18,
+    lineHeight: "1",
     fontWeight: fontWeight.semibold,
     color: colors.textPrimary,
     letterSpacing: "-0.01em",

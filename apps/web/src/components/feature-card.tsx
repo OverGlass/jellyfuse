@@ -34,6 +34,10 @@ const styles = StyleSheet.create({
     borderColor: "rgba(215,218,224,0.08)",
     borderRadius: radius.lg,
     padding: spacing.xl,
+    // Fills the grid cell so all cards in the same row are the same
+    // height (matches the prototype's `display:grid` rendering).
+    flex: 1,
+    height: "100%",
   },
   iconWrap: {
     width: 36,
