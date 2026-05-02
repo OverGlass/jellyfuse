@@ -470,10 +470,17 @@ final class MpvMetalView: UIView {
 
     // MARK: Tear-down
 
+    private var didTearDown = false
     private func tearDown() {
         let p = Unmanaged.passUnretained(self).toOpaque()
         let rc = CFGetRetainCount(self)
-        print("[MpvMetalView][lifecycle] tearDown enter \(p) rc=\(rc)")
+        print("[MpvMetalView][lifecycle] tearDown enter \(p) rc=\(rc) already=\(didTearDown)")
+        // Both `detachPlayer()` (JS-driven) and Fabric's `onDropView()`
+        // call into us via `detach()`. Guard against the second call —
+        // doing the work twice over-releases the destroyCb retainer
+        // (the documented nav-back UAF, root-caused 2026-05-02).
+        if didTearDown { return }
+        didTearDown = true
         // Set up the sync handoff before issuing clear_pool/stop. The
         // destroyCb fires on mpv's render thread once the ra_ctx is
         // fully torn down (i.e. no more Vulkan submits incoming), and
@@ -655,6 +662,11 @@ final class MpvMetalView: UIView {
         let view = Unmanaged<MpvMetalView>.fromOpaque(priv).takeUnretainedValue()
         let rc = CFGetRetainCount(view)
         print("[MpvMetalView][lifecycle] destroyCb fire \(priv) rc-before=\(rc)")
+        // Nil the retainer ivar so a second tearDown call's ELSE branch
+        // doesn't try to release the same +1 retain again (double-free).
+        // A second tearDown can happen because both `detachPlayer()` and
+        // Fabric's `onDropView()` dispatch through `metalView.detach()`.
+        view.poolSelfRetainer = nil
         view.destroySemaphore?.signal()
         Unmanaged<MpvMetalView>.fromOpaque(priv).release()
     }
