@@ -34,6 +34,12 @@ const styles = webStyles({
     fontFamily: baseFamily,
     color: colors.textPrimary,
     margin: 0,
+    // The marketing copy uses `\n` to split a heading into two display
+    // lines (e.g. "One Jellyfin client.\nEvery screen."). Browsers
+    // collapse runs of whitespace by default, so we need `pre-line` to
+    // preserve those newlines while still letting the rest of the text
+    // wrap normally.
+    whiteSpace: "pre-line",
   },
 });
 

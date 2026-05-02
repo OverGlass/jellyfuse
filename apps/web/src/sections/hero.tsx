@@ -134,9 +134,10 @@ const styles = webStyles({
     marginBottom: spacing.lg,
   },
   headlineAccent: {
-    background: "linear-gradient(180deg, #d7dae0 0%, #abb2bf 130%)",
+    backgroundImage: "linear-gradient(180deg, #d7dae0 0%, #abb2bf 130%)",
     WebkitBackgroundClip: "text",
     backgroundClip: "text",
+    WebkitTextFillColor: "transparent",
     color: "transparent",
   },
   leadWrap: {
